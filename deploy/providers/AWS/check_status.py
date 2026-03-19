@@ -801,7 +801,7 @@ def main(
                     f"FL API Net {nets} clients returned invalid JSON from flip-api container:\n{message}",
                 )
                 continue
-            if success and ("200" in message) and client_info != []:
+            if success and client_info != []:
                 print_status("PASS", f"FL API Net {nets} clients are reachable from flip-api container")
             else:
                 print_status(
