@@ -176,9 +176,10 @@ module "flip_api_secret" {
   secret_string = jsonencode({
     aes_key = var.AES_KEY_BASE64
     trust_endpoints = {
-      "Trust_1" = "http://${module.trust_ec2.public_ip}:${var.TRUST_API_PORT}",
-      "Trust_2" = "http://${module.trust_ec2.public_ip}:${var.TRUST_API_PORT}"
+      "Trust_1" = "https://${module.trust_ec2.public_ip}:${var.TRUST_API_PORT}",
+      "Trust_2" = "https://${module.trust_ec2.public_ip}:${var.TRUST_API_PORT}"
     }
+    trust_ca_cert = try(file("${path.module}/trust-ca.crt"), "")
   })
 }
 
@@ -461,6 +462,47 @@ resource "aws_lb_listener_rule" "api_routing" {
       values = ["/api", "/api/*"]
     }
   }
+}
+
+############################
+# On-Premises Trust (optional)
+# Activated by setting local_trust_public_ip in the env file or via
+# TF_VAR_local_trust_public_ip when running `make add-local-trust`.
+############################
+
+resource "aws_security_group_rule" "local_trust_fl_server" {
+  count             = var.local_trust_public_ip != "" ? 1 : 0
+  type              = "ingress"
+  from_port         = 8002
+  to_port           = 8002
+  protocol          = "tcp"
+  cidr_blocks       = ["${var.local_trust_public_ip}/32"]
+  security_group_id = module.ec2_security_group.security_group.id
+  description       = "FL Server from on-prem Trust"
+}
+
+resource "aws_security_group_rule" "local_trust_fl_admin" {
+  count             = var.local_trust_public_ip != "" ? 1 : 0
+  type              = "ingress"
+  from_port         = 8003
+  to_port           = 8003
+  protocol          = "tcp"
+  cidr_blocks       = ["${var.local_trust_public_ip}/32"]
+  security_group_id = module.ec2_security_group.security_group.id
+  description       = "FL Admin from on-prem Trust"
+}
+
+# Allow the local (on-prem) trust FL client to reach the FL server via the NLB.
+# Without this rule the NLB security group drops the connection before it reaches the EC2.
+resource "aws_security_group_rule" "local_trust_fl_server_nlb" {
+  count             = var.local_trust_public_ip != "" ? 1 : 0
+  type              = "ingress"
+  from_port         = var.FL_SERVER_PORT
+  to_port           = var.FL_SERVER_PORT
+  protocol          = "tcp"
+  cidr_blocks       = ["${var.local_trust_public_ip}/32"]
+  security_group_id = module.fl_server_nlb.security_group_id
+  description       = "FL Server NLB from on-prem Trust"
 }
 
 # Outputs

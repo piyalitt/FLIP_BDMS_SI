@@ -12,7 +12,7 @@
 
 .PHONY: build dev prod clean stop up down up-no-trust up-trusts central-fl central-hub \
 		restart restart-no-trust ci tests debug create-networks remove-networks recreate-networks consolidate-deps \
-		check-aws-access
+		check-aws-access up-local-trust-stag
 
 ifeq ($(PROD),true)
 MAIN_ENV_FILE=.env.production
@@ -43,7 +43,8 @@ endif
 ifeq ($(PROD),true)
 override DOCKER_TAG := prod
 else ifeq ($(PROD),stag)
-override DOCKER_TAG := stag
+# Use branch number tag if on a feature branch (e.g. 157 for 157-feature-...), otherwise fall back to "stag"
+override DOCKER_TAG := $(shell git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+' || echo "stag")
 else
 override DOCKER_TAG := $(shell gh pr view --json number -q '"pr-" + (.number | tostring)' 2>/dev/null || echo "stag")
 endif
@@ -152,6 +153,11 @@ up-trust-ec2: create-networks
 	@echo "🚢 Starting XNAT services..."
 	$(MAKE) -e DEBUG=$(DEBUG) -C trust/xnat up-xnat-1-ec2 PROD=${PROD}
 	@echo "✅ Trust services started successfully!"
+
+up-local-trust-stag: create-networks
+	@echo "🚢 Starting local on-prem Trust services for staging..."
+	$(MAKE) -e DEBUG=$(DEBUG) -C trust up-local-trust-stag PROD=stag
+	@echo "✅ Local Trust services started successfully!"
 
 central-hub: create-networks
 	$(MAKE) -C flip-api up
