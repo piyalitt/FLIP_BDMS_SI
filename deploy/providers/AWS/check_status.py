@@ -300,7 +300,7 @@ def check_endpoint_over_ssh(
     skip_flag = "" if verify_ssl else "-k "
     command = f"curl -s {skip_flag}-o /dev/null -w '%{{http_code}}' {endpoint}"
     print_status(status="INFO", message=f"Checking endpoint {endpoint} from {host} via SSH...")
-    success, output = run_ssh_command(ssh_key="", host=host, command=command)SSH
+    success, output = run_ssh_command(ssh_key="", host=host, command=command)
     if success and output == str(expected_status):
         print_status("PASS", f"{endpoint} is accessible from {host}")
         return True
