@@ -45,15 +45,15 @@ project2 = xnat2
 network1 = deploy_trust-network-1
 network2 = deploy_trust-network-2
 
-# Path to the current folder (docker stack deploy needs absolute path)
+# Path to the dev XNAT folder on the Docker host (bind mounts resolve there, not locally).
 export XNAT_PATH=$(realpath .)
 
-# In development, mount plugins and config from the host for hot-reload
 ifeq ($(PROD),true)
-STACK_FILES = -c docker-compose-stack.yml
+STACK_FILES = -c docker-compose-stack.yml -c docker-compose-stack.production.yml
 else ifeq ($(PROD),stag)
-STACK_FILES = -c docker-compose-stack.yml
+STACK_FILES = -c docker-compose-stack.yml -c docker-compose-stack.production.yml
 else
+# In development, mount plugins and config from the host for hot-reload
 STACK_FILES = -c docker-compose-stack.yml -c docker-compose-stack.development.yml
 endif
 
@@ -150,8 +150,9 @@ xnat-war-download:
 xnat-plugins-download:
 	@./scripts/ensure_plugins.sh "xnat/plugins" "$(FLIP_ARTIFACTS_BUCKET_NAME)"
 
-# Note this needs root privileges to run
-# Creates directory structure for XNAT (Docker Swarm requires them to exist beforehand)
+# Creates directory structure for XNAT data volumes.
+# Docker Swarm requires host directories to exist before bind-mounting.
+# Note: needs root privileges to clean up previous data.
 xnat-reset:
 	echo "Deleting previous XNAT data ..."; \
 	sudo rm -rf ${XNAT_PORT_TRUST_1}; \
