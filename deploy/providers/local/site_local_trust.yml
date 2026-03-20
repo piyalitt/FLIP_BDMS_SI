@@ -23,6 +23,7 @@
 #     deploy/providers/local/site_local_trust.yml \
 #     -e trust_public_ip=<public-ip-or-hostname> \
 #     -e trust_api_port=8443 \
+#     -e flower_supernode_health_port=9098 \
 #     -e ch_public_ip=<aws-ec2-public-ip>
 #
 # After the playbook completes, trust/certs/trust-ca.crt will be fetched to
@@ -35,6 +36,7 @@
   become: true
   vars:
     trust_api_port: 8443
+    flower_supernode_health_port: 9098
     cert_dir: /opt/flip/certs
     flip_dir: /opt/flip
 
@@ -182,21 +184,21 @@
         proto: tcp
         comment: "FLIP Trust-API HTTPS from AWS CH"
 
-    - name: Allow FL Server port 8002 from Central Hub
+    - name: Allow consolidated FL port 8002 from Central Hub
       community.general.ufw:
         rule: allow
         src: "{{ ch_public_ip }}"
         port: "8002"
         proto: tcp
-        comment: "FL Server port from AWS CH"
+        comment: "FL Server/Admin port from AWS CH"
 
-    - name: Allow FL Admin port 8003 from Central Hub
+    - name: Allow Flower supernode health port from Central Hub
       community.general.ufw:
         rule: allow
         src: "{{ ch_public_ip }}"
-        port: "8003"
+        port: "{{ flower_supernode_health_port | string }}"
         proto: tcp
-        comment: "FL Admin port from AWS CH"
+        comment: "Flower supernode health from AWS CH"
 
     - name: Set UFW default policy — deny incoming
       community.general.ufw:

@@ -115,6 +115,16 @@ resource "aws_security_group_rule" "fl_server_ingress_from_nlb" {
   description              = "FL Server from NLB security group"
 }
 
+resource "aws_security_group_rule" "flower_supernode_health_from_central_hub" {
+  type                     = "ingress"
+  from_port                = var.FLOWER_SUPERNODE_HEALTH_PORT
+  to_port                  = var.FLOWER_SUPERNODE_HEALTH_PORT
+  protocol                 = "tcp"
+  source_security_group_id = module.ec2_security_group.security_group.id
+  security_group_id        = module.trust_security_group.security_group.id
+  description              = "Flower supernode health from Central Hub EC2"
+}
+
 # RDS
 # TODO: In Production we need to activate delete protection to the RDS instances
 module "rds_security_group" {
@@ -473,23 +483,12 @@ resource "aws_lb_listener_rule" "api_routing" {
 resource "aws_security_group_rule" "local_trust_fl_server" {
   count             = var.local_trust_public_ip != "" ? 1 : 0
   type              = "ingress"
-  from_port         = 8002
-  to_port           = 8002
+  from_port         = var.FL_SERVER_PORT
+  to_port           = var.FL_SERVER_PORT
   protocol          = "tcp"
   cidr_blocks       = ["${var.local_trust_public_ip}/32"]
   security_group_id = module.ec2_security_group.security_group.id
-  description       = "FL Server from on-prem Trust"
-}
-
-resource "aws_security_group_rule" "local_trust_fl_admin" {
-  count             = var.local_trust_public_ip != "" ? 1 : 0
-  type              = "ingress"
-  from_port         = 8003
-  to_port           = 8003
-  protocol          = "tcp"
-  cidr_blocks       = ["${var.local_trust_public_ip}/32"]
-  security_group_id = module.ec2_security_group.security_group.id
-  description       = "FL Admin from on-prem Trust"
+  description       = "FL Server/Admin from on-prem Trust"
 }
 
 # Allow the local (on-prem) trust FL client to reach the FL server via the NLB.
@@ -502,7 +501,7 @@ resource "aws_security_group_rule" "local_trust_fl_server_nlb" {
   protocol          = "tcp"
   cidr_blocks       = ["${var.local_trust_public_ip}/32"]
   security_group_id = module.fl_server_nlb.security_group_id
-  description       = "FL Server NLB from on-prem Trust"
+  description       = "FL Server/Admin NLB from on-prem Trust"
 }
 
 # Outputs

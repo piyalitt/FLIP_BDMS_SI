@@ -35,11 +35,17 @@ services:
       - PRIVATE_API_KEY_HEADER=${PRIVATE_API_KEY_HEADER}
       - PRIVATE_API_KEY=${PRIVATE_API_KEY}
     command:
+      # Start the supernode health server so the Central Hub FL API can query
+      # /check_client_status across hosts using SUPERNODE_HEALTH_ADDRESSES.
+      # TODO Replace --insecure with Flower TLS client configuration once the
+      # Central Hub SuperLink is configured to accept secure Trust connections.
       - --insecure
       - --superlink
-      - fl-server-net-1:9092
+      - ${NLB_SUBDOMAIN}:${FL_SERVER_PORT}
       - --health-server-address
       - 0.0.0.0:9098
+    ports:
+      - "${FLOWER_SUPERNODE_HEALTH_PORT}:9098"
     shm_size: '8gb'
     # gpus: all
 

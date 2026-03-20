@@ -11,6 +11,7 @@
 #
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -72,7 +73,6 @@ def main():
 
     # Extract values safely
     try:
-        ec2_ip = outputs["Ec2PublicIp"]["value"]
         trust_ip = outputs["TrustEc2PublicIp"]["value"]
         db_endpoint = outputs["DbEndpoint"]["value"]
         db_secret_arn = outputs["DbSecretArn"]["value"]
@@ -85,8 +85,10 @@ def main():
     # Define updates based on infrastructure outputs
     # NOTE Ports are assumed based on standard project configuration
     # TODO Set variable ports in Terraform and output them if they differ from defaults
+    flower_supernode_health_port = os.getenv("FLOWER_SUPERNODE_HEALTH_PORT", "9098")
     updates = {
         "DB_HOST": db_endpoint,
+        "SUPERNODE_HEALTH_ADDRESSES": f"Trust_1={trust_ip}:{flower_supernode_health_port}",
         # NOTE: CENTRAL_HUB_API_URL is intentionally NOT updated here.
         # In staging/production it should be the ALB Route53 domain (e.g. https://stag.flip.aicentre.co.uk),
         # not the raw EC2 IP. SSL is terminated at the ALB using the ACM certificate.

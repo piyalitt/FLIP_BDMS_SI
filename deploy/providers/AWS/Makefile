@@ -54,6 +54,7 @@ export TF_VAR_UI_PORT=${UI_PORT}
 export TF_VAR_API_PORT=${API_PORT}
 export TF_VAR_FL_API_PORT=${FL_API_PORT}
 export TF_VAR_FL_SERVER_PORT=${FL_SERVER_PORT}
+export TF_VAR_FLOWER_SUPERNODE_HEALTH_PORT=${FLOWER_SUPERNODE_HEALTH_PORT}
 export TF_VAR_TRUST_API_PORT=${TRUST_API_PORT}
 export TF_VAR_XNAT_PORT=${XNAT_PORT_TRUST_1}
 export TF_VAR_PACS_UI_PORT=${PACS_UI_PORT_TRUST_1}
@@ -361,7 +362,8 @@ add-local-trust: ## Provision an on-prem Trust host via Ansible and register it 
 			../../../deploy/providers/local/site_local_trust.yml \
 			-e trust_public_ip=$(LOCAL_TRUST_IP) \
 			-e ch_public_ip="$$CH_IP" \
-			-e trust_api_port=$(TRUST_API_PORT); \
+			-e trust_api_port=$(TRUST_API_PORT) \
+			-e flower_supernode_health_port=$(FLOWER_SUPERNODE_HEALTH_PORT); \
 	else \
 		echo "💻 Running locally (no SSH — operator machine is the trust host)..."; \
 		if [ -z "$$ANSIBLE_BECOME_PASS" ]; then \
@@ -388,7 +390,8 @@ add-local-trust: ## Provision an on-prem Trust host via Ansible and register it 
 			../../../deploy/providers/local/site_local_trust.yml \
 			-e trust_public_ip=$(LOCAL_TRUST_IP) \
 			-e ch_public_ip="$$CH_IP" \
-			-e trust_api_port=$(TRUST_API_PORT); \
+			-e trust_api_port=$(TRUST_API_PORT) \
+			-e flower_supernode_health_port=$(FLOWER_SUPERNODE_HEALTH_PORT); \
 		PLAY_RC=$$?; \
 		exit $$PLAY_RC; \
 	fi
@@ -428,7 +431,6 @@ add-local-trust: ## Provision an on-prem Trust host via Ansible and register it 
 	@echo "🔐 Updating AWS security group rules and Secrets Manager CA cert..."
 	@TF_VAR_local_trust_public_ip=$(LOCAL_TRUST_IP) terraform plan \
 		-target=aws_security_group_rule.local_trust_fl_server \
-		-target=aws_security_group_rule.local_trust_fl_admin \
 		-target='module.flip_api_secret.aws_secretsmanager_secret_version.this[0]' \
 		-out=local-trust.tfplan
 	@TF_VAR_local_trust_public_ip=$(LOCAL_TRUST_IP) terraform apply local-trust.tfplan
@@ -438,6 +440,8 @@ add-local-trust: ## Provision an on-prem Trust host via Ansible and register it 
 	@echo ""
 	@echo "⚠️  REMAINING MANUAL STEPS:"
 	@echo "   1. Configure border router NAT: forward $(TRUST_API_PORT)/tcp → <trust-host-lan-ip>:$(TRUST_API_PORT)"
+	@echo "      If federated learning traffic must reach the host, also forward $(FL_SERVER_PORT)/tcp"
+	@echo "      and $(FLOWER_SUPERNODE_HEALTH_PORT)/tcp for Flower client health checks."
 	@echo "   2. Update Trust endpoint in Secrets Manager (recommended helper target):"
 	@echo "      make set-local-trust-endpoint LOCAL_TRUST_IP=$(LOCAL_TRUST_IP)"
 	@echo "   3. On the trust host — start the trust stack: cd trust && PROD=$(PROD) make up-local-trust-stag"
@@ -445,18 +449,18 @@ add-local-trust: ## Provision an on-prem Trust host via Ansible and register it 
 	@echo "      (or handshake-only test: make test-local-trust-insecure LOCAL_TRUST_IP=$(LOCAL_TRUST_IP))"
 
 .PHONY: set-local-trust-endpoint
-set-local-trust-endpoint: ## Update FLIP_API Trust_1-endpoint to the local trust HTTPS URL
+set-local-trust-endpoint: ## Update FLIP_API trust_endpoints.Trust_1 to the local trust HTTPS URL
 	@[ -n "$(LOCAL_TRUST_IP)" ] || (echo ""; echo "❌  ERROR: LOCAL_TRUST_IP is required."; echo "   Usage: make set-local-trust-endpoint LOCAL_TRUST_IP=<public-ip>"; echo ""; exit 1)
-	@echo "🔐 Updating $(AWS_SECRET_NAME) secret Trust_1-endpoint to https://$(LOCAL_TRUST_IP):$(TRUST_API_PORT)..."
+	@echo "🔐 Updating $(AWS_SECRET_NAME) secret trust_endpoints.Trust_1 to https://$(LOCAL_TRUST_IP):$(TRUST_API_PORT)..."
 	@AWS_PROFILE=$(AWS_PROFILE) aws secretsmanager get-secret-value \
 		--secret-id $(AWS_SECRET_NAME) \
 		--query SecretString \
 		--output text | \
-	python3 -c "import json, sys; s=json.load(sys.stdin); s['Trust_1-endpoint']='https://$(LOCAL_TRUST_IP):$(TRUST_API_PORT)'; print(json.dumps(s))" | \
+	python3 -c "import json,sys; s=json.load(sys.stdin); trust_endpoints=s.setdefault('trust_endpoints', {}); assert isinstance(trust_endpoints, dict), 'trust_endpoints must be a JSON object'; trust_endpoints['Trust_1']='https://$(LOCAL_TRUST_IP):$(TRUST_API_PORT)'; print(json.dumps(s))" | \
 	AWS_PROFILE=$(AWS_PROFILE) aws secretsmanager update-secret \
 		--secret-id $(AWS_SECRET_NAME) \
 		--secret-string file:///dev/stdin >/dev/null
-	@echo "✅ $(AWS_SECRET_NAME) Trust_1-endpoint updated."
+	@echo "✅ $(AWS_SECRET_NAME) trust_endpoints.Trust_1 updated."
 
 .PHONY: test-local-trust
 test-local-trust: ## Verify HTTPS connectivity to an on-premises Trust host
@@ -559,7 +563,7 @@ full-deploy-stag: ## Full staging deployment with on-prem local trust (requires 
 	##    and update AWS security groups
 	## 9. status: verify all services healthy
 	## NOTE: After this completes you must manually:
-	##   - Update Trust endpoint in FLIP_API secret: make set-local-trust-endpoint LOCAL_TRUST_IP=<public-ip>
+	##   - Update trust_endpoints.Trust_1 in the FLIP_API secret: make set-local-trust-endpoint LOCAL_TRUST_IP=<public-ip>
 	##   - Start local trust stack: cd ../../../trust && env PROD=stag make up-local-trust-stag
 	##   - Restart Central Hub API: make deploy-centralhub PROD=stag
 	@[ -n "$(LOCAL_TRUST_IP)" ] || (echo ""; echo "❌  ERROR: LOCAL_TRUST_IP is required."; echo "   Usage: make full-deploy-stag LOCAL_TRUST_IP=<public-ip>"; echo ""; exit 1)
@@ -567,7 +571,7 @@ full-deploy-stag: github-login aws-login init import-persistent plan apply updat
 
 .PHONY: full-deploy-stag-hybrid
 full-deploy-stag-hybrid: ## Full staging hybrid deployment including endpoint update and CH redeploy
-	## This wraps full-deploy-stag, then updates Trust_1-endpoint and redeploys Central Hub.
+	## This wraps full-deploy-stag, then updates trust_endpoints.Trust_1 and redeploys Central Hub.
 	## You still need to start the local trust stack on the trust host.
 	@[ -n "$(LOCAL_TRUST_IP)" ] || (echo ""; echo "❌  ERROR: LOCAL_TRUST_IP is required."; echo "   Usage: make full-deploy-stag-hybrid LOCAL_TRUST_IP=<public-ip>"; echo ""; exit 1)
 	@$(MAKE) full-deploy-stag LOCAL_TRUST_IP=$(LOCAL_TRUST_IP) LOCAL_TRUST_SSH_KEY="$(LOCAL_TRUST_SSH_KEY)" LOCAL_TRUST_SSH_USER="$(LOCAL_TRUST_SSH_USER)" LOCAL_TRUST_NUMBER="$(LOCAL_TRUST_NUMBER)"

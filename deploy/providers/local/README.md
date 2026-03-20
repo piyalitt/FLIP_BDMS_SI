@@ -50,7 +50,7 @@ Each local Trust host runs:
 | trust-api | 8000 | HTTP (internal, behind nginx) |
 | imaging-api | 8000 | HTTP (internal) |
 | data-access-api | 8000 | HTTP (internal) |
-| fl-client | 8002, 8003 | TCP (FL server/admin) |
+| fl-client | 8002 | TCP (FL server/admin, consolidated) |
 
 ## Prerequisites
 
@@ -83,7 +83,7 @@ cd deploy/providers/AWS
 make full-deploy-stag-hybrid LOCAL_TRUST_IP=<public-ip> [LOCAL_TRUST_SSH_KEY=~/.ssh/trust_key]
 ```
 
-This wrapper target runs the full AWS + local trust provisioning pipeline, updates `Trust_1-endpoint` in `FLIP_API`, and redeploys Central Hub so the new secret values are loaded.
+This wrapper target runs the full AWS + local trust provisioning pipeline, updates `trust_endpoints["Trust_1"]` in `FLIP_API`, and redeploys Central Hub so the new secret values are loaded.
 You still need to start the local trust stack on the trust host:
 
 ```bash
@@ -113,7 +113,7 @@ make add-local-trust LOCAL_TRUST_IP=<public-ip>
 1. Runs the Ansible playbook (`site_local_trust.yml`) which:
    - Installs Docker and required system packages
    - Generates a self-signed CA and server TLS certificate with the host's public IP as SAN
-   - Configures UFW firewall to allow `TRUST_API_PORT`, 8002, 8003 **only from the Central Hub IP**
+   - Configures UFW firewall to allow `TRUST_API_PORT`, the consolidated FL port `8002`, and the Flower supernode health port `FLOWER_SUPERNODE_HEALTH_PORT` **only from the Central Hub IP**
    - Fetches the local trust CA certificate back to `trust/certs/local-trust-ca.crt`
 2. Creates a **CA bundle** (`deploy/providers/AWS/trust-ca.crt`) by concatenating the cloud Trust EC2 CA (generated earlier by `gen-trust-ec2-certs`) with the new local trust CA. This lets `flip-api` verify HTTPS connections to **both** trusts using a single bundle.
 3. Downloads the `Trust_2` FL participant kit from S3 and deploys it to `/opt/flip/services/Trust_2/{startup,local,transfer}` on the trust host.
@@ -123,9 +123,9 @@ make add-local-trust LOCAL_TRUST_IP=<public-ip>
 
 ### Post-provisioning manual steps
 
-1. **Configure router port forwarding** — Forward `TRUST_API_PORT/tcp` (default 8020) from the router's WAN interface to the trust host's LAN IP. Optionally forward 8002/tcp and 8003/tcp for federated learning.
+1. **Configure router port forwarding** — Forward `TRUST_API_PORT/tcp` (default 8020) from the router's WAN interface to the trust host's LAN IP. If federated learning traffic must reach the trust host, also forward `8002/tcp` and `9098/tcp` (or your configured `FLOWER_SUPERNODE_HEALTH_PORT`).
 
-2. **Update the trust endpoint in Secrets Manager** — Recommended helper target:
+2. **Update `trust_endpoints["Trust_1"]` in Secrets Manager** — Recommended helper target:
 
    ```bash
    make set-local-trust-endpoint LOCAL_TRUST_IP=<public-ip>
@@ -230,8 +230,7 @@ For federated learning, also forward:
 
 | External Port | Internal Port | Protocol | Purpose |
 | --- | --- | --- | --- |
-| `8002` | `8002` | TCP | FL Server gRPC |
-| `8003` | `8003` | TCP | FL Admin |
+| `8002` | `8002` | TCP | FL Server/Admin |
 
 ### Static LAN IP
 
@@ -254,7 +253,7 @@ If the public IP changes (common with residential broadband):
 1. Regenerate TLS certificates: `TRUST_HOST=<new-ip> make -C trust generate-trust-certs`
 2. Copy certs to `/opt/flip/certs/` and restart `nginx-tls`
 3. Re-run `make add-local-trust LOCAL_TRUST_IP=<new-ip>` to refresh certs and CA bundle
-4. Update endpoint URL in Secrets Manager: `make set-local-trust-endpoint LOCAL_TRUST_IP=<new-ip>`
+4. Update `trust_endpoints["Trust_1"]` in Secrets Manager: `make set-local-trust-endpoint LOCAL_TRUST_IP=<new-ip>`
 5. Update the Terraform security group: `TF_VAR_local_trust_public_ip=<new-ip> make -C deploy/providers/AWS plan apply`
 
 ## Troubleshooting

@@ -59,7 +59,7 @@ Managed policies that cover these requirements:
 - `ElasticLoadBalancingFullAccess`
 - `AmazonSESFullAccess` (optional)
 
-**Note**: The deployed EC2 instances use minimal IAM permissions (SSM and CloudWatch only) following the principle of least privilege.
+**Note**: The current Terraform configuration attaches SSM, CloudWatch, Cognito, S3, SES, and Secrets Manager access to the EC2 role. Tightening this to a stricter least-privilege policy is still a TODO in the infrastructure code.
 
 ## Deployment Workflow
 
@@ -79,46 +79,60 @@ This command executes the following steps in order:
 1. **`github-login`**: Authenticate with GitHub CLI
 2. **`aws-login`**: Authenticate with AWS SSO
 3. **`init`**: Initialize Terraform with environment-specific S3 backend
-4. **`import-all`**: Import existing AWS resources to prevent replacement
-5. **`plan`**: Generate and review Terraform execution plan
+4. **`import-persistent`**: Import existing persistent AWS resources to prevent replacement
+5. **`plan`**: Generate and review the initial Terraform execution plan
 6. **`apply`**: Apply infrastructure changes
-7. **`ssh-config`**: Update `~/.ssh/config` with EC2 instance IPs
-8. **`ansible-init`**: Configure EC2 instances with Docker and CloudWatch
-9. **`deploy-centralhub`**: Deploy Central Hub services via Docker Compose
-10. **`deploy-trust`**: Deploy Trust services via Docker Compose
-11. **`status`**: Run comprehensive health checks
+7. **`update-env`**: Refresh the root environment file with Terraform outputs
+8. **`gen-trust-ec2-certs`**: Generate TLS certificates for the cloud Trust EC2 using its assigned public IP
+9. **`plan` + `apply`**: Write the generated Trust CA certificate into Secrets Manager
+10. **`ssh-config`**: Update `~/.ssh/config` with EC2 instance IPs
+11. **`ansible-init`**: Configure EC2 instances with Docker, CloudWatch, and FL assets
+12. **`deploy-centralhub`**: Deploy Central Hub services via Docker Compose
+13. **`deploy-trust`**: Deploy Trust services via Docker Compose
+14. **`status`**: Run comprehensive health checks
 
 ### Manual Step-by-Step Deployment
 
 For debugging or selective deployment, run individual steps:
 
 ```bash
-# 1. Login to AWS
+# 0. Choose the environment for this shell.
+# If you omit PROD, the AWS provider Makefile defaults to staging.
+export PROD=stag    # or: export PROD=true
+
+# 1. Login to GitHub and AWS
+make github-login
 make aws-login
 
 # 2. Initialize Terraform (creates/configures S3 backend)
 make init
 
-# 3. Import existing resources (prevents replacement errors)
-make import-all
+# 3. Import existing persistent resources (prevents replacement errors)
+make import-persistent
 
-# 4. Plan changes
+# 4. Plan and apply infrastructure
 make plan
-
-# 5. Apply infrastructure
 make apply
 
-# 6. Configure SSH access
+# 5. Refresh environment values and generate Trust EC2 certs
+make update-env
+make gen-trust-ec2-certs
+
+# 6. Plan and apply again so the generated Trust CA is stored in Secrets Manager
+make plan
+make apply
+
+# 7. Configure SSH access
 make ssh-config
 
-# 7. Setup EC2 instances with Ansible
+# 8. Setup EC2 instances with Ansible
 make ansible-init
 
-# 8. Deploy services
+# 9. Deploy services
 make deploy-centralhub
 make deploy-trust
 
-# 9. Check status
+# 10. Check status
 make status
 ```
 
@@ -138,8 +152,10 @@ make full-deploy PROD=true
 
 The `PROD` variable determines which environment files are loaded:
 
-- `PROD=stag` → Uses `.env.stag`, `flip-api/.env.stag`
-- `PROD=true` → Uses `.env.production`, `flip-api/.env.production`
+- `PROD=stag` → Uses the root `.env.stag`
+- `PROD=true` → Uses the root `.env.production`
+
+If `PROD` is omitted when running the AWS provider Makefile, it defaults to staging.
 
 ### Destroy Infrastructure
 
@@ -222,6 +238,14 @@ cd deploy/providers/AWS
 make full-deploy-stag-hybrid LOCAL_TRUST_IP=<public-ip> [LOCAL_TRUST_SSH_KEY=~/.ssh/trust_key]
 ```
 
+This wrapper target runs the full AWS deployment, provisions the local trust, updates `trust_endpoints["Trust_1"]` in `FLIP_API`, and redeploys the Central Hub so the new secret values are loaded.
+You still need to:
+
+1. Configure router port forwarding (`TRUST_API_PORT/tcp` to the trust host LAN IP; if federated learning traffic must reach the host, also forward `FL_SERVER_PORT/tcp`, currently `8002`)
+2. Start the trust stack on the host: `cd trust && env PROD=stag make up-local-trust-stag`
+3. Verify (CA-validated): `make test-local-trust LOCAL_TRUST_IP=<public-ip>`
+4. Optionally run a handshake-only diagnostic: `make test-local-trust-insecure LOCAL_TRUST_IP=<public-ip>`
+
 Or run provisioning directly:
 
 ```bash
@@ -237,12 +261,12 @@ make add-local-trust LOCAL_TRUST_IP=<public-ip>
 
 After provisioning, complete the manual steps printed by the target:
 
-1. Configure router port forwarding (`TRUST_API_PORT/tcp` → trust host LAN IP)
-2. Update the trust endpoint URL in the `FLIP_API` secret: `make set-local-trust-endpoint LOCAL_TRUST_IP=<public-ip>` <!-- pragma: allowlist secret -->
+1. Configure router port forwarding (`TRUST_API_PORT/tcp` → trust host LAN IP; if federated learning traffic must reach the host, also forward `FL_SERVER_PORT/tcp`, currently `8002`)
+2. Update `trust_endpoints["Trust_1"]` in the `FLIP_API` secret: `make set-local-trust-endpoint LOCAL_TRUST_IP=<public-ip>` <!-- pragma: allowlist secret -->
 3. Start the trust stack on the host: `cd trust && env PROD=stag make up-local-trust-stag`
 4. Verify (CA-validated): `make test-local-trust LOCAL_TRUST_IP=<public-ip>`
 5. Optional handshake-only diagnostic: `make test-local-trust-insecure LOCAL_TRUST_IP=<public-ip>`
-6. Restart `flip-api` on the Central Hub
+6. Redeploy the Central Hub so `flip-api` picks up the updated secret: `make deploy-centralhub PROD=stag`
 
 Full details, including home network firewall configuration and troubleshooting, are in the [local provider README](../local/README.md).
 
@@ -270,15 +294,13 @@ Review the output for failed checks and follow the specific troubleshooting step
 
 ### Services
 
-The platform supports a cloud-only setup (Central Hub + Trust on AWS) or a hybrid setup (Central Hub on AWS + Trust on-premises). Both use HTTPS for inter-service communication.
+The platform supports a cloud-only setup (Central Hub + Trust on AWS) or a hybrid setup (Central Hub on AWS + Trust on-premises). Both use HTTPS for inter-service communication. Current staging and production deployments provision a single federated learning network (`net-1`).
 
 1. **Central Hub EC2**: Hosts the main application services
    - flip-ui (Frontend)
    - flip-api (Backend API)
    - fl-api-net-1 (Federated Learning API for Network 1)
-   - fl-api-net-2 (Federated Learning API for Network 2)
    - fl-server-net-1 (Federated Learning Server for Network 1)
-   - fl-server-net-2 (Federated Learning Server for Network 2)
 
 2. **Trust EC2** (cloud model): Hosts trust-related services (automatically provisioned)
    - nginx-tls (HTTPS termination)
@@ -286,7 +308,6 @@ The platform supports a cloud-only setup (Central Hub + Trust on AWS) or a hybri
    - imaging-api
    - data-access-api
    - fl-client-net-1 (FL Client for Network 1)
-   - fl-client-net-2 (FL Client for Network 2)
    - XNAT (medical imaging platform)
    - Orthanc (DICOM server)
    - OMOP database
@@ -347,8 +368,8 @@ The platform supports a cloud-only setup (Central Hub + Trust on AWS) or a hybri
 ### Central Hub Infrastructure
 
 - **VPC**: Custom VPC with public/private subnets
-- **Central Hub EC2**: Single t3.small instance running Docker containers (UI, API, FL services)
-- **Trust EC2**: Separate t3.small instance running Trust services via Docker Compose
+- **Central Hub EC2**: Single `t3.medium` instance running Docker containers (UI, API, FL services)
+- **Trust EC2**: Separate `t3.xlarge` instance running Trust services via Docker Compose
   - Deployed using custom Terraform module (`modules/trust_ec2`)
   - Automatic Docker and Docker Compose installation via user_data
   - Automatic Docker network creation for inter-service communication
@@ -384,9 +405,10 @@ Trust services can run on AWS EC2 or on-premises. Both models use the same Docke
 | ------ | --------- | --------- | --------- |
 | **22** | SSH | 🟢 **OPEN** | Remote administration |
 | **80** | HTTP | 🟢 **OPEN** | ALB traffic |
-| **3000** | FLIP UI | 🟢 **OPEN** | Frontend application |
-| **8000** | FLIP API | 🟢 **OPEN** | Backend API |
-| **8001** | FL API | 🟢 **OPEN** | Federated learning API |
-| **8002** | FL Server | 🟡 **CONDITIONAL** | gRPC (open to trust IPs only) |
-| **8003** | FL Admin | 🟡 **CONDITIONAL** | Admin (open to trust IPs only) |
+| **443** | HTTPS / FLIP UI | 🟢 **OPEN** | Primary ALB entrypoint for the UI and `/api/*` routes |
+| **8000** | FL API | 🟢 **OPEN** | Federated learning API |
+| **8002** | FL Server/Admin | 🟡 **CONDITIONAL** | Consolidated FL server/admin traffic, allow-listed to trust IPs only |
 | **8020** | Trust API | 🟢 **OPEN** | HTTPS (nginx-tls → trust-api) |
+| **8042** | Orthanc PACS UI | 🟢 **OPEN** | DICOM viewer / PACS administration |
+| **8080** | FLIP API | 🟢 **OPEN** | Dedicated ALB HTTP listener for the backend API |
+| **8104** | XNAT | 🟢 **OPEN** | Medical imaging platform UI |

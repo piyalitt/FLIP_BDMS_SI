@@ -20,9 +20,11 @@ services:
     container_name: flip-fl-api-net-1
     image: ${DOCKER_REGISTRY}${DOCKER_FL_API_NAME}:${DOCKER_FL_TAG}
     environment:
+      # Use the internal hostnames and ports for the server since the API is within the same Docker network
       - SUPERLINK_ADDRESS=fl-server-net-1:9093
       - SUPERLINK_HEALTH_ADDRESS=fl-server-net-1:9097
-      - SUPERNODE_HEALTH_ADDRESSES=Trust_1=trust1-fl-client-net-1-1:9098,Trust_2=trust2-fl-client-net-1-1:9098
+      # AWS update_env.py writes the Trust public-IP health endpoint(s) here for FL API check_client_status endpoint.
+      - SUPERNODE_HEALTH_ADDRESSES=${SUPERNODE_HEALTH_ADDRESSES}
     ports:
       - "${FL_API_PORT}:8000"
     depends_on:
@@ -32,8 +34,6 @@ services:
   fl-server-net-1:
     container_name: fl-server-net-1
     image: ${DOCKER_REGISTRY}${DOCKER_FL_SERVER_NAME}:${DOCKER_FL_TAG}
-    ports:
-      - "${FL_SERVER_PORT}:8002"
     environment:
       - NET_ID=net-1
       - LOCAL_DEV=false
@@ -46,5 +46,13 @@ services:
       - PRIVATE_API_KEY_HEADER=${PRIVATE_API_KEY_HEADER}
       - PRIVATE_API_KEY=${PRIVATE_API_KEY}
       # - AWS_PROFILE=${AWS_PROFILE} # in production, AWS credentials are retrieved from the instance role
+    command:
+      # TODO Replace --insecure with Flower TLS configuration for production so
+      # remote Trust supernodes connect to the SuperLink over authenticated encryption.
+      - --insecure
+      - --health-server-address
+      - 0.0.0.0:9097
+    ports:
+      - "${FL_SERVER_PORT}:9092"
     restart: unless-stopped
     init: true
