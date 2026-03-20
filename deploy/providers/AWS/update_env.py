@@ -87,7 +87,6 @@ def main():
     # TODO Set variable ports in Terraform and output them if they differ from defaults
     updates = {
         "DB_HOST": db_endpoint,
-        "SP_ADDRESS": ec2_ip,
         # NOTE: CENTRAL_HUB_API_URL is intentionally NOT updated here.
         # In staging/production it should be the ALB Route53 domain (e.g. https://stag.flip.aicentre.co.uk),
         # not the raw EC2 IP. SSL is terminated at the ALB using the ACM certificate.
