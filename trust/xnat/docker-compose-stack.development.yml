@@ -27,6 +27,8 @@ services:
       - ${XNAT_PATH}/${XNAT_PORT}/xnat-data/cache:${XNAT_ROOT}/cache
 
   xnat-db:
+    volumes:
+      - ./postgres:/docker-entrypoint-initdb.d
     deploy:
       resources:
         reservations:
