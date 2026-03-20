@@ -24,6 +24,7 @@
 #     -e trust_public_ip=<public-ip-or-hostname> \
 #     -e trust_api_port=8443 \
 #     -e flower_supernode_health_port=9098 \
+#     -e enable_flower_supernode_health=true \
 #     -e ch_public_ip=<aws-ec2-public-ip>
 #
 # After the playbook completes, trust/certs/trust-ca.crt will be fetched to
@@ -37,6 +38,7 @@
   vars:
     trust_api_port: 8443
     flower_supernode_health_port: 9098
+    enable_flower_supernode_health: false
     cert_dir: /opt/flip/certs
     flip_dir: /opt/flip
 
@@ -199,6 +201,7 @@
         port: "{{ flower_supernode_health_port | string }}"
         proto: tcp
         comment: "Flower supernode health from AWS CH"
+      when: enable_flower_supernode_health | bool
 
     - name: Set UFW default policy — deny incoming
       community.general.ufw:

@@ -17,6 +17,11 @@ import subprocess
 import sys
 
 
+def is_truthy(value):
+    """Return True for common truthy env-var values."""
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def get_terraform_outputs():
     """Run terraform output -json and return parsed object"""
     try:
@@ -86,9 +91,14 @@ def main():
     # NOTE Ports are assumed based on standard project configuration
     # TODO Set variable ports in Terraform and output them if they differ from defaults
     flower_supernode_health_port = os.getenv("FLOWER_SUPERNODE_HEALTH_PORT", "9098")
+    enable_flower_supernode_health = is_truthy(os.getenv("ENABLE_FLOWER_SUPERNODE_HEALTH", "")) or (
+        os.getenv("FL_BACKEND", "").strip().lower() == "flower"
+    )
     updates = {
         "DB_HOST": db_endpoint,
-        "SUPERNODE_HEALTH_ADDRESSES": f"Trust_1={trust_ip}:{flower_supernode_health_port}",
+        "SUPERNODE_HEALTH_ADDRESSES": (
+            f"Trust_1={trust_ip}:{flower_supernode_health_port}" if enable_flower_supernode_health else ""
+        ),
         # NOTE: CENTRAL_HUB_API_URL is intentionally NOT updated here.
         # In staging/production it should be the ALB Route53 domain (e.g. https://stag.flip.aicentre.co.uk),
         # not the raw EC2 IP. SSL is terminated at the ALB using the ACM certificate.

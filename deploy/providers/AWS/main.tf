@@ -116,6 +116,7 @@ resource "aws_security_group_rule" "fl_server_ingress_from_nlb" {
 }
 
 resource "aws_security_group_rule" "flower_supernode_health_from_central_hub" {
+  count                    = var.ENABLE_FLOWER_SUPERNODE_HEALTH ? 1 : 0
   type                     = "ingress"
   from_port                = var.FLOWER_SUPERNODE_HEALTH_PORT
   to_port                  = var.FLOWER_SUPERNODE_HEALTH_PORT

@@ -137,6 +137,12 @@ variable "FLOWER_SUPERNODE_HEALTH_PORT" {
   default     = 9098
 }
 
+variable "ENABLE_FLOWER_SUPERNODE_HEALTH" {
+  description = "Whether to expose Flower supernode health networking for remote Trust status checks"
+  type        = bool
+  default     = false
+}
+
 variable "flip_alb_subdomain" {
   description = "Subdomain for the FLIP ALB"
   type        = string

@@ -26,6 +26,9 @@ endif
 # Export PROD so child processes (e.g. check_status.py) can determine the environment
 export PROD
 
+ENABLE_FLOWER_SUPERNODE_HEALTH := $(if $(filter flower,$(FL_BACKEND)),true,false)
+export ENABLE_FLOWER_SUPERNODE_HEALTH
+
 # If PROD=true, check that the AWS_PROFILE=FlipDeveloperAccess-046651569599
 ifeq ($(PROD),true)
 ifneq ($(AWS_PROFILE),FlipDeveloperAccess-046651569599)
@@ -55,6 +58,7 @@ export TF_VAR_API_PORT=${API_PORT}
 export TF_VAR_FL_API_PORT=${FL_API_PORT}
 export TF_VAR_FL_SERVER_PORT=${FL_SERVER_PORT}
 export TF_VAR_FLOWER_SUPERNODE_HEALTH_PORT=${FLOWER_SUPERNODE_HEALTH_PORT}
+export TF_VAR_ENABLE_FLOWER_SUPERNODE_HEALTH=${ENABLE_FLOWER_SUPERNODE_HEALTH}
 export TF_VAR_TRUST_API_PORT=${TRUST_API_PORT}
 export TF_VAR_XNAT_PORT=${XNAT_PORT_TRUST_1}
 export TF_VAR_PACS_UI_PORT=${PACS_UI_PORT_TRUST_1}
@@ -364,7 +368,8 @@ add-local-trust: ## Provision an on-prem Trust host via Ansible and register it 
 			-e trust_public_ip=$(LOCAL_TRUST_IP) \
 			-e ch_public_ip="$$CH_IP" \
 			-e trust_api_port=$(TRUST_API_PORT) \
-			-e flower_supernode_health_port=$(FLOWER_SUPERNODE_HEALTH_PORT); \
+			-e flower_supernode_health_port=$(FLOWER_SUPERNODE_HEALTH_PORT) \
+			-e enable_flower_supernode_health=$(ENABLE_FLOWER_SUPERNODE_HEALTH); \
 	else \
 		echo "💻 Running locally (no SSH — operator machine is the trust host)..."; \
 		if [ -z "$$ANSIBLE_BECOME_PASS" ]; then \
@@ -392,7 +397,8 @@ add-local-trust: ## Provision an on-prem Trust host via Ansible and register it 
 			-e trust_public_ip=$(LOCAL_TRUST_IP) \
 			-e ch_public_ip="$$CH_IP" \
 			-e trust_api_port=$(TRUST_API_PORT) \
-			-e flower_supernode_health_port=$(FLOWER_SUPERNODE_HEALTH_PORT); \
+			-e flower_supernode_health_port=$(FLOWER_SUPERNODE_HEALTH_PORT) \
+			-e enable_flower_supernode_health=$(ENABLE_FLOWER_SUPERNODE_HEALTH); \
 		PLAY_RC=$$?; \
 		exit $$PLAY_RC; \
 	fi
@@ -442,7 +448,9 @@ add-local-trust: ## Provision an on-prem Trust host via Ansible and register it 
 	@echo "⚠️  REMAINING MANUAL STEPS:"
 	@echo "   1. Configure border router NAT: forward $(TRUST_API_PORT)/tcp → <trust-host-lan-ip>:$(TRUST_API_PORT)"
 	@echo "      If federated learning traffic must reach the host, also forward $(FL_SERVER_PORT)/tcp"
-	@echo "      and $(FLOWER_SUPERNODE_HEALTH_PORT)/tcp for Flower client health checks."
+	@if [ "$(ENABLE_FLOWER_SUPERNODE_HEALTH)" = "true" ]; then \
+		echo "      and $(FLOWER_SUPERNODE_HEALTH_PORT)/tcp so the FL API check_client_status endpoint can reach the Trust supernode health service."; \
+	fi
 	@echo "   2. Update Trust endpoint in Secrets Manager (recommended helper target):"
 	@echo "      make set-local-trust-endpoint LOCAL_TRUST_IP=$(LOCAL_TRUST_IP)"
 	@echo "   3. On the trust host — start the trust stack: cd trust && PROD=$(PROD) make up-local-trust-stag"

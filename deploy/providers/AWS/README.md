@@ -241,7 +241,7 @@ make full-deploy-stag-hybrid LOCAL_TRUST_IP=<public-ip> [LOCAL_TRUST_SSH_KEY=~/.
 This wrapper target runs the full AWS deployment, provisions the local trust, updates `trust_endpoints["Trust_1"]` in `FLIP_API`, and redeploys the Central Hub so the new secret values are loaded.
 You still need to:
 
-1. Configure router port forwarding (`TRUST_API_PORT/tcp` to the trust host LAN IP; if federated learning traffic must reach the host, also forward `FL_SERVER_PORT/tcp`, currently `8002`, and `FLOWER_SUPERNODE_HEALTH_PORT/tcp`, default `9098`, so the FL API `check_client_status` endpoint can call the Trust supernode health endpoint)
+1. Configure router port forwarding (`TRUST_API_PORT/tcp` to the trust host LAN IP; if federated learning traffic must reach the host, also forward `FL_SERVER_PORT/tcp`, currently `8002`. When `FL_BACKEND=flower`, also forward `FLOWER_SUPERNODE_HEALTH_PORT/tcp`, default `9098`, so the FL API `check_client_status` endpoint can call the Trust supernode health endpoint)
 2. Start the trust stack on the host: `cd trust && env PROD=stag make up-local-trust-stag`
 3. Verify (CA-validated): `make test-local-trust LOCAL_TRUST_IP=<public-ip>`
 4. Optionally run a handshake-only diagnostic: `make test-local-trust-insecure LOCAL_TRUST_IP=<public-ip>`
@@ -261,7 +261,7 @@ make add-local-trust LOCAL_TRUST_IP=<public-ip>
 
 After provisioning, complete the manual steps printed by the target:
 
-1. Configure router port forwarding (`TRUST_API_PORT/tcp` → trust host LAN IP; if federated learning traffic must reach the host, also forward `FL_SERVER_PORT/tcp`, currently `8002`, and `FLOWER_SUPERNODE_HEALTH_PORT/tcp`, default `9098`, so the FL API `check_client_status` endpoint can call the Trust supernode health endpoint)
+1. Configure router port forwarding (`TRUST_API_PORT/tcp` → trust host LAN IP; if federated learning traffic must reach the host, also forward `FL_SERVER_PORT/tcp`, currently `8002`. When `FL_BACKEND=flower`, also forward `FLOWER_SUPERNODE_HEALTH_PORT/tcp`, default `9098`, so the FL API `check_client_status` endpoint can call the Trust supernode health endpoint)
 2. Update `trust_endpoints["Trust_1"]` in the `FLIP_API` secret: `make set-local-trust-endpoint LOCAL_TRUST_IP=<public-ip>` <!-- pragma: allowlist secret -->
 3. Start the trust stack on the host: `cd trust && env PROD=stag make up-local-trust-stag`
 4. Verify (CA-validated): `make test-local-trust LOCAL_TRUST_IP=<public-ip>`
@@ -409,7 +409,7 @@ Trust services can run on AWS EC2 or on-premises. Both models use the same Docke
 | **8000** | FL API | 🟢 **OPEN** | Federated learning API |
 | **8002** | FL Server/Admin | 🟡 **CONDITIONAL** | Consolidated FL server/admin traffic, allow-listed to trust IPs only |
 | **8020** | Trust API | 🟢 **OPEN** | HTTPS (nginx-tls → trust-api) |
-| **9098** | Flower Supernode Health | 🟡 **CONDITIONAL** | Central Hub FL API polls Trust supernode gRPC health; restrict to the Central Hub IP only |
+| **9098** | Flower Supernode Health | 🟡 **CONDITIONAL** | Used only when `FL_BACKEND=flower`; Central Hub FL API polls Trust supernode gRPC health, restricted to the Central Hub IP only |
 | **8042** | Orthanc PACS UI | 🟢 **OPEN** | DICOM viewer / PACS administration |
 | **8080** | FLIP API | 🟢 **OPEN** | Dedicated ALB HTTP listener for the backend API |
 | **8104** | XNAT | 🟢 **OPEN** | Medical imaging platform UI |

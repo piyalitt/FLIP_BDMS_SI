@@ -113,7 +113,7 @@ make add-local-trust LOCAL_TRUST_IP=<public-ip>
 1. Runs the Ansible playbook (`site_local_trust.yml`) which:
    - Installs Docker and required system packages
    - Generates a self-signed CA and server TLS certificate with the host's public IP as SAN
-   - Configures UFW firewall to allow `TRUST_API_PORT`, the consolidated FL port `8002`, and the Flower supernode health port `FLOWER_SUPERNODE_HEALTH_PORT` **only from the Central Hub IP**
+   - Configures UFW firewall to allow `TRUST_API_PORT` and the consolidated FL port `8002` **only from the Central Hub IP**, plus `FLOWER_SUPERNODE_HEALTH_PORT` when `FL_BACKEND=flower`
    - Fetches the local trust CA certificate back to `trust/certs/local-trust-ca.crt`
 2. Creates a **CA bundle** (`deploy/providers/AWS/trust-ca.crt`) by concatenating the cloud Trust EC2 CA (generated earlier by `gen-trust-ec2-certs`) with the new local trust CA. This lets `flip-api` verify HTTPS connections to **both** trusts using a single bundle.
 3. Downloads the `Trust_2` FL participant kit from S3 and deploys it to `/opt/flip/services/Trust_2/{startup,local,transfer}` on the trust host.
@@ -123,7 +123,7 @@ make add-local-trust LOCAL_TRUST_IP=<public-ip>
 
 ### Post-provisioning manual steps
 
-1. **Configure router port forwarding** — Forward `TRUST_API_PORT/tcp` (default 8020) from the router's WAN interface to the trust host's LAN IP. If federated learning traffic must reach the trust host, also forward `8002/tcp` and `9098/tcp` (or your configured `FLOWER_SUPERNODE_HEALTH_PORT`).
+1. **Configure router port forwarding** — Forward `TRUST_API_PORT/tcp` (default 8020) from the router's WAN interface to the trust host's LAN IP. If federated learning traffic must reach the trust host, also forward `8002/tcp`. When `FL_BACKEND=flower`, also forward `9098/tcp` (or your configured `FLOWER_SUPERNODE_HEALTH_PORT`) so the FL API `check_client_status` endpoint can reach the Trust supernode health service.
 
 2. **Update `trust_endpoints["Trust_1"]` in Secrets Manager** — Recommended helper target:
 
