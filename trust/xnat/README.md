@@ -56,6 +56,9 @@ When running from the root Makefile, `DOCKER_TAG` is resolved automatically.
 
 In development (when `PROD` is not set), `make up` also mounts the local `xnat/plugins` and `xnat/config` directories into the container for hot-reload. In production, these are baked into the Docker image.
 
+> **Important — XNAT data volumes must be bind-mounted.**
+> XNAT's container service plugin executes Docker commands on the host (via the mounted Docker socket). Those host-spawned containers need access to XNAT data through host paths, so the data directories (`archive`, `build`, `cache`, `tomcat_logs`) must be bind-mounted rather than using named volumes. The `/${XNAT_PORT}` prefix isolates data directories per XNAT instance. See `docker-compose-stack.development.yml` for the full volume configuration.
+
 If successful, you will be able to log in to XNAT with the service account credentials (specified in the root `.env` file) and see the registered PACS in the DICOM Query-Retrieve plugin.
 
 ## Plugins
@@ -92,6 +95,12 @@ This can also be done manually from XNAT:
 * Click on **Import from PACS** on the right-hand sidebar.
 * Select **Orthanc** as your **Source PACS** (the selected SCP Receiver should default to **XNAT:8104**).
 * [Query PACS](https://wiki.xnat.org/xnat-tools/using-dqr-searching-the-pacs-and-importing-data#UsingDQR:SearchingthePACSandImportingData-Querying/SearchingforImageSessions).
+
+## Resource limits
+
+XNAT's container service plugin can launch many containers simultaneously (e.g. multiple dcm2niix conversions during a large import). Without resource limits, this can exhaust host CPU and memory, causing XNAT itself to hang. Docker Swarm's deploy resource constraints (`reservations` and `limits`) prevent this by capping what each service can consume.
+
+The development overlay (`docker-compose-stack.development.yml`) sets these constraints for `xnat-web` and `xnat-db`. EC2 deployments should also set limits, but the current instance type may be too small for the development values — adjust them to match the available resources on your target instance.
 
 ## Troubleshooting
 
