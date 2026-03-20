@@ -104,22 +104,13 @@ The development overlay (`docker-compose-stack.development.yml`) sets these cons
 
 ## Troubleshooting
 
-### [`FIXED`] Issue with receiving data from PACS (Orthanc) -- 'Error: Cannot import' when going to 'Import Studies from PACS' in a project page
+All issues below have been resolved and are documented here for reference.
 
-* Go to Administer > Site Administration > DICOM SCP Receivers > select XNAT > Change identifier to 'dqrObjectIdentifier' and enable custom processing.
-* This was not being configured correctly
+- **"Error: Cannot import" when importing studies from PACS** — The DICOM SCP Receiver was missing the correct identifier. Fix: set the identifier to `dqrObjectIdentifier` and enable custom processing under **Administer > Site Administration > DICOM SCP Receivers > XNAT**. Now handled automatically by `make up`.
 
-### [`FIXED`] Failed container launch: org.mandas.docker.client.exceptions.DockerRequestException: Request error: GET unix://localhost:80/images/json: 200
+- **`DockerRequestException` on container launch** — Container service plugin 3.4.3 is incompatible with Docker 25+ ([known issue](https://groups.google.com/g/xnat_discussion/c/2kh3J-p_8bE), [3.5.0 release notes](https://bitbucket.org/xnatdev/container-service/src/master/CHANGELOG.md)). Fixed by upgrading the plugin to 3.6.2+ and XNAT to 1.9.3 (see [compatibility matrix](https://wiki.xnat.org/container-service/container-service-compatibility-matrix#ContainerServiceCompatibilityMatrix-ContainerServiceCompatibilitywithXNAT)). Batch Launch and DQR plugins were also updated.
 
-Container service plugin 3.4.3 is incompatible with Docker version 25 and above. This is a known issue (<https://groups.google.com/g/xnat_discussion/c/2kh3J-p_8bE>). See plugin release notes for 3.5.0 <https://bitbucket.org/xnatdev/container-service/src/master/CHANGELOG.md>. I was running Docker version 28.0.1, build 068a01e.
-
-At the time this was fixed by installing newer version of the plugin (3.6.2). This meant installing a newer XNAT (1.9.3), after checking the compatibility matrix <https://wiki.xnat.org/container-service/container-service-compatibility-matrix#ContainerServiceCompatibilityMatrix-ContainerServiceCompatibilitywithXNAT>
-
-Also installed newer Batch Launch Plugin and DQR Plugin due to compatibility matrices.
-
-### [`FIXED`] Container can't find data
-
-Likely due to not having set path translation correctly -- this is now handled automatically.
+- **Container can't find data** — Path translation between the XNAT container and host was not configured. Now set automatically during `make up`.
 
 ## Attribution
 
