@@ -100,6 +100,48 @@ resource "aws_cognito_user_pool" "flip_user_pool" {
     mutable             = false
     required            = true
   }
+
+  admin_create_user_config {
+    invite_message_template {
+      email_subject = "You've been invited to FLIP - Federated Learning and Interoperability Platform"
+      email_message = <<-EOT
+        <p>Hello,</p>
+        <p>You have been invited to join <strong>FLIP</strong> (Federated Learning and Interoperability Platform) hosted by the London AI Centre.</p>
+        <p>Your temporary login credentials are:</p>
+        <ul>
+          <li><strong>Username:</strong> {username}</li>
+          <li><strong>Temporary password:</strong> {####}</li>
+        </ul>
+        <p>Please sign in at <a href="https://${var.flip_alb_subdomain}">https://${var.flip_alb_subdomain}</a> and change your password on first login.</p>
+        <p>If you did not expect this invitation, you can safely ignore this email.</p>
+        <p>- The FLIP Team</p>
+      EOT
+      sms_message   = "You've been invited to FLIP. Username: {username}, Temporary password: {####}"
+    }
+  }
+
+  verification_message_template {
+    default_email_option  = "CONFIRM_WITH_CODE"
+    email_subject         = "FLIP - Password Reset Request"
+    email_message         = <<-EOT
+      <p>Hello,</p>
+      <p>We received a request to reset your password for your <strong>FLIP</strong> (Federated Learning and Interoperability Platform) account.</p>
+      <p>Your verification code is: <strong>{####}</strong></p>
+      <p>If you did not request a password reset, you can safely ignore this email. Your password will remain unchanged.</p>
+      <p>- The FLIP Team</p>
+    EOT
+    email_subject_by_link = "FLIP - Password Reset Request"
+    email_message_by_link = <<-EOT
+      <p>Hello,</p>
+      <p>We received a request to reset your password for your <strong>FLIP</strong> (Federated Learning and Interoperability Platform) account.</p>
+      <p>Click the link below to reset your password:</p>
+      <p><a href="{##Click here to reset your password##}">Click here to reset your password</a></p>
+      <p>If you did not request a password reset, you can safely ignore this email. Your password will remain unchanged.</p>
+      <p>- The FLIP Team</p>
+    EOT
+    sms_message           = "Your FLIP verification code is: {####}"
+  }
+
   deletion_protection = "ACTIVE"
   lifecycle {
     prevent_destroy = true
