@@ -25,6 +25,7 @@ services:
       - SUPERLINK_HEALTH_ADDRESS=fl-server-net-1:9097
       # AWS update_env.py writes the Trust public-IP health endpoint(s) here for FL API check_client_status endpoint.
       - SUPERNODE_HEALTH_ADDRESSES=${SUPERNODE_HEALTH_ADDRESSES}
+      - FLOWER_HEALTHCHECK_TIMEOUT_SECONDS=5.0
     ports:
       - "${FL_API_PORT}:8000"
     depends_on:
