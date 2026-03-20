@@ -13,7 +13,7 @@
 
 # XNAT
 
-This is a very simple development environment to enable new users of XNAT to interact with the tool in a local environment, using Orthanc as as the mock PACS.
+XNAT is the medical imaging archive used by each FLIP trust site. It stores DICOM data imported from the trust's PACS (Orthanc) and makes it available to federated learning pipelines via the Imaging API. This directory contains the Docker configuration for running XNAT locally and on EC2, along with the plugins and setup scripts needed to integrate it with the rest of the FLIP Trust Services layer.
 
 ## Docker Swarm
 
@@ -25,7 +25,15 @@ XNAT is deployed using Docker Swarm (both locally and on EC2). This is because S
 
 **How it works:**
 - `make up` / `make down` use `docker stack deploy` / `docker stack rm` under the hood
-- The stack definition is in `docker-compose-stack.yml`
+- The stack definition uses layered compose files, selected by the `PROD` variable:
+
+  | Environment | Files |
+  | --- | --- |
+  | Development (default) | `docker-compose-stack.yml` + `docker-compose-stack.development.yml` |
+  | Staging / Production | `docker-compose-stack.yml` + `docker-compose-stack.production.yml` |
+
+  The base file defines the three services (`xnat-web`, `xnat-db`, `xnat-nginx`). The development overlay adds host bind-mounts for hot-reload and resource limits sized for dev machines. The production overlay mounts persistent data volumes under `/opt/flip/xnat/`.
+- Two XNAT instances are deployed as separate Swarm stacks (`xnat1`, `xnat2`), one per trust
 - EC2 deployments reuse the same Swarm targets (`up-xnat-1-ec2` delegates to `up-xnat-1`)
 
 ## Setup
