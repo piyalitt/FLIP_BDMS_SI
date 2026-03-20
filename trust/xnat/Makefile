@@ -12,7 +12,8 @@
 
 .PHONY: build up down clean xnat-shell xnat-plugins-download \
 	xnat-reset xnat-configure-trust-1 xnat-configure-trust-2 \
-	create-network-trust-1 create-network-trust-2 up-xnat-1 up-xnat-2
+	create-network-trust-1 create-network-trust-2 up-xnat-1 up-xnat-2 \
+	up-xnat-1-ec2 down-xnat-1-ec2
 
 # if tag PROD=true is passed, set PROD=true
 ifeq ($(PROD),true)
@@ -35,8 +36,11 @@ include xnat-docker-compose/.env
 export $(shell sed 's/=.*//' xnat-docker-compose/.env)
 endif
 
+# Default DOCKER_TAG to 'stag' when running standalone (not via root Makefile which exports its own)
+DOCKER_TAG ?= stag
+export DOCKER_TAG
+
 DOCKER_COMPOSE_CMD=docker compose -f docker-compose.development.yml
-DOCKER_COMPOSE_PROD_CMD=docker compose -f docker-compose.production.yml
 
 project1 = xnat1
 project2 = xnat2
@@ -52,45 +56,55 @@ build: xnat-war-download xnat-plugins-download
 # Path to the current folder (docker stack deploy needs absolute path)
 export XNAT_PATH=$(realpath .)
 
-TRUST_1_VARS = \
-	TRUST_NETWORK_NAME=${network1} \
-	XNAT_PORT=${XNAT_PORT_TRUST_1}
-TRUST_2_VARS = \
-	TRUST_NETWORK_NAME=${network2} \
-	XNAT_PORT=${XNAT_PORT_TRUST_2}
-
 up: xnat-reset up-xnat-1 up-xnat-2
 
 up-xnat-1: create-network-trust-1
 	cd xnat-docker-compose && \
-	$(TRUST_1_VARS) ${DOCKER_COMPOSE_CMD} -p ${project1} up -d --remove-orphans
+	XNAT_PATH=${XNAT_PATH} \
+	XNAT_PORT=${XNAT_PORT_TRUST_1} \
+	PACS_UI_PORT=${PACS_UI_PORT_TRUST_1} \
+	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_1} \
+	DOCKER_NETWORK_NAME=${network1} \
+	docker stack deploy --with-registry-auth -c docker-compose-stack.yml ${project1}
+# 	wait for a few seconds to ensure the containers are up before configuring
+	sleep 10
 	$(MAKE) xnat-configure-trust-1
 
-up-xnat-1-ec2: create-network-trust-1
-	cd xnat-docker-compose && \
-	$(TRUST_1_VARS) ${DOCKER_COMPOSE_PROD_CMD} -p ${project1} up -d --remove-orphans --pull always
-	$(MAKE) xnat-configure-trust-1
+up-xnat-1-ec2:
+	$(MAKE) up-xnat-1
 
 up-xnat-2: create-network-trust-2
 	cd xnat-docker-compose && \
-	$(TRUST_2_VARS) ${DOCKER_COMPOSE_CMD} -p ${project2} up -d --remove-orphans
+	XNAT_PATH=${XNAT_PATH} \
+	XNAT_PORT=${XNAT_PORT_TRUST_2} \
+	PACS_UI_PORT=${PACS_UI_PORT_TRUST_2} \
+	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_2} \
+	DOCKER_NETWORK_NAME=${network2} \
+	docker stack deploy --with-registry-auth -c docker-compose-stack.yml ${project2}
+# 	wait for a few seconds to ensure the containers are up before configuring
+	sleep 10
 	$(MAKE) xnat-configure-trust-2
 
 # Get a shell in the running xnat container (for project1)
 xnat-shell:
-	cd xnat-docker-compose && docker compose -p ${project1} exec xnat /bin/sh
+	CONTAINER=$$(docker ps --filter "name=${project1}_xnat-web" -q); \
+	docker exec -it $$CONTAINER bash
 
 # Stop all containers
 down:
 	cd xnat-docker-compose && \
-	docker compose -p ${project1} down && \
-	docker compose -p ${project2} down
+	docker stack rm ${project1} && \
+	docker stack rm ${project2}
+
+down-xnat-1-ec2:
+	docker stack rm ${project1}
 
 # Stop and clean up images
 clean:
 	cd xnat-docker-compose && \
-	docker compose -p ${project1} down --rmi local && \
-	docker compose -p ${project2} down --rmi local
+	docker stack rm ${project1} && \
+	docker stack rm ${project2} && \
+	docker system prune -f
 
 # Download XNAT WAR into the xnat-web Docker build context
 xnat-war-download:
@@ -124,95 +138,27 @@ xnat-reset: xnat-plugins-download
 	mkdir -p xnat-docker-compose/${XNAT_PORT_TRUST_2}/xnat-data/cache;
 
 # Configure XNAT instances with initial settings and run dcm2niix setup script
+# Finds the container ID by name and runs the configuration scripts inside it
 xnat-configure-trust-1:
-	cd xnat-docker-compose && \
-	docker compose -p ${project1} exec xnat-web bash -c "cd /data/xnat/config && bash configure-xnat.sh" && \
-	docker compose -p ${project1} exec xnat-web bash -c "cd /data/xnat/config && bash configure-dcm2niix.sh"
+	@echo "⏳ Waiting for ${project1}_xnat-web container to be ready..."
+	@timeout 120 bash -c 'until [ "$$(docker ps --filter "name=${project1}_xnat-web" -q)" != "" ]; do echo "  Waiting for container..."; sleep 5; done' || { echo "❌ ERROR: ${project1}_xnat-web container never started"; exit 1; }
+	CONTAINER=$$(docker ps --filter "name=${project1}_xnat-web" -q); \
+	docker exec $$CONTAINER bash -c 'cd /data/xnat/config && LOG_FILE="configure-xnat-${project1}.log" && bash configure-xnat.sh 2>&1 | tee "$$LOG_FILE"'; \
+	docker exec $$CONTAINER bash -c 'cd /data/xnat/config && LOG_FILE="configure-dcm2niix-${project1}.log" && bash configure-dcm2niix.sh 2>&1 | tee "$$LOG_FILE"'
 
 xnat-configure-trust-2:
-	cd xnat-docker-compose && \
-	docker compose -p ${project2} exec xnat-web bash -c "cd /data/xnat/config && bash configure-xnat.sh" && \
-	docker compose -p ${project2} exec xnat-web bash -c "cd /data/xnat/config && bash configure-dcm2niix.sh"
+	@echo "⏳ Waiting for ${project2}_xnat-web container to be ready..."
+	@timeout 120 bash -c 'until [ "$$(docker ps --filter "name=${project2}_xnat-web" -q)" != "" ]; do echo "  Waiting for container..."; sleep 5; done' || { echo "❌ ERROR: ${project2}_xnat-web container never started"; exit 1; }
+	CONTAINER=$$(docker ps --filter "name=${project2}_xnat-web" -q); \
+	docker exec $$CONTAINER bash -c 'cd /data/xnat/config && LOG_FILE="configure-xnat-${project2}.log" && bash configure-xnat.sh 2>&1 | tee "$$LOG_FILE"'; \
+	docker exec $$CONTAINER bash -c 'cd /data/xnat/config && LOG_FILE="configure-dcm2niix-${project2}.log" && bash configure-dcm2niix.sh 2>&1 | tee "$$LOG_FILE"'
 
 create-network-trust-1:
 	@echo "🔧 Ensuring external Docker networks exist..."
 	@docker network inspect ${network1} >/dev/null 2>&1 || \
-		docker network create --driver bridge ${network1}
-
-create-network-trust-2:
-	@echo "🔧 Ensuring external Docker networks exist..."
-	@docker network inspect ${network2} >/dev/null 2>&1 || \
-		docker network create --driver bridge ${network2}
-
-
-# ================== SWARM =======================
-
-up-swarm: xnat-reset up-xnat-1-swarm up-xnat-2-swarm
-
-up-xnat-1-swarm: create-network-trust-1-swarm
-	cd xnat-docker-compose && \
-	XNAT_PATH=${XNAT_PATH} \
-	XNAT_PORT=${XNAT_PORT_TRUST_1} \
-	PACS_UI_PORT=${PACS_UI_PORT_TRUST_1} \
-	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_1} \
-	DOCKER_NETWORK_NAME=${network1} \
-	docker stack deploy --with-registry-auth -c docker-compose-stack.yml ${project1}
-# 	wait for a few seconds to ensure the containers are up before configuring
-	sleep 10
-	$(MAKE) xnat-configure-trust-1-swarm
-
-up-xnat-2-swarm: create-network-trust-2-swarm
-	cd xnat-docker-compose && \
-	XNAT_PATH=${XNAT_PATH} \
-	XNAT_PORT=${XNAT_PORT_TRUST_2} \
-	PACS_UI_PORT=${PACS_UI_PORT_TRUST_2} \
-	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_2} \
-	DOCKER_NETWORK_NAME=${network2} \
-	docker stack deploy --with-registry-auth -c docker-compose-stack.yml ${project2}
-# 	wait for a few seconds to ensure the containers are up before configuring
-	sleep 10
-	$(MAKE) xnat-configure-trust-2-swarm
-
-# Get a shell in the running xnat container (for project1) - swarm mode
-xnat-shell-swarm:
-	CONTAINER=$$(docker ps --filter "name=${project1}_xnat-web" -q); \
-	docker exec -it $$CONTAINER bash
-
-# Stop all containers
-down-swarm:
-	cd xnat-docker-compose && \
-	docker stack rm ${project1} && \
-	docker stack rm ${project2}
-
-# Stop and clean up images (swarm)
-clean-swarm:
-	cd xnat-docker-compose && \
-	docker stack rm ${project1} && \
-	docker stack rm ${project2} && \
-	docker system prune -f
-
-# Configure both XNAT instances in swarm mode
-# find the container ID and run the configuration scripts inside it
-xnat-configure-trust-1-swarm:
-	@echo "⏳ Waiting for ${project1}_xnat-web container to be ready..."
-	@timeout 120 bash -c 'until [ "$$(docker ps --filter "name=${project1}_xnat-web" -q)" != "" ]; do echo "  Waiting for container..."; sleep 5; done' || { echo "❌ ERROR: ${project1}_xnat-web container never started"; exit 1; }
-	CONTAINER=$$(docker ps --filter "name=${project1}_xnat-web" -q); \
-	docker exec $$CONTAINER bash -c "cd /data/xnat/config && bash configure-xnat.sh"; \
-	docker exec $$CONTAINER bash -c "cd /data/xnat/config && bash configure-dcm2niix.sh"
-
-xnat-configure-trust-2-swarm:
-	@echo "⏳ Waiting for ${project2}_xnat-web container to be ready..."
-	@timeout 120 bash -c 'until [ "$$(docker ps --filter "name=${project2}_xnat-web" -q)" != "" ]; do echo "  Waiting for container..."; sleep 5; done' || { echo "❌ ERROR: ${project2}_xnat-web container never started"; exit 1; }
-	CONTAINER=$$(docker ps --filter "name=${project2}_xnat-web" -q); \
-	docker exec $$CONTAINER bash -c "cd /data/xnat/config && bash configure-xnat.sh"; \
-	docker exec $$CONTAINER bash -c "cd /data/xnat/config && bash configure-dcm2niix.sh"
-
-create-network-trust-1-swarm:
-	@echo "🔧 Ensuring external Docker networks exist..."
-	@docker network inspect ${network1} >/dev/null 2>&1 || \
 		docker network create --driver overlay --attachable ${network1}
 
-create-network-trust-2-swarm:
+create-network-trust-2:
 	@echo "🔧 Ensuring external Docker networks exist..."
 	@docker network inspect ${network2} >/dev/null 2>&1 || \
 		docker network create --driver overlay --attachable ${network2}

@@ -15,6 +15,19 @@
 
 This is a very simple development environment to enable new users of XNAT to interact with the tool in a local environment, using Orthanc as as the mock PACS.
 
+## Docker Swarm
+
+XNAT is deployed using Docker Swarm (both locally and on EC2). This is because Swarm provides overlay networking, resource constraints, and restart policies needed for XNAT services.
+
+**Prerequisites:**
+- Docker Swarm must be initialized before running XNAT: `docker swarm init`
+- Overlay networks are created automatically by Make targets
+
+**How it works:**
+- `make up` / `make down` use `docker stack deploy` / `docker stack rm` under the hood
+- The stack definition is in `xnat-docker-compose/docker-compose-stack.yml`
+- EC2 deployments reuse the same Swarm targets (`up-xnat-1-ec2` delegates to `up-xnat-1`)
+
 ## Setup
 
 Note you need Orthanc running in order to startup XNAT and configure it properly (see [orthanc](../orthanc/)).

@@ -9,7 +9,7 @@
 # version: '3.7'
 services:
   xnat-web:
-    image: ghcr.io/londonaicentre/xnat-web:stag
+    image: ghcr.io/londonaicentre/xnat-web:${DOCKER_TAG}
     deploy:
       replicas: 1
       restart_policy:
@@ -50,7 +50,7 @@ services:
       - xnat-db
 
   xnat-db:
-    image: ghcr.io/londonaicentre/xnat-db:stag
+    image: ghcr.io/londonaicentre/xnat-db:${DOCKER_TAG}
     deploy:
       replicas: 1
       restart_policy:
@@ -76,7 +76,7 @@ services:
       - XNAT_DATASOURCE_PASSWORD=${XNAT_DATASOURCE_PASSWORD}
 
   xnat-nginx:
-    image: ghcr.io/londonaicentre/xnat-nginx:stag
+    image: ghcr.io/londonaicentre/xnat-nginx:${DOCKER_TAG}
     deploy:
       replicas: 1
       resources:

@@ -125,18 +125,13 @@ Then create the networks again:
 make create-networks
 ```
 
-To manually manage XNAT Swarm services:
+To manually manage XNAT services (uses Docker Swarm):
 
 ```bash
-# Start XNAT services in Swarm mode
 cd trust/xnat
-make up-swarm
-
-# Stop XNAT services in Swarm mode
-make down-swarm
-
-# Get a shell in the XNAT container (Swarm mode)
-make xnat-shell-swarm
+make up          # Start XNAT services
+make down        # Stop XNAT services
+make xnat-shell  # Get a shell in the XNAT container
 ```
 
 ### Basic Usage
