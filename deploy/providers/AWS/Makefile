@@ -246,6 +246,7 @@ gen-trust-ec2-certs: ## Generate TLS certs for the cloud Trust EC2 using its Ter
 		../../../trust/certs/trust-server.key \
 		ubuntu@$$TRUST_IP:/opt/flip/certs/
 	@echo "✅ TLS certificates generated and deployed to Trust EC2!"
+
 .PHONY: regen-trust-certs
 regen-trust-certs: ## Re-generate TLS certs for Trust EC2, deploy to EC2, and update Secrets Manager
 	@echo "🔑 Regenerating TLS certificates for Trust EC2..."

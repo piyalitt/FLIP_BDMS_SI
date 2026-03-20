@@ -39,6 +39,7 @@
     "python.defaultInterpreterPath": "${workspaceFolder}/flip-api/.venv/bin/python",
     "python.envFile": "${workspaceFolder}/.env.development",
     "python.testing.pytestPath": ".venv/bin/pytest",
+
     // ========== FLIP-API (ACTIVE) ==========
     "python.testing.pytestArgs": [
         "flip-api/tests/",
@@ -50,18 +51,21 @@
         "--skip-client",
         "--skip-db",
     ],
+
     // ========== IMAGING-API (COMMENT OUT ABOVE, UNCOMMENT BELOW) ==========
     // "python.testing.pytestArgs": [
     //     "trust/imaging-api/tests/",
     //     "--tb=short",
     //     "--disable-warnings",
     // ],
+
     // ========== TRUST-API (COMMENT OUT ABOVE, UNCOMMENT BELOW) ==========
     // "python.testing.pytestArgs": [
     //     "trust/trust-api/tests/",
     //     "--tb=short",
     //     "--disable-warnings",
     // ],
+
     // ========== DATA-ACCESS-API (COMMENT OUT ABOVE, UNCOMMENT BELOW) ==========
     // "python.testing.pytestArgs": [
     //     "trust/data-access-api/tests/",
