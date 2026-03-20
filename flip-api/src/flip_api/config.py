@@ -69,11 +69,14 @@ class Settings(BaseSettings):
     # Variables used during database seeding
     NET_ENDPOINTS: dict[str, str]
 
+    # SSL / TLS settings
+    TRUST_CA_BUNDLE: Optional[str] = None  # Path to the Trust CA certificate PEM file
+
     # FL settings
     FL_BACKEND: Literal["nvflare", "flower"] = "nvflare"
 
     # Variables only used in testing
-    FLIP_API_URL: str = "http://localhost:8080/"  # this is currently only used in tests (TODO review)
+    FLIP_API_URL: str = "http://localhost:8080/api"  # this is currently only used in tests (TODO review)
     ADMIN_USER_PASSWORD: SecretStr | None = None  # only used in integration tests to make actual logins
 
 

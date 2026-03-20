@@ -176,9 +176,10 @@ module "flip_api_secret" {
   secret_string = jsonencode({
     aes_key = var.AES_KEY_BASE64
     trust_endpoints = {
-      "Trust_1" = "http://${module.trust_ec2.public_ip}:${var.TRUST_API_PORT}",
-      "Trust_2" = "http://${module.trust_ec2.public_ip}:${var.TRUST_API_PORT}"
+      "Trust_1" = "https://${module.trust_ec2.public_ip}:${var.TRUST_API_PORT}",
+      "Trust_2" = "https://${module.trust_ec2.public_ip}:${var.TRUST_API_PORT}"
     }
+    trust_ca_cert = try(file("${path.module}/trust-ca.crt"), "")
   })
 }
 
@@ -340,6 +341,14 @@ module "alb" {
       port      = var.API_PORT
       protocol  = "HTTP"
       target_id = aws_instance.ec2_instance.id
+
+      health_check = {
+        enabled  = true
+        protocol = "HTTP"
+        path     = "/api/health"
+        port     = "traffic-port"
+        matcher  = "200"
+      }
     },
     ec2-instance-fl-api = {
       port      = var.FL_API_PORT
@@ -438,11 +447,10 @@ resource "aws_route53_record" "fl_server_nlb" {
   }
 }
 
-# Listener rule for path-based routing to API
-# Routes specific API paths to avoid conflicts with UI routes
-resource "aws_lb_listener_rule" "api_path_routing" {
+# Listener rule for path-based routing to the API namespace
+resource "aws_lb_listener_rule" "api_routing" {
   listener_arn = module.alb.listeners["https-listener"].arn
-  priority     = 100
+  priority     = 98
 
   action {
     type             = "forward"
@@ -451,62 +459,50 @@ resource "aws_lb_listener_rule" "api_path_routing" {
 
   condition {
     path_pattern {
-      values = ["/cohort/*", "/files/*", "/fl/*", "/model/*", "/health"]
+      values = ["/api", "/api/*"]
     }
   }
 }
 
-# Additional listener rule for API documentation paths
-resource "aws_lb_listener_rule" "api_docs_routing" {
-  listener_arn = module.alb.listeners["https-listener"].arn
-  priority     = 101
+############################
+# On-Premises Trust (optional)
+# Activated by setting local_trust_public_ip in the env file or via
+# TF_VAR_local_trust_public_ip when running `make add-local-trust`.
+############################
 
-  action {
-    type             = "forward"
-    target_group_arn = module.alb.target_groups["ec2-instance-api"].arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/docs", "/openapi.json", "/redoc", "/prompts/*", "/roles/*"]
-    }
-  }
+resource "aws_security_group_rule" "local_trust_fl_server" {
+  count             = var.local_trust_public_ip != "" ? 1 : 0
+  type              = "ingress"
+  from_port         = 8002
+  to_port           = 8002
+  protocol          = "tcp"
+  cidr_blocks       = ["${var.local_trust_public_ip}/32"]
+  security_group_id = module.ec2_security_group.security_group.id
+  description       = "FL Server from on-prem Trust"
 }
 
-# Additional listener rule for trust and site API paths
-resource "aws_lb_listener_rule" "api_trust_site_routing" {
-  listener_arn = module.alb.listeners["https-listener"].arn
-  priority     = 102
-
-  action {
-    type             = "forward"
-    target_group_arn = module.alb.target_groups["ec2-instance-api"].arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/trust/*", "/site/*"]
-    }
-  }
+resource "aws_security_group_rule" "local_trust_fl_admin" {
+  count             = var.local_trust_public_ip != "" ? 1 : 0
+  type              = "ingress"
+  from_port         = 8003
+  to_port           = 8003
+  protocol          = "tcp"
+  cidr_blocks       = ["${var.local_trust_public_ip}/32"]
+  security_group_id = module.ec2_security_group.security_group.id
+  description       = "FL Admin from on-prem Trust"
 }
 
-# Listener rule for user and project API endpoints (priority 99 - higher priority)
-# Note: /users and /projects in UI are frontend routes, not API endpoints
-# API endpoints for users/projects should use more specific paths or HTTP methods
-resource "aws_lb_listener_rule" "api_user_project_routing" {
-  listener_arn = module.alb.listeners["https-listener"].arn
-  priority     = 99
-
-  action {
-    type             = "forward"
-    target_group_arn = module.alb.target_groups["ec2-instance-api"].arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/user/*", "/project/*"]
-    }
-  }
+# Allow the local (on-prem) trust FL client to reach the FL server via the NLB.
+# Without this rule the NLB security group drops the connection before it reaches the EC2.
+resource "aws_security_group_rule" "local_trust_fl_server_nlb" {
+  count             = var.local_trust_public_ip != "" ? 1 : 0
+  type              = "ingress"
+  from_port         = var.FL_SERVER_PORT
+  to_port           = var.FL_SERVER_PORT
+  protocol          = "tcp"
+  cidr_blocks       = ["${var.local_trust_public_ip}/32"]
+  security_group_id = module.fl_server_nlb.security_group_id
+  description       = "FL Server NLB from on-prem Trust"
 }
 
 # Outputs

@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-.PHONY: build dev prod clean stop up down up-trust-1 up-trust-2 down-trust-1 down-trust-2 create-networks remove-networks recreate-networks tests
+.PHONY: build dev prod clean stop up down up-trust-1 up-trust-2 down-trust-1 down-trust-2 up-local-trust-stag create-networks remove-networks recreate-networks tests generate-trust-certs verify-trust-certs test-trust-https
 # if tag PROD=true is passed, set PROD=true
 ifeq ($(PROD),true)
 MAIN_ENV_FILE=../.env.production
@@ -112,8 +112,8 @@ down-trust-1:
 
 restart-trust-1: down-trust-1 up-trust-1
 
-# Uses --pull always to ensure the latest FL images, 'stag' version, and omop-db images are used
-up-trust-1-stag:
+# Uses --pull always to ensure the latest FL images, 'stag' or 'prod' version, and omop-db images are used
+up-trust-1-ec2:
 # omop data will be downloaded onto the ec2 instance as part of deploy/providers/AWS/site.yml, so no need to do it here
 # NOTE eventually if we get AWSCLI on the ec2 instance by default then we could run update-omop-data here too.
 	@echo "🚢 Starting Trust 1 services..."
@@ -121,9 +121,23 @@ up-trust-1-stag:
 	@echo "🧠 FL_BACKEND=$(FL_BACKEND) ($(FL_BACKEND_COMPOSE_FILE))"
 	$(TRUST_1_VARS) DEBUG=${DEBUG} ${DOCKER_COMPOSE_CMD} -p ${trust1} up -d --pull always
 
-down-trust-1-stag:
+down-trust-1-ec2:
 	@echo "🛑 Stopping Trust 1 services..."
 	$(TRUST_1_VARS) ${DOCKER_COMPOSE_CMD} -p ${trust1} down --remove-orphans
+
+# LOCAL_TRUST_NUMBER controls which NVFlare participant kit the FL client mounts.
+# Local (on-prem) trusts use Trust_2 kit; EC2 trusts use Trust_1 kit (default).
+LOCAL_TRUST_NUMBER ?= 2
+
+up-local-trust-stag:
+	## Starts Trust 1 compose stack with TRUST_NUMBER overridden for the local trust FL kit.
+	## Uses project name 'trust1' so nginx-tls, trust-api, etc. keep their normal names,
+	## but overrides TRUST_NUMBER so the FL client mounts Trust_$(LOCAL_TRUST_NUMBER)/ kit dir.
+	@echo "🚢 Starting local Trust services (TRUST_NUMBER=$(LOCAL_TRUST_NUMBER))..."
+	@echo "⚙️ Using environment file ${MAIN_ENV_FILE}"
+	@echo "🧠 FL_BACKEND=$(FL_BACKEND) ($(FL_BACKEND_COMPOSE_FILE))"
+	$(TRUST_1_VARS) TRUST_NUMBER=$(LOCAL_TRUST_NUMBER) DEBUG=$(DEBUG) \
+		$(DOCKER_COMPOSE_CMD) -p $(trust1) up -d --pull always
 
 # Uses --pull always to ensure the latest FL images and omop-db image are used
 # ensure omop data is up to date before bringing up trust 2
@@ -132,11 +146,11 @@ up-trust-2: update-omop-data
 	@echo "⚙️ Using environment file ${MAIN_ENV_FILE}"
 	@echo "🧠 FL_BACKEND=$(FL_BACKEND) ($(FL_BACKEND_COMPOSE_FILE))"
 	mkdir -p ${BASE_IMAGES_DOWNLOAD_DIR_TRUST2}
-	$(TRUST_2_VARS) ${DOCKER_COMPOSE_CMD} -p ${trust2} up -d $(PULL_ALWAYS_FLAG)
+	$(TRUST_2_VARS) ${DOCKER_COMPOSE_CMD} -f compose_trust-2_override.yml -p ${trust2} up -d $(PULL_ALWAYS_FLAG)
 
 down-trust-2:
 	@echo "🛑 Stopping Trust 2 services..."
-	$(TRUST_2_VARS) ${DOCKER_COMPOSE_CMD} -p ${trust2} down --remove-orphans
+	$(TRUST_2_VARS) ${DOCKER_COMPOSE_CMD} -f compose_trust-2_override.yml -p ${trust2} down --remove-orphans
 
 restart-trust-2: down-trust-2 up-trust-2
 
@@ -194,3 +208,19 @@ debug-imaging-api-off:
 	DEBUG=false $(TRUST_1_VARS) ${DEBUG_OVERRIDE_COMPOSE_COMMAND} -p ${trust1} up --remove-orphans -d imaging-api
 debug-trust-api-off:
 	DEBUG=false $(TRUST_1_VARS) ${DEBUG_OVERRIDE_COMPOSE_COMMAND} -p ${trust1} up --remove-orphans -d trust-api
+
+generate-trust-certs:
+	TRUST_HOST="$(TRUST_HOST)" bash certs/generate-trust-certs.sh
+
+verify-trust-certs:
+	@echo "--- Verifying cert chain ---"
+	openssl verify -CAfile certs/trust-ca.crt certs/trust-server.crt
+	@echo "--- Server cert SANs ---"
+	openssl x509 -in certs/trust-server.crt -noout -ext subjectAltName
+	@echo "--- Expiry ---"
+	openssl x509 -in certs/trust-server.crt -noout -dates
+
+test-trust-https:
+	@[ -n "$(TRUST_HOST)" ] || (echo "ERROR: TRUST_HOST is required. Usage: make test-trust-https TRUST_HOST=<ip-or-hostname>"; exit 1)
+	@echo "--- HTTPS health check: https://$(TRUST_HOST):$(TRUST_API_PORT)/health ---"
+	curl -sf --cacert certs/trust-ca.crt https://$(TRUST_HOST):$(TRUST_API_PORT)/health
