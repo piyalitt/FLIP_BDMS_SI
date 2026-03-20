@@ -9,7 +9,7 @@
 # version: '3.7'
 services:
   xnat-web:
-    image: ghcr.io/londonaicentre/xnat-web:${DOCKER_TAG}
+    image: ${DOCKER_REGISTRY}xnat-web:${DOCKER_TAG}
     deploy:
       replicas: 1
       restart_policy:
@@ -28,7 +28,7 @@ services:
     environment:
       - CATALINA_OPTS=-Xms${XNAT_MIN_HEAP} -Xmx${XNAT_MAX_HEAP} -Dxnat.home=${XNAT_HOME} -XX:+UseG1GC -Djava.awt.headless=true -XX:+ParallelRefProcEnabled -XX:ParallelGCThreads=6 -XX:+UseStringDeduplication
       - XNAT_HOME=${XNAT_HOME}
-      - DATA_PATH=${XNAT_PATH}/xnat-docker-compose/${XNAT_PORT}/xnat-data
+      - DATA_PATH=${XNAT_PATH}/${XNAT_PORT}/xnat-data
       - XNAT_ADMIN_USER=${XNAT_ADMIN_USER}
       - XNAT_ADMIN_INITIAL_PASSWORD=${XNAT_ADMIN_INITIAL_PASSWORD}
       - XNAT_ADMIN_PASSWORD=${XNAT_ADMIN_PASSWORD}
@@ -37,20 +37,16 @@ services:
       - XNAT_PORT=${XNAT_PORT}
       - PACS_DICOM_PORT=${PACS_DICOM_PORT}
     volumes:
-      # added to allow for the plugins to be mounted while developing - in production they will already be in the image
-      - ${XNAT_PATH}/xnat-docker-compose/xnat/plugins:${XNAT_HOME}/plugins
-      - ${XNAT_PATH}/xnat-docker-compose/${XNAT_PORT}/xnat-data/tomcat_logs:${XNAT_HOME}/logs
-      - ${XNAT_PATH}/xnat-docker-compose/${XNAT_PORT}/xnat-data/archive:${XNAT_ROOT}/archive
-      - ${XNAT_PATH}/xnat-docker-compose/${XNAT_PORT}/xnat-data/build:${XNAT_ROOT}/build
-      - ${XNAT_PATH}/xnat-docker-compose/${XNAT_PORT}/xnat-data/cache:${XNAT_ROOT}/cache
+      - ${XNAT_PATH}/${XNAT_PORT}/xnat-data/tomcat_logs:${XNAT_HOME}/logs
+      - ${XNAT_PATH}/${XNAT_PORT}/xnat-data/archive:${XNAT_ROOT}/archive
+      - ${XNAT_PATH}/${XNAT_PORT}/xnat-data/build:${XNAT_ROOT}/build
+      - ${XNAT_PATH}/${XNAT_PORT}/xnat-data/cache:${XNAT_ROOT}/cache
       - /var/run/docker.sock:/var/run/docker.sock
-      # added to allow for the config to be mounted
-      - ${XNAT_PATH}/xnat-docker-compose/xnat/config:${XNAT_ROOT}/config
     depends_on:
       - xnat-db
 
   xnat-db:
-    image: ghcr.io/londonaicentre/xnat-db:${DOCKER_TAG}
+    image: ${DOCKER_REGISTRY}xnat-db:${DOCKER_TAG}
     deploy:
       replicas: 1
       restart_policy:
@@ -76,7 +72,7 @@ services:
       - XNAT_DATASOURCE_PASSWORD=${XNAT_DATASOURCE_PASSWORD}
 
   xnat-nginx:
-    image: ghcr.io/londonaicentre/xnat-nginx:${DOCKER_TAG}
+    image: ${DOCKER_REGISTRY}xnat-nginx:${DOCKER_TAG}
     deploy:
       replicas: 1
       resources:

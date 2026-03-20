@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-.PHONY: build up down clean xnat-shell xnat-plugins-download \
+.PHONY: build up down clean xnat-shell xnat-war-download xnat-plugins-download \
 	xnat-reset xnat-configure-trust-1 xnat-configure-trust-2 \
 	create-network-trust-1 create-network-trust-2 up-xnat-1 up-xnat-2 \
 	up-xnat-1-ec2 down-xnat-1-ec2
@@ -30,42 +30,74 @@ include $(MAIN_ENV_FILE)
 export $(shell sed 's/=.*//' $(MAIN_ENV_FILE))
 endif
 
-# Load .env file inside xnat-docker-compose folder
-ifneq ("$(wildcard xnat-docker-compose/.env)","")
-include xnat-docker-compose/.env
-export $(shell sed 's/=.*//' xnat-docker-compose/.env)
+# Load XNAT-specific .env file
+ifneq ("$(wildcard .env)","")
+include .env
+export $(shell sed 's/=.*//' .env)
 endif
 
 # Default DOCKER_TAG to 'stag' when running standalone (not via root Makefile which exports its own)
 DOCKER_TAG ?= stag
 export DOCKER_TAG
 
-DOCKER_COMPOSE_CMD=docker compose -f docker-compose.development.yml
-
 project1 = xnat1
 project2 = xnat2
 network1 = deploy_trust-network-1
 network2 = deploy_trust-network-2
 
-# Build the Docker images using the compose file
-build: xnat-war-download xnat-plugins-download
-	@echo "🔧 Building XNAT Docker images (no cache)..."
-	cd xnat-docker-compose && \
-	${DOCKER_COMPOSE_CMD} build --no-cache
-
 # Path to the current folder (docker stack deploy needs absolute path)
 export XNAT_PATH=$(realpath .)
+
+# In development, mount plugins and config from the host for hot-reload
+ifeq ($(PROD),true)
+STACK_FILES = -c docker-compose-stack.yml
+else ifeq ($(PROD),stag)
+STACK_FILES = -c docker-compose-stack.yml
+else
+STACK_FILES = -c docker-compose-stack.yml -c docker-compose-stack.development.yml
+endif
+
+# Build XNAT Docker images locally (mirrors CI workflow)
+# Requires AWS CLI access to download WAR and plugins from S3
+build:
+	@echo "🔧 Building XNAT Docker images..."
+	$(MAKE) xnat-war-download
+	$(MAKE) xnat-plugins-download
+	@echo "🐳 Building xnat-web image..."
+	docker build \
+		--build-arg XNAT_VERSION=${XNAT_VERSION} \
+		--build-arg XNAT_SMTP_ENABLED=${XNAT_SMTP_ENABLED} \
+		--build-arg XNAT_DATASOURCE_DRIVER=${XNAT_DATASOURCE_DRIVER} \
+		--build-arg XNAT_DATASOURCE_USERNAME=${XNAT_DATASOURCE_USERNAME} \
+		--build-arg XNAT_DATASOURCE_PASSWORD=${XNAT_DATASOURCE_PASSWORD} \
+		--build-arg XNAT_DATASOURCE_URL=${XNAT_DATASOURCE_URL} \
+		--build-arg TOMCAT_XNAT_FOLDER=${TOMCAT_XNAT_FOLDER} \
+		--build-arg XNAT_ROOT=${XNAT_ROOT} \
+		--build-arg XNAT_HOME=${XNAT_HOME} \
+		--build-arg XNAT_EMAIL=${XNAT_EMAIL} \
+		-t ${DOCKER_REGISTRY}xnat-web:dev \
+		xnat/
+	@echo "🐳 Building xnat-db image..."
+	docker build \
+		--build-arg PG_VERSION=${PG_VERSION} \
+		-t ${DOCKER_REGISTRY}xnat-db:dev \
+		postgres/
+	@echo "🐳 Building xnat-nginx image..."
+	docker build \
+		--build-arg NGINX_VERSION=${NGINX_VERSION} \
+		-t ${DOCKER_REGISTRY}xnat-nginx:dev \
+		nginx/
+	@echo "✅ XNAT Docker images built successfully!"
 
 up: xnat-reset up-xnat-1 up-xnat-2
 
 up-xnat-1: create-network-trust-1
-	cd xnat-docker-compose && \
 	XNAT_PATH=${XNAT_PATH} \
 	XNAT_PORT=${XNAT_PORT_TRUST_1} \
 	PACS_UI_PORT=${PACS_UI_PORT_TRUST_1} \
 	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_1} \
 	DOCKER_NETWORK_NAME=${network1} \
-	docker stack deploy --with-registry-auth -c docker-compose-stack.yml ${project1}
+	docker stack deploy --with-registry-auth ${STACK_FILES} ${project1}
 # 	wait for a few seconds to ensure the containers are up before configuring
 	sleep 10
 	$(MAKE) xnat-configure-trust-1
@@ -74,13 +106,12 @@ up-xnat-1-ec2:
 	$(MAKE) up-xnat-1
 
 up-xnat-2: create-network-trust-2
-	cd xnat-docker-compose && \
 	XNAT_PATH=${XNAT_PATH} \
 	XNAT_PORT=${XNAT_PORT_TRUST_2} \
 	PACS_UI_PORT=${PACS_UI_PORT_TRUST_2} \
 	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_2} \
 	DOCKER_NETWORK_NAME=${network2} \
-	docker stack deploy --with-registry-auth -c docker-compose-stack.yml ${project2}
+	docker stack deploy --with-registry-auth ${STACK_FILES} ${project2}
 # 	wait for a few seconds to ensure the containers are up before configuring
 	sleep 10
 	$(MAKE) xnat-configure-trust-2
@@ -92,7 +123,6 @@ xnat-shell:
 
 # Stop all containers
 down:
-	cd xnat-docker-compose && \
 	docker stack rm ${project1} && \
 	docker stack rm ${project2}
 
@@ -101,41 +131,39 @@ down-xnat-1-ec2:
 
 # Stop and clean up images
 clean:
-	cd xnat-docker-compose && \
 	docker stack rm ${project1} && \
 	docker stack rm ${project2} && \
 	docker system prune -f
 
-# Download XNAT WAR into the xnat-web Docker build context
+# Download XNAT WAR into the xnat-web Docker build context (skips if already present)
 xnat-war-download:
-	@if [ -f xnat-docker-compose/xnat/build-artifacts/xnat-web-$(XNAT_VERSION).war ]; then \
+	@mkdir -p xnat/build-artifacts
+	@if [ -f xnat/build-artifacts/xnat-web-$(XNAT_VERSION).war ]; then \
 		echo "✅ XNAT WAR already exists locally."; \
 	else \
 		echo "📦 Downloading XNAT WAR from S3..."; \
 		aws s3 cp "s3://$(FLIP_ARTIFACTS_BUCKET_NAME)/xnat/xnat-web-$(XNAT_VERSION).war" \
-			"xnat-docker-compose/xnat/build-artifacts/xnat-web-$(XNAT_VERSION).war"; \
-		ls -lh "xnat-docker-compose/xnat/build-artifacts/xnat-web-$(XNAT_VERSION).war"; \
+			"xnat/build-artifacts/xnat-web-$(XNAT_VERSION).war"; \
 	fi
 
-# Plugin versions (see the compatibility matrices for each plugin, e.g. for the container service plugin,
-# see https://wiki.xnat.org/container-service/container-service-compatibility-matrix)
+# Ensure required XNAT plugins are present locally (skips S3 sync if all are available)
 xnat-plugins-download:
-	@./scripts/ensure_plugins.sh "xnat-docker-compose/xnat/plugins" "$(FLIP_ARTIFACTS_BUCKET_NAME)"
+	@./scripts/ensure_plugins.sh "xnat/plugins" "$(FLIP_ARTIFACTS_BUCKET_NAME)"
 
 # Note this needs root privileges to run
 # Creates directory structure for XNAT (Docker Swarm requires them to exist beforehand)
-xnat-reset: xnat-plugins-download
+xnat-reset:
 	echo "Deleting previous XNAT data ..."; \
-	sudo rm -rf xnat-docker-compose/${XNAT_PORT_TRUST_1}; \
-	sudo rm -rf xnat-docker-compose/${XNAT_PORT_TRUST_2}; \
-	mkdir -p xnat-docker-compose/${XNAT_PORT_TRUST_1}/xnat-data/tomcat_logs; \
-	mkdir -p xnat-docker-compose/${XNAT_PORT_TRUST_1}/xnat-data/archive; \
-	mkdir -p xnat-docker-compose/${XNAT_PORT_TRUST_1}/xnat-data/build; \
-	mkdir -p xnat-docker-compose/${XNAT_PORT_TRUST_1}/xnat-data/cache; \
-	mkdir -p xnat-docker-compose/${XNAT_PORT_TRUST_2}/xnat-data/tomcat_logs; \
-	mkdir -p xnat-docker-compose/${XNAT_PORT_TRUST_2}/xnat-data/archive; \
-	mkdir -p xnat-docker-compose/${XNAT_PORT_TRUST_2}/xnat-data/build; \
-	mkdir -p xnat-docker-compose/${XNAT_PORT_TRUST_2}/xnat-data/cache;
+	sudo rm -rf ${XNAT_PORT_TRUST_1}; \
+	sudo rm -rf ${XNAT_PORT_TRUST_2}; \
+	mkdir -p ${XNAT_PORT_TRUST_1}/xnat-data/tomcat_logs; \
+	mkdir -p ${XNAT_PORT_TRUST_1}/xnat-data/archive; \
+	mkdir -p ${XNAT_PORT_TRUST_1}/xnat-data/build; \
+	mkdir -p ${XNAT_PORT_TRUST_1}/xnat-data/cache; \
+	mkdir -p ${XNAT_PORT_TRUST_2}/xnat-data/tomcat_logs; \
+	mkdir -p ${XNAT_PORT_TRUST_2}/xnat-data/archive; \
+	mkdir -p ${XNAT_PORT_TRUST_2}/xnat-data/build; \
+	mkdir -p ${XNAT_PORT_TRUST_2}/xnat-data/cache;
 
 # Configure XNAT instances with initial settings and run dcm2niix setup script
 # Finds the container ID by name and runs the configuration scripts inside it

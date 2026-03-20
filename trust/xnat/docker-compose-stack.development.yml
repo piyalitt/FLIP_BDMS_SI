@@ -1,0 +1,8 @@
+# Development overlay for docker-compose-stack.yml
+# Mounts plugins and config from the host for hot-reload during development.
+# In production, these are baked into the Docker image.
+services:
+  xnat-web:
+    volumes:
+      - ${XNAT_PATH}/xnat/plugins:${XNAT_HOME}/plugins
+      - ${XNAT_PATH}/xnat/config:${XNAT_ROOT}/config

@@ -25,52 +25,61 @@ XNAT is deployed using Docker Swarm (both locally and on EC2). This is because S
 
 **How it works:**
 - `make up` / `make down` use `docker stack deploy` / `docker stack rm` under the hood
-- The stack definition is in `xnat-docker-compose/docker-compose-stack.yml`
+- The stack definition is in `docker-compose-stack.yml`
 - EC2 deployments reuse the same Swarm targets (`up-xnat-1-ec2` delegates to `up-xnat-1`)
 
 ## Setup
 
 Note you need Orthanc running in order to startup XNAT and configure it properly (see [orthanc](../orthanc/)).
 
-### Download plugins
+### Build XNAT Docker images for local development
 
-During development, you will need to download the following XNAT plugins. In production, the XNAT Docker image comes with the plugins installed.
-
-Make sure to always use the correct version of the plugins that are compatible with the XNAT version specified. Check the plugin's compatibility matrix for more information (for example, see [DQR Plugin Compatibility Matrix](https://wiki.xnat.org/xnat-tools/dqr-plugin-compatibility-matrix)).
-
-You can use the Makefile command to download the plugins. From this folder, run
+Build the XNAT Docker images locally (requires AWS CLI access for S3 artifacts):
 
 ```sh
-make xnat-plugins-download
+make build
 ```
+
+This downloads the XNAT WAR and plugins from S3, then builds all three images (`xnat-web`, `xnat-db`, `xnat-nginx`) tagged as `${DOCKER_REGISTRY}xnat-<service>:dev`.
+
+### Run XNAT
+
+After building, run with the `dev` tag:
+
+```sh
+DOCKER_TAG=dev make up
+```
+
+When running from the root Makefile, `DOCKER_TAG` is resolved automatically.
+
+`make up` will create the required data directories, deploy the XNAT stack via Docker Swarm, and automatically configure both XNAT instances (service account, admin password, SCP receiver, PACS registration, dcm2niix).
+
+In development (when `PROD` is not set), `make up` also mounts the local `xnat/plugins` and `xnat/config` directories into the container for hot-reload. In production, these are baked into the Docker image.
+
+If successful, you will be able to log in to XNAT with the service account credentials (specified in the root `.env` file) and see the registered PACS in the DICOM Query-Retrieve plugin.
+
+## Plugins
+
+Plugins and the XNAT WAR are stored in S3 at `s3://<FLIP_ARTIFACTS_BUCKET_NAME>/xnat/plugins/` and `s3://<FLIP_ARTIFACTS_BUCKET_NAME>/xnat/xnat-web-<version>.war`. The CI workflows download them and bake them into the Docker image during the build.
+
+### Plugin compatibility
+
+Make sure to always use the correct version of the plugins that are compatible with the XNAT version specified. Check the plugin's compatibility matrix for more information (for example, see [DQR Plugin Compatibility Matrix](https://wiki.xnat.org/xnat-tools/dqr-plugin-compatibility-matrix)).
 
 The following table lists the compatible versions of the plugins for the XNAT version `1.9.3` used in this environment.
 
 | Plugin                          | Version for XNAT 1.9.3  |
-| --------------------------------- | ------------------------- |
+| ------------------------------- | ----------------------- |
 | Container Service Plugin        | 3.7.3                   |
 | Batch Launch Plugin             | 0.9.0                   |
 | DICOM Query-Retrieve Plugin     | 2.2.0                   |
 | OHIF Viewer Plugin              | 3.7.1                   |
 
-###  Steps
+### Adding or updating a plugin
 
-Use the Makefile in this folder and run
-
-```sh
-make xnat-reset # this will cleanup previous data, plugins and configurations
-make up
-```
-
-Once XNAT is up, configure XNAT using the below (only needs to be run once). In a separate terminal, run:
-
-```sh
-make xnat-configure
-```
-
-The `xnat-configure` command will configure XNAT by creating the service account, changing the default admin password, configuring the SCP receiver, registering PACS, etc. It will also configure dcm2niix in the container service plugin.
-
-If successful, you will be able to log in to XNAT with the service account credentials (specified in the root `.env` file) and see the registered PACS in the DICOM Query-Retrieve plugin.
+1. Upload the new `.jar` file to `s3://<FLIP_ARTIFACTS_BUCKET_NAME>/xnat/plugins/`.
+2. Update the plugin compatibility table above.
+3. Trigger the CI workflows (push or `gh workflow run`) to rebuild the image with the new plugin.
 
 ## Importing data
 
@@ -102,3 +111,12 @@ Also installed newer Batch Launch Plugin and DQR Plugin due to compatibility mat
 ### [`FIXED`] Container can't find data
 
 Likely due to not having set path translation correctly -- this is now handled automatically.
+
+## Attribution
+
+This directory contains Docker configuration derived from the XNAT docker-compose
+project maintained by Washington University School of Medicine.
+
+Original source: https://github.com/NrgXnat/xnat-docker-compose
+
+Modifications were made to integrate with the FLIP Trust Services layer.
