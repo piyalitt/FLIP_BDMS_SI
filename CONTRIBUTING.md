@@ -224,6 +224,7 @@ The project-wide ruff rules are:
 ```toml
 [tool.ruff]
 line-length = 120
+target-version = "py312"
 
 [tool.ruff.lint]
 preview = true
