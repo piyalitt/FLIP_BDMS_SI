@@ -96,6 +96,68 @@ make -C flip-api create_testing_projects   # Create test projects
 make -C flip-api delete_testing_projects   # Clean up test data
 ```
 
+## Workflow Requirements
+
+### Always Use Make Commands
+
+When a `Makefile` target exists for the task at hand, **always use it** instead of running raw commands. Make targets encapsulate the correct flags, environment setup, and command sequences. Key rules:
+
+- Use `make test` (from a service directory) rather than invoking `uv run ruff`, `uv run mypy`, and `uv run pytest` separately — it runs all three in the correct order.
+- Use `make unit_test` (from root or service directory) for running unit tests.
+- Use `make build` instead of raw `docker compose build`.
+- Use `make up` / `make down` instead of raw `docker compose` commands.
+- Check each service's `Makefile` for available targets before writing manual commands.
+
+### Always Verify Changes
+
+After making any code changes, **always run verification before committing**:
+
+1. **Identify affected services** — determine which service(s) your changes touch.
+2. **Run the service-level test suite** — from the affected service directory:
+   ```bash
+   make test        # Runs ruff + mypy + pytest (unit + integration)
+   ```
+   If only unit tests are needed (e.g., no Docker available):
+   ```bash
+   make unit_test   # Unit tests only
+   ```
+3. **For cross-service changes**, run the root-level test suite:
+   ```bash
+   make unit_test   # All services from root
+   ```
+4. **Fix all failures** before committing — do not commit code that fails linting, type checking, or tests.
+5. **For frontend changes** (`flip-ui/`), also run:
+   ```bash
+   cd flip-ui && npm run lint && npm run test:unit
+   ```
+
+### Check If Documentation Needs Updating
+
+After making changes, **always evaluate whether documentation needs to be updated**. Check the following:
+
+| Change Type | Documentation to Review |
+|-------------|------------------------|
+| New service or component | `README.md` (root), `CONTRIBUTING.md` (Adding a new service section), `docs/source/2_components.rst` |
+| New API endpoints | `docs/source/5_api_reference.rst`, service-level `README.md` |
+| Changed environment variables | `.env.development.example`, `CONTRIBUTING.md` (Environment variables section), `docs/source/3_sys-admin.rst` |
+| New dependencies or tooling | `CONTRIBUTING.md` (Prerequisites section), service `README.md` |
+| Changed Docker/deployment config | `deploy/README.md`, `docs/source/3_sys-admin.rst` |
+| New Make targets | `README.md` (root), this file (`CLAUDE.md`) |
+| Changed user-facing workflows | `docs/source/4_user-guides.rst` and files in `docs/source/user-guides/` |
+| New FL framework features | `docs/source/components/component-fl-nodes.rst` |
+| Trust service changes | `trust/README.md`, relevant `trust/*/README.md` |
+| New user roles or auth changes | `docs/source/components/component-user-roles.rst` |
+
+Documentation files in this repo:
+- **`README.md`** (root) — project overview, quickstart, prerequisites
+- **`CONTRIBUTING.md`** — development setup, coding style, PR process
+- **`docs/source/`** — Sphinx/ReadTheDocs documentation (`.rst` files)
+- **Service-level `README.md`** files — per-service setup and usage (in `flip-api/`, `flip-ui/`, `trust/*/`)
+- **`deploy/README.md`** — deployment instructions
+- **This file (`CLAUDE.md`)** — AI assistant reference
+
+When in doubt, update the docs. Outdated documentation is worse than no documentation.
+
 ## Code Style & Conventions
 
 ### Python
