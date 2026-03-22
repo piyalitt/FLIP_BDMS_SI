@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     ENV: str = os.getenv("ENV", "development")
     environment: str = ENV
     #
-    LOG_LEVEL: str = "DEBUG"
+    LOG_LEVEL: str = "INFO"
     FLIP_SITE_NAME: str = "unknown"
 
     #

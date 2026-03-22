@@ -101,9 +101,9 @@ The two relevant settings are:
      - Default
      - Description
    * - ``LOG_LEVEL``
-     - ``INFO`` (``DEBUG`` for imaging-api)
-     - Python log level (``DEBUG``, ``INFO``, ``WARNING``, ``ERROR``,
-       ``CRITICAL``).
+     - ``INFO``
+     - Python log level applied uniformly to all trust services. Set to
+       ``DEBUG`` in development, ``INFO`` in staging/production.
    * - ``FLIP_SITE_NAME``
      - ``unknown``
      - Human-readable trust/site name included in every log line for
@@ -237,9 +237,10 @@ override.
    * - Variable
      - Service
      - Description
-   * - ``LOG_LEVEL``
-     - All APIs
-     - Python log level (default ``INFO``, imaging-api defaults to ``DEBUG``)
+   * - ``TRUST_LOG_LEVEL``
+     - All APIs (mapped to ``LOG_LEVEL`` inside each container)
+     - Sets the Python log level uniformly across all trust services.
+       Defaults to ``DEBUG`` in development, ``INFO`` in staging/production.
    * - ``FLIP_SITE_NAME``
      - All APIs
      - Site identifier included in every log line

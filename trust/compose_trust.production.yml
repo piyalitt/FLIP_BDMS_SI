@@ -100,7 +100,7 @@ services:
       DEBUG: ${DEBUG}
       ENV: production
       BASE_IMAGES_DOWNLOAD_DIR: /app/data/images
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_LEVEL: ${TRUST_LOG_LEVEL:-INFO}
       FLIP_SITE_NAME: ${FLIP_SITE_NAME}
     # NOTE the volume BASE_IMAGES_DOWNLOAD_DIR is mounted to share images downloaded from XNAT with FL clients
     volumes:
@@ -119,7 +119,7 @@ services:
       DEBUG_PORT: ${DATA_ACCESS_DEBUG_PORT_TRUST_1}
       DEBUG: ${DEBUG}
       ENV: production
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_LEVEL: ${TRUST_LOG_LEVEL:-INFO}
       FLIP_SITE_NAME: ${FLIP_SITE_NAME}
 
   nginx-tls:
@@ -147,7 +147,7 @@ services:
       PRIVATE_API_KEY_HEADER: ${PRIVATE_API_KEY_HEADER}
       PRIVATE_API_KEY: ${PRIVATE_API_KEY}
       ENV: production
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_LEVEL: ${TRUST_LOG_LEVEL:-INFO}
       FLIP_SITE_NAME: ${FLIP_SITE_NAME}
 
 networks:
