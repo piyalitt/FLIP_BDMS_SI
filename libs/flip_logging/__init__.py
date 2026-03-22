@@ -21,14 +21,12 @@ _configured = False
 
 def configure_logging(
     api_name: str,
-    site: str = "unknown",
     level: str = "INFO",
 ) -> None:
     """Configure structured JSON logging for a FLIP API service.
 
     Args:
         api_name: The name of the API (e.g. "trust-api", "imaging-api").
-        site: The site/trust name (e.g. "trustA"). Set via FLIP_SITE_NAME env var.
         level: Log level string (e.g. "DEBUG", "INFO"). Set via LOG_LEVEL env var.
     """
     global _configured
@@ -40,7 +38,7 @@ def configure_logging(
     root.setLevel(getattr(logging, level.upper(), logging.INFO))
 
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(JSONFormatter(api_name=api_name, site=site))
+    handler.setFormatter(JSONFormatter(api_name=api_name))
     handler.addFilter(PIIRedactionFilter())
 
     root.handlers.clear()

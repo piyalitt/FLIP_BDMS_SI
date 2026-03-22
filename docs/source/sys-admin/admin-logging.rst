@@ -60,7 +60,7 @@ All trust-side APIs use the ``flip_logging`` library located at
 ``libs/flip_logging/``. The library provides:
 
 - **JSONFormatter** -- serialises every log record as a single-line JSON object
-  containing ``timestamp``, ``level``, ``api``, ``site``, ``logger``,
+  containing ``timestamp``, ``level``, ``api``, ``logger``,
   ``message`` and any extra fields.
 - **PIIRedactionFilter** -- defence-in-depth filter that redacts NHS numbers
   (10-digit sequences) and email addresses before they reach the log output.
@@ -86,13 +86,12 @@ from the service's Pydantic ``Settings`` class:
 
    configure_logging(
        api_name="trust-api",
-       site=_settings.FLIP_SITE_NAME,
        level=_settings.LOG_LEVEL,
    )
 
    logger = get_logger(__name__)
 
-The two relevant settings are:
+The relevant setting is:
 
 .. list-table::
    :header-rows: 1
@@ -104,12 +103,8 @@ The two relevant settings are:
      - ``INFO``
      - Python log level applied uniformly to all trust services. Set to
        ``DEBUG`` in development, ``INFO`` in staging/production.
-   * - ``FLIP_SITE_NAME``
-     - ``unknown``
-     - Human-readable trust/site name included in every log line for
-       multi-site identification.
 
-These are set via environment variables or ``.env.*`` files and read through
+This is set via environment variables or ``.env.*`` files and read through
 each service's Pydantic ``Settings`` class.
 
 Structured events
@@ -135,7 +130,6 @@ Every log line is a JSON object:
      "timestamp": "2025-06-15T10:23:45.123456Z",
      "level": "INFO",
      "api": "trust-api",
-     "site": "gstt",
      "logger": "trust_api.routers.cohort",
      "message": "Project approved",
      "event": "PROJECT_APPROVED",
@@ -220,9 +214,6 @@ override.
      - All APIs (mapped to ``LOG_LEVEL`` inside each container)
      - Sets the Python log level uniformly across all trust services.
        Defaults to ``DEBUG`` in development, ``INFO`` in staging/production.
-   * - ``FLIP_SITE_NAME``
-     - All APIs
-     - Site identifier included in every log line
    * - ``GRAFANA_PORT``
      - Grafana
      - Host port for the Grafana UI (default ``3000``)

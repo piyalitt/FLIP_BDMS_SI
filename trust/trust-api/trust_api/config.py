@@ -30,7 +30,6 @@ class Settings(BaseSettings):
 
     #
     LOG_LEVEL: str = "INFO"
-    FLIP_SITE_NAME: str = "unknown"
 
     #
     CENTRAL_HUB_API_URL: str

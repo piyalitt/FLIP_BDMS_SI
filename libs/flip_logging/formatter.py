@@ -78,17 +78,15 @@ _BUILTIN_ATTRS = frozenset({
 class JSONFormatter(logging.Formatter):
     """Outputs log records as single-line JSON objects."""
 
-    def __init__(self, api_name: str, site: str) -> None:
+    def __init__(self, api_name: str) -> None:
         super().__init__()
         self.api_name = api_name
-        self.site = site
 
     def format(self, record: logging.LogRecord) -> str:
         entry: dict = {
             "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
             "level": record.levelname,
             "api": self.api_name,
-            "site": self.site,
             "logger": record.name,
             "message": record.getMessage(),
         }

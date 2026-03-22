@@ -18,7 +18,6 @@ _settings = get_settings()
 
 configure_logging(
     api_name="data-access-api",
-    site=_settings.FLIP_SITE_NAME,
     level=_settings.LOG_LEVEL,
 )
 

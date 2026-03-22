@@ -32,7 +32,6 @@ class Settings(BaseSettings):
 
     #
     LOG_LEVEL: str = "INFO"
-    FLIP_SITE_NAME: str = "unknown"
 
     #
     COHORT_QUERY_THRESHOLD: int = 10  # Minimum number of records required to return statistics

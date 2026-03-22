@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     environment: str = ENV
     #
     LOG_LEVEL: str = "INFO"
-    FLIP_SITE_NAME: str = "unknown"
 
     #
     XNAT_PORT: int
