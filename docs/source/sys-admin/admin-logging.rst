@@ -7,8 +7,8 @@ visualise application logs. The stack consists of three layers:
 
 1. **flip_logging** -- a shared Python library that emits structured JSON logs
    with PII redaction.
-2. **Promtail + Loki** -- Docker-native log collection and storage with 30-day
-   retention.
+2. **Grafana Alloy + Loki** -- Docker-native log collection and storage with
+   30-day retention.
 3. **Grafana** -- a web dashboard for querying and visualising logs.
 
 .. contents:: On this page
@@ -30,8 +30,8 @@ Architecture
           └───────────┬───────┘─────────────────────┘
                       ▼
               ┌───────────────┐
-              │   Promtail    │  Scrapes Docker logs via socket
-              │  (port 9080)  │  Parses JSON, extracts labels
+              │ Grafana Alloy │  Scrapes Docker logs via socket
+              │ (port 12345)  │  Parses JSON, extracts labels
               └───────┬───────┘
                       ▼
               ┌───────────────┐
@@ -45,9 +45,9 @@ Architecture
               └───────────────┘
 
 Each FLIP API service writes single-line JSON to stdout. Docker captures this
-output. Promtail discovers containers via the Docker socket, parses the JSON
-and forwards the logs to Loki. Grafana queries Loki through a pre-provisioned
-datasource.
+output. Grafana Alloy discovers containers via the Docker socket, parses the
+JSON and forwards the logs to Loki. Grafana queries Loki through a
+pre-provisioned datasource.
 
 *******************
 Application Logging
@@ -147,19 +147,21 @@ Every log line is a JSON object:
 Infrastructure Components
 *************************
 
-Promtail
-========
+Grafana Alloy
+=============
 
-Promtail discovers containers via the Docker socket and scrapes their stdout
-logs. Configuration is at ``trust/promtail-config.yml``.
+Grafana Alloy discovers containers via the Docker socket and scrapes their
+stdout logs. Configuration is at ``trust/alloy-config.alloy`` (River syntax).
+Alloy replaces the now end-of-life Promtail collector.
 
 Key behaviours:
 
-- Discovers containers every 5 seconds.
+- Discovers containers every 5 seconds via ``discovery.docker``.
 - Extracts Docker labels as log labels: ``container``, ``service``,
-  ``project``.
+  ``project`` (via ``discovery.relabel``).
 - Parses JSON log lines and promotes ``level``, ``api``, ``event`` and
-  ``request_id`` to Loki labels for efficient querying.
+  ``request_id`` to Loki labels for efficient querying (via
+  ``loki.process`` with ``stage.json`` and ``stage.labels``).
 
 Loki
 ====
@@ -244,8 +246,7 @@ The logging infrastructure is defined in the trust-level Docker Compose files:
 Three services are added:
 
 1. **loki** (``grafana/loki:3.4.0``) -- log storage
-2. **promtail** (``grafana/promtail:3.4.0``) -- log collector (depends on
-   loki)
+2. **alloy** (``grafana/alloy:v1.9.0``) -- log collector (depends on loki)
 3. **grafana** (``grafana/grafana:11.5.0``) -- dashboard (depends on loki)
 
 In production, persistent volumes are mounted at:
@@ -318,8 +319,8 @@ Logs not appearing in Grafana
 =============================
 
 1. Check that the API containers are running: ``docker compose ps``.
-2. Check Promtail can reach Loki: ``docker compose logs promtail``.
-3. Verify Promtail has access to the Docker socket
+2. Check Alloy can reach Loki: ``docker compose logs alloy``.
+3. Verify Alloy has access to the Docker socket
    (``/var/run/docker.sock`` must be mounted).
 4. Check Loki is healthy: ``curl http://localhost:3100/ready``.
 
