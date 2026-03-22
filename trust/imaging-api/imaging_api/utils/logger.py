@@ -10,14 +10,15 @@
 # limitations under the License.
 #
 
-import os
-
 from flip_logging import configure_logging, get_logger
+from imaging_api.config import get_settings
+
+_settings = get_settings()
 
 configure_logging(
     api_name="imaging-api",
-    site=os.getenv("FLIP_SITE_NAME", "unknown"),
-    level=os.getenv("LOG_LEVEL", "DEBUG"),
+    site=_settings.FLIP_SITE_NAME,
+    level=_settings.LOG_LEVEL,
 )
 
 logger = get_logger(__name__)

@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     ENV: str = os.getenv("ENV", "development")
     environment: str = ENV
     #
+    LOG_LEVEL: str = "DEBUG"
+    FLIP_SITE_NAME: str = "unknown"
+
+    #
     XNAT_PORT: int
     PACS_ID: int
 
