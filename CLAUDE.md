@@ -326,14 +326,16 @@ On-premises trusts are provisioned via Ansible (`deploy/providers/local/`), whic
 
 ### Dev/Prod Consistency Rules
 
-When making infrastructure or deployment changes:
+When making infrastructure or deployment changes, **always think through both environments end-to-end**:
 
-1. **Compose files** — update both `compose.development.yml` and `compose.production.yml`
-2. **FL backend variants** — update both `flower` and `nvflare` compose files if adding services or ports
-3. **Environment variables** — add to `.env.development.example` and document in `deploy/README.md`; production uses Secrets Manager, so also update `deploy/providers/AWS/services.tf` if needed
-4. **Terraform variables** — update `variables.tf` with descriptions and defaults; keep `main.tf` and `services.tf` in sync
-5. **Trust changes** — update both cloud (`deploy/providers/AWS/`) and on-prem (`deploy/providers/local/`) Ansible playbooks
-6. **Certificates** — never bypass TLS validation; fix certificates instead
+1. **Compose files** — update both `compose.development.yml` and `compose.production.yml`. They differ in *how* services run (build-from-source vs GHCR images, source volume mounts vs baked-in code), but the set of services, ports, networks, and functional volume mounts must stay in sync.
+2. **Volume mounts and host files** — development mounts files from the local repo (e.g., `../trust/certs:/etc/ssl/trust/:ro`). Production mounts files from the EC2 host filesystem (e.g., `/opt/flip/certs/trust-ca.crt:/etc/ssl/trust/trust-ca.crt:ro`). If you add a file bind mount in development, the same file must exist on the production EC2 instance — ensure it is provisioned by the Ansible playbook (`deploy/providers/AWS/site.yml`) or by a Makefile target, and add the corresponding mount in `compose.production.yml`.
+3. **FL backend variants** — update both `flower` and `nvflare` compose files if adding services or ports.
+4. **Environment variables** — add to `.env.development.example` and document in `deploy/README.md`. Production uses AWS Secrets Manager instead of `.env` files, so also update `deploy/providers/AWS/services.tf` (the `FLIP_API` secret) if the variable is needed at runtime.
+5. **Terraform variables** — update `variables.tf` with descriptions and defaults; keep `main.tf` and `services.tf` in sync.
+6. **Ansible provisioning** — if production EC2 instances need new directories, files, packages, or data, add tasks to `deploy/providers/AWS/site.yml` (cloud) and `deploy/providers/local/site_local_trust.yml` (on-prem). Key host paths: `/opt/flip/` (app root), `/opt/flip/certs/` (TLS certs), `/opt/flip/data/` (FL data), `/opt/flip/services/` (FL participant kits), `/opt/flip/volumes/` (database data).
+7. **Trust changes** — update both cloud (`deploy/providers/AWS/`) and on-prem (`deploy/providers/local/`) Ansible playbooks so both deployment models stay consistent.
+8. **Certificates** — never bypass TLS validation; fix certificates instead.
 
 ## Security Rules
 
