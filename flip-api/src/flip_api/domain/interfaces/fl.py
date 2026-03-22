@@ -13,12 +13,13 @@
 import json
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Dict, List, Optional
+from typing import Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, computed_field, field_validator
 
 from flip_api.domain.schemas.status import ClientStatus
+from flip_api.domain.schemas.types import TrimStr
 from flip_api.utils.constants import JOB_TYPES_REQUIRED_FILES_FILE
 
 # Path to the JSON file containing job types and required files (relative to this file)
@@ -84,7 +85,7 @@ class IRequiredTrainingInformation(BaseModel):
 
 
 class IInitiateTrainingInputPayload(BaseModel):
-    trusts: List[Annotated[str, Field(strip_whitespace=True, min_length=1)]]
+    trusts: List[TrimStr]
 
     @field_validator("trusts")
     @classmethod

@@ -14,8 +14,6 @@ from pydantic import BaseModel, Field
 
 from flip_api.domain.schemas.types import TrimStr
 
-# Schemas
-
 
 class UpdateTrustStatusSchema(BaseModel):
     fl_client_endpoint: TrimStr = Field(..., description="'fl_client_endpoint' is required")
