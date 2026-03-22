@@ -18,8 +18,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from flip_logging.context import request_context
-from flip_logging.events import REQUEST_COMPLETED, REQUEST_FAILED, REQUEST_STARTED
+from flip_logging.formatter import request_context
+
+# Request lifecycle event names
+REQUEST_STARTED = "request.started"
+REQUEST_COMPLETED = "request.completed"
+REQUEST_FAILED = "request.failed"
 
 logger = logging.getLogger(__name__)
 

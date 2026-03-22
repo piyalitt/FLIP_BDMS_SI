@@ -10,4 +10,17 @@
 # limitations under the License.
 #
 
-PYTHONPATH=./data_access_api:../../libs
+import os
+
+# Set dummy environment variables required by Settings() before any app code
+# is imported.  These are only used in tests; real values come from Docker
+# Compose environment or .env files in deployed environments.
+_TEST_ENV_DEFAULTS = {
+    "DATA_ACCESS_POSTGRES_USER": "test_user",
+    "DATA_ACCESS_POSTGRES_PASSWORD": "test_password",
+    "OMOP_POSTGRES_DB": "test_omop_db",
+    "AES_KEY_BASE64": "QgZ+TBA0lUxcuCiRPLneFe/JjMaUEUJWHACHHGz2gGA=",  # 32-byte key, base64
+}
+
+for key, value in _TEST_ENV_DEFAULTS.items():
+    os.environ.setdefault(key, value)

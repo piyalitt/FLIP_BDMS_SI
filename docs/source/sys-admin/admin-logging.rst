@@ -115,37 +115,14 @@ each service's Pydantic ``Settings`` class.
 Structured events
 -----------------
 
-The library defines named event constants in ``flip_logging.events`` for
-consistent log tagging across services:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 40 60
-
-   * - Category
-     - Events
-   * - Project lifecycle
-     - ``PROJECT_SUBMITTED``, ``PROJECT_APPROVED``, ``PROJECT_STAGED``,
-       ``PROJECT_UNSTAGED``, ``PROJECT_DELETED``
-   * - Data access
-     - ``COHORT_QUERY_SUBMITTED``, ``COHORT_RESULTS_RECEIVED``
-   * - Imaging pipeline
-     - ``IMAGING_PROJECT_CREATED``, ``IMAGING_STUDIES_IMPORTED``,
-       ``IMAGING_STUDIES_REIMPORTED``
-   * - Training
-     - ``TRAINING_INITIATED``, ``TRAINING_COMPLETED``, ``TRAINING_FAILED``
-   * - Model management
-     - ``MODEL_CREATED``, ``MODEL_DELETED``, ``MODEL_STATUS_UPDATED``
-   * - Request lifecycle
-     - ``REQUEST_STARTED``, ``REQUEST_COMPLETED``, ``REQUEST_FAILED``
-
-Use events via the ``event`` extra field:
+Use the ``event`` extra field with dotted string names for consistent log
+tagging across services. The ``LoggingMiddleware`` automatically tags request
+lifecycle events (``request.started``, ``request.completed``,
+``request.failed``).
 
 .. code-block:: python
 
-   from flip_logging.events import PROJECT_APPROVED
-
-   logger.info("Project approved", extra={"event": PROJECT_APPROVED, "project_id": pid})
+   logger.info("Project approved", extra={"event": "project.approved", "project_id": pid})
 
 Log output format
 -----------------

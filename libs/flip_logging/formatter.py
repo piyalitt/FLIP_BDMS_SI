@@ -12,9 +12,59 @@
 
 import json
 import logging
+import re
+from contextvars import ContextVar
 from datetime import datetime, timezone
 
-from flip_logging.context import request_context
+# ---------------------------------------------------------------------------
+# Per-request context
+# ---------------------------------------------------------------------------
+
+# Holds a dict of fields (request_id, user_id, etc.) that get merged into
+# every log record emitted during that request.
+request_context: ContextVar[dict | None] = ContextVar("request_context", default=None)
+
+# ---------------------------------------------------------------------------
+# PII redaction
+# ---------------------------------------------------------------------------
+
+# NHS number: 10 consecutive digits (with optional spaces in groups of 3-3-4)
+_NHS_NUMBER_PATTERN = re.compile(r"\b\d{3}\s?\d{3}\s?\d{4}\b")
+
+# Email address
+_EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
+
+_REDACTED = "[REDACTED]"
+
+
+def _redact(text: str) -> str:
+    """Replace potential PII patterns in a string."""
+    text = _NHS_NUMBER_PATTERN.sub(_REDACTED, text)
+    text = _EMAIL_PATTERN.sub(_REDACTED, text)
+    return text
+
+
+class PIIRedactionFilter(logging.Filter):
+    """Defence-in-depth filter that redacts potential PII from log messages.
+
+    Developers should never log patient data, but this filter catches
+    accidental inclusion of NHS numbers and email addresses.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.msg and isinstance(record.msg, str):
+            record.msg = _redact(record.msg)
+        if record.args:
+            if isinstance(record.args, dict):
+                record.args = {k: _redact(str(v)) if isinstance(v, str) else v for k, v in record.args.items()}
+            elif isinstance(record.args, tuple):
+                record.args = tuple(_redact(str(a)) if isinstance(a, str) else a for a in record.args)
+        return True
+
+
+# ---------------------------------------------------------------------------
+# JSON formatter
+# ---------------------------------------------------------------------------
 
 # Fields from LogRecord that we handle explicitly or want to exclude from extras
 _BUILTIN_ATTRS = frozenset({
