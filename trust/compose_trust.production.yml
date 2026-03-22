@@ -24,7 +24,7 @@ services:
     ports:
       - "${LOKI_PORT:-3100}:3100"
     volumes:
-      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - /opt/flip/config/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - /opt/flip/volumes/loki:/loki
 
   alloy:
@@ -35,7 +35,7 @@ services:
       - --server.http.listen-addr=0.0.0.0:12345
       - /etc/alloy/config.alloy
     volumes:
-      - ./alloy-config.alloy:/etc/alloy/config.alloy:ro
+      - /opt/flip/config/alloy-config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - loki
@@ -49,7 +49,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
     volumes:
       - /opt/flip/volumes/grafana:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - /opt/flip/config/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - loki
 
