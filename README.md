@@ -208,6 +208,8 @@ If you see errors like "fed_client.json does not exist" or "missing startup fold
 For production deployments on AWS, see the [AWS Deployment Guide](deploy/README.md). This covers provisioning
 infrastructure with OpenTofu (Terraform), configuring AWS services, and deploying the platform at scale.
 
+For hybrid on-premises trust deployments, see the [Local Trust Deployment Guide](deploy/providers/local/README.md).
+
 ## Project Structure
 
 The repository is organised as follows:
