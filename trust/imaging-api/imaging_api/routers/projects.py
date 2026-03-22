@@ -146,9 +146,10 @@ async def create_project_from_central_hub_project(
     # Set the project pre-archive settings
     set_project_prearchive_settings(project.ID, headers)
 
-    # Enable dcm2niix command at the project level
+    # Enable dcm2niix command at the project level if requested
     # TODO We may want to add more here in the future, e.g. QC
-    enable_project_command(project.ID, "xnat/dcm2niix:latest", headers)
+    if central_hub_project.dicom_to_nifti:
+        enable_project_command(project.ID, "xnat/dcm2niix:latest", headers)
 
     # Add central hub users to imaging project
     # Will create XNAT users if they do not exist, and add them to the XNAT project

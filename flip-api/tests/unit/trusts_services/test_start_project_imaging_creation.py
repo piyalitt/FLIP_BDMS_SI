@@ -77,6 +77,7 @@ def mock_get_project():
             name="Test Project",
             query=query,
             owner_id=user_id,
+            dicom_to_nifti=True,
         )
         yield mock_get_project
 
