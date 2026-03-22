@@ -125,3 +125,4 @@ def get_dataframe(query_input: DataframeQuery) -> dict[str, list[Any]]:
 
     # df.to_csv("data.csv", index=False) # debugging
     return df.to_dict(orient="list")
+    return df.to_dict(orient="list")
