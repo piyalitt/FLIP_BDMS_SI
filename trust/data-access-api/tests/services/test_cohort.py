@@ -268,40 +268,62 @@ def test_get_records_undefined_column_with_extraction_failure(mock_read_sql, moc
 # Tests for validate_query
 
 
-def test_validate_query():
-    """
-    Test the validate_query function.
-    """
+def test_validate_query_valid():
+    """Test that valid SELECT queries pass validation."""
     assert validate_query("SELECT * FROM test_table") is True
-    assert validate_query("INVALID SQL") is True
+    assert validate_query("  SELECT col1, col2 FROM test_table WHERE id = 1  ") is True
 
-    # Test restricted schemas
-    with pytest.raises(HTTPException, match="Query contains restricted PostgreSQL internal functions or schemas."):
+
+def test_validate_query_empty():
+    """Test that empty queries are rejected."""
+    with pytest.raises(HTTPException, match="Query is empty"):
+        validate_query("")
+    with pytest.raises(HTTPException, match="Query is empty"):
+        validate_query("   ")
+
+
+def test_validate_query_non_select():
+    """Test that non-SELECT statements are rejected."""
+    with pytest.raises(HTTPException, match="Only SELECT statements are allowed"):
+        validate_query("INVALID SQL")
+    with pytest.raises(HTTPException, match="Only SELECT statements are allowed"):
+        validate_query("WITH cte AS (SELECT 1) SELECT * FROM cte")
+
+
+def test_validate_query_semicolons():
+    """Test that semicolons (statement chaining) are rejected."""
+    with pytest.raises(HTTPException, match="semicolons"):
+        validate_query("SELECT 1; DROP TABLE test_table")
+
+
+def test_validate_query_restricted_schemas():
+    """Test that restricted PostgreSQL schemas are rejected (case-insensitive)."""
+    with pytest.raises(HTTPException, match="restricted PostgreSQL internal functions or schemas"):
         validate_query("SELECT * FROM pg_catalog.pg_tables")
-    with pytest.raises(HTTPException, match="Query contains restricted PostgreSQL internal functions or schemas."):
+    with pytest.raises(HTTPException, match="restricted PostgreSQL internal functions or schemas"):
         validate_query("SELECT * FROM information_schema.tables")
+    with pytest.raises(HTTPException, match="restricted PostgreSQL internal functions or schemas"):
+        validate_query("SELECT * FROM PG_CATALOG.pg_tables")
 
-    # Test unsafe operations
-    with pytest.raises(HTTPException, match="Query contains unsafe operations like DROP, DELETE, or UPDATE."):
-        validate_query("DROP TABLE test_table")
-    with pytest.raises(HTTPException, match="Query contains unsafe operations like DROP, DELETE, or UPDATE."):
-        validate_query("DELETE FROM test_table")
-    with pytest.raises(HTTPException, match="Query contains unsafe operations like DROP, DELETE, or UPDATE."):
-        validate_query("UPDATE test_table SET col=1")
 
-    # Test INSERT
-    with pytest.raises(HTTPException, match="Query contains unsafe operation like INSERT."):
-        validate_query("INSERT INTO test_table VALUES (1)")
-
-    # Test CREATE
-    with pytest.raises(HTTPException, match="Query contains unsafe operation like CREATE."):
-        validate_query("CREATE TABLE test_table (id int)")
-
-    # Test ALTER
-    with pytest.raises(HTTPException, match="Query contains unsafe operation like ALTER."):
-        validate_query("ALTER TABLE test_table ADD COLUMN col int")
-
-    assert validate_query("") is True
+def test_validate_query_dangerous_keywords():
+    """Test that dangerous SQL keywords are rejected (case-insensitive)."""
+    with pytest.raises(HTTPException, match="unsafe operation: DROP"):
+        validate_query("SELECT * FROM (DROP TABLE test_table)")
+    with pytest.raises(HTTPException, match="unsafe operation: DELETE"):
+        validate_query("SELECT * FROM t WHERE EXISTS (DELETE FROM t)")
+    with pytest.raises(HTTPException, match="unsafe operation: UPDATE"):
+        validate_query("SELECT * FROM t WHERE EXISTS (UPDATE t SET col=1)")
+    with pytest.raises(HTTPException, match="unsafe operation: INSERT"):
+        validate_query("SELECT * FROM t WHERE EXISTS (INSERT INTO t VALUES (1))")
+    with pytest.raises(HTTPException, match="unsafe operation: CREATE"):
+        validate_query("SELECT * FROM t WHERE EXISTS (CREATE TABLE t (id int))")
+    with pytest.raises(HTTPException, match="unsafe operation: ALTER"):
+        validate_query("SELECT * FROM t WHERE EXISTS (ALTER TABLE t ADD col int)")
+    with pytest.raises(HTTPException, match="unsafe operation: GRANT"):
+        validate_query("SELECT * FROM t WHERE EXISTS (GRANT ALL ON t TO public)")
+    with pytest.raises(HTTPException, match="unsafe operation: TRUNCATE"):
+        validate_query("SELECT * FROM t WHERE EXISTS (TRUNCATE TABLE t)")
 
 
 # Tests for get_counts

@@ -11,6 +11,7 @@
 #
 
 import datetime
+import re
 
 import pandas as pd
 from fastapi import HTTPException
@@ -26,35 +27,56 @@ from data_access_api.utils.sql_parsers import extract_missing_identifier
 
 COHORT_QUERY_THRESHOLD = get_settings().COHORT_QUERY_THRESHOLD
 
+DANGEROUS_KEYWORDS = re.compile(
+    r"\b("
+    r"drop|delete|update|insert|create|alter|grant|revoke|truncate|merge"
+    r"|execute|exec|call|copy|analyze|explain|vacuum|reindex|cluster"
+    r"|set\s+role|set\s+session|load|do"
+    r")\b",
+    re.IGNORECASE,
+)
+
+RESTRICTED_SCHEMAS = re.compile(r"\b(pg_catalog|information_schema)\b", re.IGNORECASE)
+
 
 def validate_query(query: str) -> bool | HTTPException:
     """
     Validates the SQL query to ensure it is safe to execute.
-    This function checks that the query not contain sql injection risks or other unsafe elements.
+    This function checks that the query does not contain SQL injection risks or other unsafe elements.
 
     Args:
         query (str): The SQL query to validate.
 
     Returns:
-        bool: True if the query is valid, False otherwise.
+        bool: True if the query is valid.
 
     Raises:
         HTTPException: If the query is invalid or contains unsafe elements.
     """
-    # TODO: Implement more comprehensive validation logic.
-    # Check if the user is using PostgreSQL internal functions that are not allowed.
-    if "pg_catalog" in query or "information_schema" in query:
+    normalized = query.strip()
+
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Query is empty.")
+
+    if ";" in normalized:
+        raise HTTPException(
+            status_code=400, detail="Query must not contain semicolons (statement chaining is not allowed)."
+        )
+
+    lower = normalized.lower()
+
+    if not lower.startswith("select"):
+        raise HTTPException(status_code=400, detail="Only SELECT statements are allowed.")
+
+    if RESTRICTED_SCHEMAS.search(normalized):
         raise HTTPException(
             status_code=400, detail="Query contains restricted PostgreSQL internal functions or schemas."
         )
-    if "DROP" in query or "DELETE" in query or "UPDATE" in query:
-        raise HTTPException(status_code=400, detail="Query contains unsafe operations like DROP, DELETE, or UPDATE.")
-    if "INSERT" in query:
-        raise HTTPException(status_code=400, detail="Query contains unsafe operation like INSERT.")
-    if "CREATE" in query:
-        raise HTTPException(status_code=400, detail="Query contains unsafe operation like CREATE.")
-    if "ALTER" in query:
-        raise HTTPException(status_code=400, detail="Query contains unsafe operation like ALTER.")
+
+    match = DANGEROUS_KEYWORDS.search(normalized)
+    if match:
+        raise HTTPException(status_code=400, detail=f"Query contains unsafe operation: {match.group(0).upper()}.")
+
     return True
 
 
@@ -72,6 +94,7 @@ def get_records(query: str, params: dict | None = None) -> pd.DataFrame:
     Raises:
         HTTPException: If the query is invalid or if there is an error during execution.
     """
+    validate_query(query)
     logger.info(f"Executing SQL query: {query}")
 
     try:
