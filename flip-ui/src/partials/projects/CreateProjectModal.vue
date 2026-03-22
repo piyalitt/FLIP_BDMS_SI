@@ -91,7 +91,7 @@
                                                     Convert DICOM to NIfTI
                                                 </label>
                                                 <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                                                    Automatically convert DICOM scans to NIfTI format when images are imported. NIfTI files strip all DICOM metadata including patient information.
+                                                    Automatically convert DICOM scans to NIfTI format when images are imported.
                                                 </p>
                                                 <AiSwitch
                                                     name="dicom_to_nifti"
