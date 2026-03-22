@@ -11,13 +11,12 @@
 #
 
 from fastapi import FastAPI
-
 from flip_logging import LoggingMiddleware
-from data_access_api.routers.cohort import router as cohort_router
-from data_access_api.routers.health import router as health_router
 
 # Ensure structured logging is configured on import
 import data_access_api.utils.logger  # noqa: F401
+from data_access_api.routers.cohort import router as cohort_router
+from data_access_api.routers.health import router as health_router
 
 app = FastAPI(
     title="Data Access API",

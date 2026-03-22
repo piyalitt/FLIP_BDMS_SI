@@ -11,14 +11,13 @@
 #
 
 from fastapi import FastAPI
-
 from flip_logging import LoggingMiddleware
-from trust_api.routers.cohort import router as cohort_router
-from trust_api.routers.health import router as health_router
-from trust_api.routers.imaging import router as imaging_router
 
 # Ensure structured logging is configured on import
 import trust_api.utils.logger  # noqa: F401
+from trust_api.routers.cohort import router as cohort_router
+from trust_api.routers.health import router as health_router
+from trust_api.routers.imaging import router as imaging_router
 
 app = FastAPI(
     title="Trust API",
