@@ -14,10 +14,11 @@ from datetime import datetime
 from typing import Generic, List, Optional, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, conlist, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlmodel import SQLModel
 
 from flip_api.domain.schemas.status import XNATImageStatus
+from flip_api.domain.schemas.types import NonEmptyUUIDList
 
 
 class UserAccessInfo(SQLModel):  # Or BaseModel
@@ -160,7 +161,7 @@ class ProjectDetails(BaseModel, from_attributes=True):
 
 
 class StageProjectRequest(BaseModel):
-    trusts: conlist(UUID, min_length=1) = Field(..., description="A non-empty list of Trust UUIDs")  # type: ignore[valid-type]
+    trusts: NonEmptyUUIDList = Field(..., description="A non-empty list of Trust UUIDs")
 
     model_config = ConfigDict(
         json_schema_extra={

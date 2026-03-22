@@ -10,12 +10,13 @@
 # limitations under the License.
 #
 
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, conlist
+from pydantic import BaseModel, Field
 
 from flip_api.domain.schemas.status import BucketAction, BucketStatus, FileUploadStatus
+from flip_api.domain.schemas.types import NonEmptyUUIDList
 
 
 class ModelFiles(BaseModel):
@@ -100,4 +101,4 @@ class IdList(BaseModel):
     Ensures each item in the list is a valid UUID.
     """
 
-    ids: Annotated[list[UUID], conlist(UUID, min_length=1)]
+    ids: NonEmptyUUIDList
