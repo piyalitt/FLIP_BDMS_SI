@@ -12,8 +12,12 @@
 
 from fastapi import FastAPI
 
+from flip_logging import LoggingMiddleware
 from data_access_api.routers.cohort import router as cohort_router
 from data_access_api.routers.health import router as health_router
+
+# Ensure structured logging is configured on import
+import data_access_api.utils.logger  # noqa: F401
 
 app = FastAPI(
     title="Data Access API",
@@ -22,6 +26,8 @@ app = FastAPI(
     docs_url="/docs",  # Swagger UI
     redoc_url="/redoc",  # ReDoc UI
 )
+
+app.add_middleware(LoggingMiddleware)
 
 app.include_router(cohort_router)
 app.include_router(health_router)

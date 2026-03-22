@@ -15,6 +15,43 @@
 
 services:
 
+  # --- Logging infrastructure ---
+
+  loki:
+    image: grafana/loki:3.4.0
+    restart: always
+    command: -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - /opt/flip/volumes/loki:/loki
+
+  promtail:
+    image: grafana/promtail:3.4.0
+    restart: always
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:11.5.0
+    restart: always
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - /opt/flip/volumes/grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - loki
+
+  # --- Application services ---
+
   omop-db:
     image: ghcr.io/londonaicentre/omop-db:stag
     restart: always
@@ -63,6 +100,8 @@ services:
       DEBUG: ${DEBUG}
       ENV: production
       BASE_IMAGES_DOWNLOAD_DIR: /app/data/images
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      FLIP_SITE_NAME: ${FLIP_SITE_NAME}
     # NOTE the volume BASE_IMAGES_DOWNLOAD_DIR is mounted to share images downloaded from XNAT with FL clients
     volumes:
       - ${BASE_IMAGES_DOWNLOAD_DIR}:/app/data/images
@@ -80,6 +119,8 @@ services:
       DEBUG_PORT: ${DATA_ACCESS_DEBUG_PORT_TRUST_1}
       DEBUG: ${DEBUG}
       ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      FLIP_SITE_NAME: ${FLIP_SITE_NAME}
 
   nginx-tls:
     build:
@@ -106,6 +147,8 @@ services:
       PRIVATE_API_KEY_HEADER: ${PRIVATE_API_KEY_HEADER}
       PRIVATE_API_KEY: ${PRIVATE_API_KEY}
       ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      FLIP_SITE_NAME: ${FLIP_SITE_NAME}
 
 networks:
   default:

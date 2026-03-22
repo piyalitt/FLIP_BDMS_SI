@@ -15,6 +15,40 @@
 
 services:
 
+  # --- Logging infrastructure ---
+
+  loki:
+    image: grafana/loki:3.4.0
+    command: -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+
+  promtail:
+    image: grafana/promtail:3.4.0
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:11.5.0
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - loki
+
+  # --- Application services ---
+
   omop-db:
     image: ghcr.io/londonaicentre/omop-db:latest
     restart: always
@@ -68,11 +102,14 @@ services:
       DEBUG: ${DEBUG}
       ENV: development
       BASE_IMAGES_DOWNLOAD_DIR: /app/data/images
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      FLIP_SITE_NAME: ${FLIP_SITE_NAME:-development}
     # NOTE the volume BASE_IMAGES_DOWNLOAD_DIR is mounted to share images downloaded from XNAT with FL clients
     volumes:
       - ./imaging-api/imaging_api:/app/imaging_api
       - ./imaging-api/tests:/app/tests
       - ${BASE_IMAGES_DOWNLOAD_DIR}:/app/data/images
+      - ../libs/flip_logging:/app/flip_logging:ro
 
   data-access-api:
     build:
@@ -95,9 +132,12 @@ services:
       DEBUG_PORT: ${DATA_ACCESS_DEBUG_PORT_TRUST_1}
       DEBUG: ${DEBUG}
       ENV: development
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      FLIP_SITE_NAME: ${FLIP_SITE_NAME:-development}
     volumes:
       - ./data-access-api/data_access_api:/app/data_access_api
       - ./data-access-api/tests:/app/tests
+      - ../libs/flip_logging:/app/flip_logging:ro
 
   nginx-tls:
     build:
@@ -135,12 +175,19 @@ services:
       PRIVATE_API_KEY_HEADER: ${PRIVATE_API_KEY_HEADER}
       PRIVATE_API_KEY: ${PRIVATE_API_KEY}
       ENV: development
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      FLIP_SITE_NAME: ${FLIP_SITE_NAME:-development}
     volumes:
       - ./trust-api/trust_api:/app/trust_api
       - ./trust-api/tests:/app/tests
+      - ../libs/flip_logging:/app/flip_logging:ro
     networks:
       - default
       - central-hub-trust-apis-network
+
+volumes:
+  loki-data:
+  grafana-data:
 
 networks:
   default:

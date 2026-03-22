@@ -10,14 +10,8 @@
 # limitations under the License.
 #
 
-import os
+from contextvars import ContextVar
 
-from flip_logging import configure_logging, get_logger
-
-configure_logging(
-    api_name="data-access-api",
-    site=os.getenv("FLIP_SITE_NAME", "unknown"),
-    level=os.getenv("LOG_LEVEL", "INFO"),
-)
-
-logger = get_logger(__name__)
+# Per-request context: holds a dict of fields (request_id, user_id, etc.)
+# that get merged into every log record emitted during that request.
+request_context: ContextVar[dict | None] = ContextVar("request_context", default=None)

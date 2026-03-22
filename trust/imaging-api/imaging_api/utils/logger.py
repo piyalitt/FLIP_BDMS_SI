@@ -10,9 +10,14 @@
 # limitations under the License.
 #
 
-import logging
+import os
 
-from imaging_api.config import get_settings
+from flip_logging import configure_logging, get_logger
 
-logger = logging.getLogger("uvicorn")
-logger.setLevel(get_settings().LOG_LEVEL)
+configure_logging(
+    api_name="imaging-api",
+    site=os.getenv("FLIP_SITE_NAME", "unknown"),
+    level=os.getenv("LOG_LEVEL", "DEBUG"),
+)
+
+logger = get_logger(__name__)

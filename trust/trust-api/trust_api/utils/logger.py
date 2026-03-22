@@ -10,7 +10,14 @@
 # limitations under the License.
 #
 
-import logging
+import os
 
-logger = logging.getLogger("uvicorn")
-logger.setLevel(logging.DEBUG)
+from flip_logging import configure_logging, get_logger
+
+configure_logging(
+    api_name="trust-api",
+    site=os.getenv("FLIP_SITE_NAME", "unknown"),
+    level=os.getenv("LOG_LEVEL", "INFO"),
+)
+
+logger = get_logger(__name__)
