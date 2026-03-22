@@ -28,9 +28,6 @@ class Settings(BaseSettings):
         extra="allow",
     )
 
-    LOG_LEVEL: str = "INFO"
-    FLIP_SITE_NAME: str = "unknown"
-
     #
     CENTRAL_HUB_API_URL: str
     DATA_ACCESS_API_URL: str

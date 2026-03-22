@@ -19,6 +19,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from flip_logging.context import request_context
+from flip_logging.events import REQUEST_COMPLETED, REQUEST_FAILED, REQUEST_STARTED
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         logger.info(
             "Request started",
             extra={
-                "event": "request.started",
+                "event": REQUEST_STARTED,
                 "method": request.method,
                 "path": request.url.path,
             },
@@ -51,7 +52,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             logger.exception(
                 "Request failed with unhandled exception",
                 extra={
-                    "event": "request.failed",
+                    "event": REQUEST_FAILED,
                     "method": request.method,
                     "path": request.url.path,
                     "duration_ms": duration_ms,
@@ -65,7 +66,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         logger.info(
             "Request completed",
             extra={
-                "event": "request.completed",
+                "event": REQUEST_COMPLETED,
                 "method": request.method,
                 "path": request.url.path,
                 "status_code": response.status_code,
