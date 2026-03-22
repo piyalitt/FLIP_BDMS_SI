@@ -274,36 +274,24 @@ def test_validate_query_valid():
     assert validate_query("  SELECT col1, col2 FROM test_table WHERE id = 1  ") is True
 
 
-def test_validate_query_cte():
-    """Test that CTE (WITH ... SELECT) queries pass validation."""
-    assert validate_query("WITH cte AS (SELECT 1) SELECT * FROM cte") is True
-    assert validate_query("  WITH a AS (SELECT 1), b AS (SELECT 2) SELECT * FROM a, b  ") is True
-
-
-def test_validate_query_trailing_semicolon():
-    """Test that a trailing semicolon is stripped and the query passes."""
-    assert validate_query("SELECT * FROM test_table;") is True
-    assert validate_query("SELECT * FROM test_table ;  ") is True
-
-
 def test_validate_query_empty():
     """Test that empty queries are rejected."""
     with pytest.raises(HTTPException, match="Query is empty"):
         validate_query("")
     with pytest.raises(HTTPException, match="Query is empty"):
         validate_query("   ")
-    with pytest.raises(HTTPException, match="Query is empty"):
-        validate_query(";")
 
 
 def test_validate_query_non_select():
     """Test that non-SELECT statements are rejected."""
     with pytest.raises(HTTPException, match="Only SELECT statements are allowed"):
         validate_query("INVALID SQL")
+    with pytest.raises(HTTPException, match="Only SELECT statements are allowed"):
+        validate_query("WITH cte AS (SELECT 1) SELECT * FROM cte")
 
 
 def test_validate_query_semicolons():
-    """Test that mid-query semicolons (statement chaining) are rejected."""
+    """Test that semicolons (statement chaining) are rejected."""
     with pytest.raises(HTTPException, match="semicolons"):
         validate_query("SELECT 1; DROP TABLE test_table")
 

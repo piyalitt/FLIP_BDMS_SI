@@ -53,7 +53,7 @@ def validate_query(query: str) -> bool | HTTPException:
     Raises:
         HTTPException: If the query is invalid or contains unsafe elements.
     """
-    normalized = query.strip().rstrip(";").strip()
+    normalized = query.strip()
 
     if not normalized:
         raise HTTPException(status_code=400, detail="Query is empty.")
@@ -65,7 +65,7 @@ def validate_query(query: str) -> bool | HTTPException:
 
     lower = normalized.lower()
 
-    if not (lower.startswith("select") or lower.startswith("with")):
+    if not lower.startswith("select"):
         raise HTTPException(status_code=400, detail="Only SELECT statements are allowed.")
 
     if RESTRICTED_SCHEMAS.search(normalized):
