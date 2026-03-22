@@ -18,7 +18,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from flip_logging.formatter import request_context
+from log_config.formatter import request_context
 
 # Request lifecycle event names
 REQUEST_STARTED = "request.started"

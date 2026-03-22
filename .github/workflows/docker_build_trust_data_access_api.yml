@@ -18,7 +18,7 @@ on:
     branches: [main, develop]
     paths:
       - "trust/data-access-api/**"
-      - "trust/flip_logging/**"
+      - "trust/log_config/**"
       - ".github/workflows/docker_build_trust_data_access_api.yml"
 
 jobs:
@@ -86,7 +86,7 @@ jobs:
         run: echo ${{ secrets.GITHUB_TOKEN }} | docker login $REGISTRY -u ${{ github.actor }} --password-stdin
 
       - name: Copy shared logging library into build context
-        run: cp -r ../flip_logging ./flip_logging
+        run: cp -r ../log_config ./log_config
 
       - name: Build Docker image
         run: |

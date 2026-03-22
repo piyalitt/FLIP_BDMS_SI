@@ -11,7 +11,7 @@
 #
 
 from fastapi import FastAPI
-from flip_logging import LoggingMiddleware
+from log_config import LoggingMiddleware
 
 # Ensure structured logging is configured on import
 import data_access_api.utils.logger  # noqa: F401

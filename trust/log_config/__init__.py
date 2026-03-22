@@ -10,8 +10,8 @@
 # limitations under the License.
 #
 
-from flip_logging.formatter import JSONFormatter, PIIRedactionFilter, request_context
-from flip_logging.middleware import LoggingMiddleware
+from log_config.formatter import JSONFormatter, PIIRedactionFilter, request_context
+from log_config.middleware import LoggingMiddleware
 
 import logging
 import sys

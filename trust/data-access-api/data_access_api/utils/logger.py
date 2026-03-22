@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-from flip_logging import configure_logging, get_logger
+from log_config import configure_logging, get_logger
 
 from data_access_api.config import get_settings
 

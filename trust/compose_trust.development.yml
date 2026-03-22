@@ -111,7 +111,7 @@ services:
       - ./imaging-api/imaging_api:/app/imaging_api
       - ./imaging-api/tests:/app/tests
       - ${BASE_IMAGES_DOWNLOAD_DIR}:/app/data/images
-      - ./flip_logging:/app/flip_logging:ro
+      - ./log_config:/app/log_config:ro
 
   data-access-api:
     build:
@@ -138,7 +138,7 @@ services:
     volumes:
       - ./data-access-api/data_access_api:/app/data_access_api
       - ./data-access-api/tests:/app/tests
-      - ./flip_logging:/app/flip_logging:ro
+      - ./log_config:/app/log_config:ro
 
   nginx-tls:
     build:
@@ -180,7 +180,7 @@ services:
     volumes:
       - ./trust-api/trust_api:/app/trust_api
       - ./trust-api/tests:/app/tests
-      - ./flip_logging:/app/flip_logging:ro
+      - ./log_config:/app/log_config:ro
     networks:
       - default
       - central-hub-trust-apis-network

@@ -1,2 +1,2 @@
 # Shared lib copied into build context by CI — not committed here
-flip_logging/
+log_config/

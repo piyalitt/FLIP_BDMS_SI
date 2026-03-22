@@ -5,7 +5,7 @@ Logging Stack
 FLIP uses a structured logging stack at each Trust site to collect, store and
 visualise application logs. The stack consists of three layers:
 
-1. **flip_logging** -- a shared Python library that emits structured JSON logs
+1. **log_config** -- a shared Python library that emits structured JSON logs
    with PII redaction.
 2. **Grafana Alloy + Loki** -- Docker-native log collection and storage with
    30-day retention.
@@ -53,11 +53,11 @@ pre-provisioned datasource.
 Application Logging
 *******************
 
-Shared library: ``flip_logging``
+Shared library: ``log_config``
 ================================
 
-All trust-side APIs use the ``flip_logging`` library located at
-``trust/flip_logging/``. The library provides:
+All trust-side APIs use the ``log_config`` library located at
+``trust/log_config/``. The library provides:
 
 - **JSONFormatter** -- serialises every log record as a single-line JSON object
   containing ``timestamp``, ``level``, ``api``, ``logger``,
@@ -79,7 +79,7 @@ from the service's Pydantic ``Settings`` class:
 
 .. code-block:: python
 
-   from flip_logging import configure_logging, get_logger
+   from log_config import configure_logging, get_logger
    from trust_api.config import get_settings
 
    _settings = get_settings()
