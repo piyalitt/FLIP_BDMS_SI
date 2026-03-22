@@ -19,6 +19,8 @@ import pandas as pd
 from data_access_api.config import get_settings
 from data_access_api.utils.logger import logger
 
+_MAX_CACHE_ENTRIES = 256
+
 
 @dataclass
 class CacheEntry:
@@ -30,13 +32,11 @@ _cache: dict[str, CacheEntry] = {}
 
 
 def _make_cache_key(query: str) -> str:
-    """Create a cache key by hashing the normalized query string."""
     normalized = " ".join(query.strip().lower().split())
     return hashlib.sha256(normalized.encode()).hexdigest()
 
 
 def get_cached_result(query: str) -> pd.DataFrame | None:
-    """Return cached DataFrame if it exists and hasn't expired, otherwise None."""
     key = _make_cache_key(query)
     entry = _cache.get(key)
     if entry is None:
@@ -53,13 +53,15 @@ def get_cached_result(query: str) -> pd.DataFrame | None:
 
 
 def set_cached_result(query: str, df: pd.DataFrame) -> None:
-    """Store a query result in the cache."""
     key = _make_cache_key(query)
+    # Evict oldest entries when cache is full
+    if len(_cache) >= _MAX_CACHE_ENTRIES and key not in _cache:
+        oldest_key = min(_cache, key=lambda k: _cache[k].created_at)
+        del _cache[oldest_key]
     _cache[key] = CacheEntry(df=df.copy(), created_at=datetime.now(UTC))
     logger.info(f"Cached result for query hash {key[:12]}... ({len(_cache)} entries in cache)")
 
 
 def clear_cache() -> None:
-    """Clear all cached query results."""
     _cache.clear()
     logger.info("Query cache cleared")

@@ -273,10 +273,10 @@ def get_statistics(df: pd.DataFrame, query_input: CohortQueryInput, threshold: i
     if "person_id" in df.columns:
         logger.info("person_id column found in the query results; including age and sex distribution calculations.")
         age = get_age_distribution(df)
-        age["results"] = make_other_category(get_age_distribution(df)["results"], min_count=COHORT_QUERY_THRESHOLD)
+        age["results"] = make_other_category(age["results"], min_count=COHORT_QUERY_THRESHOLD)
 
         sex = get_sex_distribution(df)
-        sex["results"] = make_other_category(get_sex_distribution(df)["results"], min_count=COHORT_QUERY_THRESHOLD)
+        sex["results"] = make_other_category(sex["results"], min_count=COHORT_QUERY_THRESHOLD)
 
         stats.data += [age, sex]
     return stats
