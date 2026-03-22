@@ -106,8 +106,9 @@ The two relevant settings are:
        ``DEBUG`` in development, ``INFO`` in staging/production.
    * - ``FLIP_SITE_NAME``
      - ``unknown``
-     - Human-readable trust/site name included in every log line for
-       multi-site identification.
+     - Trust/site name included in every log line for multi-site
+       identification. Set automatically from ``TRUST_NAME`` in the
+       Docker Compose files.
 
 These are set via environment variables or ``.env.*`` files and read through
 each service's Pydantic ``Settings`` class.
@@ -220,9 +221,10 @@ override.
      - All APIs (mapped to ``LOG_LEVEL`` inside each container)
      - Sets the Python log level uniformly across all trust services.
        Defaults to ``DEBUG`` in development, ``INFO`` in staging/production.
-   * - ``FLIP_SITE_NAME``
-     - All APIs
-     - Site identifier included in every log line
+   * - ``TRUST_NAME``
+     - All APIs (mapped to ``FLIP_SITE_NAME`` inside each container)
+     - Site identifier included in every log line. Derived from the
+       Makefile (``trust1``, ``trust2``, etc.).
    * - ``GRAFANA_PORT``
      - Grafana
      - Host port for the Grafana UI (default ``3000``)
