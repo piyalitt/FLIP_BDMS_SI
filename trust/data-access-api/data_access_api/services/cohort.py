@@ -15,6 +15,7 @@ import datetime
 import pandas as pd
 from fastapi import HTTPException
 from psycopg2 import errors as pg_errors
+from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 
 from data_access_api.config import get_settings
@@ -57,12 +58,13 @@ def validate_query(query: str) -> bool | HTTPException:
     return True
 
 
-def get_records(query: str) -> pd.DataFrame:
+def get_records(query: str, params: dict | None = None) -> pd.DataFrame:
     """
     Executes a raw SQL query and returns results.
 
     Args:
         query (str): The SQL query to execute.
+        params (dict | None): Optional parameters for parameterized queries.
 
     Returns:
         pd.DataFrame: The results of the query as a DataFrame.
@@ -79,7 +81,7 @@ def get_records(query: str) -> pd.DataFrame:
         # Therefore, we need to validate the query is safe, e.g. only SELECT queries, and does not contain sensitive
         # data.
         # TODO check if we can check column types -- could be used to exclude primary keys, foreign keys, etc.
-        df = pd.read_sql(query, engine)
+        df = pd.read_sql(text(query), engine, params=params)
         return df
 
     except DBAPIError as e:
@@ -136,16 +138,18 @@ def get_sex_distribution(df: pd.DataFrame) -> dict:
     if "person_id" not in df.columns:
         return {"name": "Sex Distribution", "results": []}
 
-    sex_counts_database_query = f"""
+    person_ids = df["person_id"].unique().tolist()
+    sex_counts_database_query = """
     SELECT
     p.gender_source_value,
     COUNT(*) AS count
     FROM omop.person p
-    WHERE p.person_id IN ({", ".join(df["person_id"].unique().astype(str).tolist())})
+    WHERE p.person_id = ANY(:person_ids)
     GROUP BY p.gender_source_value
     """
     sex_counts = get_records(
         query=sex_counts_database_query,
+        params={"person_ids": person_ids},
     )
     return {
         "name": "Sex Distribution",
@@ -163,17 +167,19 @@ def get_age_distribution(df: pd.DataFrame) -> dict:
     if "person_id" not in df.columns:
         return {"name": "Age Distribution", "results": []}
 
-    age_distribution_database_query = f"""
+    person_ids = df["person_id"].unique().tolist()
+    age_distribution_database_query = """
     SELECT
     FLOOR(DATE_PART('year', AGE(CURRENT_DATE, p.birth_datetime)) / 10) * 10 AS age_group,
     COUNT(*) AS count
     FROM omop.person p
-    WHERE p.person_id IN ({", ".join(df["person_id"].unique().astype(str).tolist())})
+    WHERE p.person_id = ANY(:person_ids)
     GROUP BY age_group
     ORDER BY age_group
     """
     age_distribution = get_records(
         query=age_distribution_database_query,
+        params={"person_ids": person_ids},
     )
     return {
         "name": "Age Distribution",
