@@ -57,7 +57,7 @@ Shared library: ``flip_logging``
 ================================
 
 All trust-side APIs use the ``flip_logging`` library located at
-``libs/flip_logging/``. The library provides:
+``trust/flip_logging/``. The library provides:
 
 - **JSONFormatter** -- serialises every log record as a single-line JSON object
   containing ``timestamp``, ``level``, ``api``, ``logger``,
