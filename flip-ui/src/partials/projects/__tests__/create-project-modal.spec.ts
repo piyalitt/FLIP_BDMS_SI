@@ -83,4 +83,9 @@ describe("Create Project Modal", () => {
         console.log("Found description:", descriptionInput.exists());
         expect(descriptionInput.exists()).toBe(true);
     });
+
+    it("DICOM to NIfTI toggle exists", () => {
+        const toggle = component.find(CreateProjectModal.dicomToNiftiToggle);
+        expect(toggle.exists()).toBe(true);
+    });
 });
