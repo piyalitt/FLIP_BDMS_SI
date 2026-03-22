@@ -22,6 +22,9 @@ FLIP/
 │   ├── orthanc/        # Mocked PACS server
 │   └── xnat/           # Mocked XNAT neuroimaging service
 ├── deploy/             # Docker Compose files (dev/prod, flower/nvflare)
+│   └── providers/
+│       ├── AWS/        # Terraform/OpenTofu IaC + Ansible for AWS deployment
+│       └── local/      # Ansible playbooks for on-premises trust deployment
 ├── docs/               # Sphinx documentation (ReadTheDocs)
 └── scripts/            # Utility scripts
 ```
@@ -36,6 +39,7 @@ FLIP/
 | Package mgmt (Python) | UV (`uv sync`, `uv add`) |
 | Package mgmt (JS) | npm |
 | Containers | Docker, Docker Compose, Docker Swarm (XNAT) |
+| Infrastructure | Terraform/OpenTofu (AWS), Ansible (EC2 + on-prem provisioning) |
 | FL frameworks | NVIDIA FLARE, Flower |
 | Auth | AWS Cognito |
 | Storage | AWS S3 |
@@ -228,6 +232,108 @@ Configured in `.pre-commit-config.yaml`:
 - Environment variable validation
 
 Install: `pre-commit install`
+
+## Deployment & Infrastructure
+
+### Deployment Models
+
+FLIP supports two deployment models:
+
+1. **Cloud-Only**: Central Hub + Trust services both on AWS EC2
+2. **Hybrid/On-Premises**: Central Hub on AWS EC2 + Trust services on a local/on-premises host
+
+Both models use HTTPS with TLS certificates. Trust communication is encrypted via `AES_KEY_BASE64`.
+
+### Docker Compose (Development vs Production)
+
+Compose files live in `deploy/` and are selected by the `PROD` environment variable and `FL_BACKEND`:
+
+| File | Purpose |
+|------|---------|
+| `compose.development.yml` | Builds from source, volume-mounts code, exposes debug ports |
+| `compose.production.yml` | Pulls pre-built images from GHCR (`ghcr.io/londonaicentre/*`) |
+| `compose.{env}.flower.yml` | FL backend override for Flower |
+| `compose.{env}.nvflare.yml` | FL backend override for NVIDIA FLARE |
+| `compose.development.debug.override.yml` | Debug port mappings (port 5678) |
+
+**Development** builds images locally and mounts source for live editing. **Production** pulls tagged images from GHCR and uses AWS Secrets Manager for credentials instead of `.env` files.
+
+When modifying Docker Compose configuration, **always update both development and production compose files** to keep them consistent. Check that:
+- New services appear in both `compose.development.yml` and `compose.production.yml`
+- Environment variables, ports, and network configurations match across environments
+- New FL-backend-specific services appear in both `flower` and `nvflare` variants
+
+### AWS Infrastructure (Terraform/OpenTofu)
+
+Infrastructure-as-code lives in `deploy/providers/AWS/`. Key resources:
+
+| Resource | Purpose |
+|----------|---------|
+| VPC + subnets | Network isolation (`10.0.0.0/16`, 2 AZs) |
+| EC2 instances | Central Hub (`t3.small`) + Trust (`t3.small`, optional) |
+| RDS PostgreSQL | Managed database (private subnets) |
+| ALB | HTTPS termination for UI and API (ACM certificate) |
+| NLB | gRPC traffic for FL servers |
+| S3 buckets | Model files, federated data, FL app storage |
+| Cognito | User pool (`flip-user-pool`) with email auth |
+| Secrets Manager | `FLIP_API` secret (AES key, DB password, trust endpoints, CA certs) |
+| SES | Email notifications |
+| Route53 | DNS records for ALB subdomain |
+
+**Terraform state** is stored remotely in S3 with encryption and DynamoDB locking.
+
+### Deployment Commands
+
+```bash
+# From deploy/providers/AWS/
+make full-deploy PROD=stag           # Full staging deployment
+make full-deploy PROD=true           # Full production deployment
+make full-deploy-stag-hybrid LOCAL_TRUST_IP=<ip>  # Hybrid with on-prem trust
+
+# Individual steps
+make init                            # Terraform init (S3 backend)
+make plan                            # Terraform plan
+make apply                           # Terraform apply
+make deploy-centralhub               # Deploy Central Hub services to EC2
+make deploy-trust                    # Deploy Trust services to EC2
+make status                          # Health checks across all services
+
+# On-premises trust
+make add-local-trust LOCAL_TRUST_IP=<ip>       # Provision on-prem trust via Ansible
+make test-local-trust LOCAL_TRUST_IP=<ip>      # Validate trust connectivity (with TLS)
+
+# Certificate management
+make gen-trust-ec2-certs             # Generate TLS certs for cloud Trust EC2
+make regen-trust-certs               # Regenerate expired certs
+```
+
+### Trust Services Architecture
+
+Each Trust environment (cloud or on-prem) runs:
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| nginx-tls | 8020 | HTTPS termination |
+| trust-api | 8000 | Trust API gateway |
+| imaging-api | 8000 | DICOM image retrieval |
+| data-access-api | 8000 | OMOP database queries |
+| fl-client | 8002-8003 | Federated learning client |
+| XNAT | 8104 | Neuroimaging platform |
+| Orthanc | 4242 | DICOM server |
+| omop-db | 5432 | Patient cohort database |
+
+On-premises trusts are provisioned via Ansible (`deploy/providers/local/`), which installs Docker, generates TLS certificates, configures the firewall, and deploys the Trust Docker Compose stack.
+
+### Dev/Prod Consistency Rules
+
+When making infrastructure or deployment changes:
+
+1. **Compose files** — update both `compose.development.yml` and `compose.production.yml`
+2. **FL backend variants** — update both `flower` and `nvflare` compose files if adding services or ports
+3. **Environment variables** — add to `.env.development.example` and document in `deploy/README.md`; production uses Secrets Manager, so also update `deploy/providers/AWS/services.tf` if needed
+4. **Terraform variables** — update `variables.tf` with descriptions and defaults; keep `main.tf` and `services.tf` in sync
+5. **Trust changes** — update both cloud (`deploy/providers/AWS/`) and on-prem (`deploy/providers/local/`) Ansible playbooks
+6. **Certificates** — never bypass TLS validation; fix certificates instead
 
 ## Security Rules
 
