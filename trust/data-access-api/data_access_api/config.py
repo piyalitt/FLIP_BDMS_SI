@@ -32,6 +32,7 @@ class Settings(BaseSettings):
 
     #
     COHORT_QUERY_THRESHOLD: int = 10  # Minimum number of records required to return statistics
+    CACHE_TTL_DAYS: int = 60  # Number of days before cached query results expire
 
     #
     OMOP_DB_SERVICE_NAME: str = "omop-db"  # The name of the OMOP database service in Docker Compose or Kubernetes
