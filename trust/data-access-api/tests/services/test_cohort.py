@@ -508,9 +508,10 @@ def test_get_sex_distribution_with_person_id(mock_get_records):
     assert result == expected
     # Verify the SQL query was called with correct person IDs
     mock_get_records.assert_called_once()
-    call_args = mock_get_records.call_args[1]["query"]
-    assert "1, 2, 3" in call_args  # Unique person IDs
-    assert "omop.person" in call_args
+    call_args = mock_get_records.call_args[1]
+    assert "omop.person" in call_args["query"]
+    assert "ANY(:person_ids)" in call_args["query"]
+    assert sorted(call_args["params"]["person_ids"]) == [1, 2, 3]
 
 
 # Tests for get_age_distribution
@@ -564,10 +565,11 @@ def test_get_age_distribution_with_person_id(mock_get_records):
     assert result == expected
     # Verify the SQL query was called
     mock_get_records.assert_called_once()
-    call_args = mock_get_records.call_args[1]["query"]
-    assert "1, 2, 3" in call_args
-    assert "omop.person" in call_args
-    assert "birth_datetime" in call_args
+    call_args = mock_get_records.call_args[1]
+    assert "omop.person" in call_args["query"]
+    assert "birth_datetime" in call_args["query"]
+    assert "ANY(:person_ids)" in call_args["query"]
+    assert sorted(call_args["params"]["person_ids"]) == [1, 2, 3]
 
 
 # Tests for verify_cardinality
@@ -849,9 +851,10 @@ def test_get_statistics_with_person_id_column(mock_read_sql):
 
     # Configure mocks to return different data based on query
     def read_sql_side_effect(query, *args, **kwargs):
-        if "birth_datetime" in query:
+        query_str = str(query)
+        if "birth_datetime" in query_str:
             return mock_age_data
-        elif "gender_source_value" in query:
+        elif "gender_source_value" in query_str:
             return mock_sex_data
         else:
             # Main query
@@ -926,9 +929,10 @@ def test_get_statistics_with_person_id_and_low_count_categories(mock_read_sql):
     })
 
     def read_sql_side_effect(query, *args, **kwargs):
-        if "birth_datetime" in query:
+        query_str = str(query)
+        if "birth_datetime" in query_str:
             return mock_age_data
-        elif "gender_source_value" in query:
+        elif "gender_source_value" in query_str:
             return mock_sex_data
         else:
             return mock_df
