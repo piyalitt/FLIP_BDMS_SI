@@ -63,7 +63,7 @@ def insert_status(
     project_id: UUID,
     status: XNATImageStatus,
     db: Session,
-    query_id: UUID | None | UUID | None = None,
+    query_id: UUID | None = None,
 ) -> int:
     """
     Insert a new XNAT project status record

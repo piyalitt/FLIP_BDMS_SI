@@ -481,7 +481,7 @@ class TestGetReimportQueries:
         )
         trust = Trust(id=trust_id, name="Example Trust", endpoint="https://trust.example.com")
 
-        # Should be a List[tuple[Queries, XNATProjectStatus, Trust]]
+        # Should be a list[tuple[Queries, XNATProjectStatus, Trust]]
         mock_session.exec.return_value.all.return_value = [(query, xnat_project_status, trust)]
 
         result = get_reimport_queries_service(max_reimport_count=5, session=mock_session)

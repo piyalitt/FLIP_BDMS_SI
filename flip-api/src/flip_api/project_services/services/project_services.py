@@ -280,7 +280,7 @@ def edit_project_service(
         )
 
 
-def get_project_query(project_from_db: IProjectResponse) -> IProjectQuery | None | None:
+def get_project_query(project_from_db: IProjectResponse) -> IProjectQuery | None:
     """
     If the project has a query, try to return it if it is valid. Otherwise, return None.
 
@@ -684,7 +684,7 @@ def get_reimport_queries_service(max_reimport_count: int, session: Session) -> l
             )
         )
 
-        rows = session.exec(stmt).all()  # List[tuple[Queries, XNATProjectStatus, Trust]]
+        rows = session.exec(stmt).all()  # list[tuple[Queries, XNATProjectStatus, Trust]]
 
         return [
             IReimportQuery(

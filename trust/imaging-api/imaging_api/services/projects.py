@@ -291,7 +291,7 @@ def add_central_hub_users_to_project(
         headers (dict[str, str]): XNAT authentication headers
 
     Returns:
-        Tuple[List[imaging_api.routers.schemas.CreatedUser], List[imaging_api.routers.schemas.User]]: List of created
+        tuple[list[imaging_api.routers.schemas.CreatedUser], list[imaging_api.routers.schemas.User]]: List of created
         users and added users.
     """
     created_users: list[CreatedUser] = []

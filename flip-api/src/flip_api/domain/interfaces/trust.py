@@ -66,7 +66,7 @@ class ICreatedImagingProject(BaseModel):
     name: str
     created_users: list[ICreatedImagingUser]
     # TODO Consider adding the below if we want to notify existing users they have been added to a new imaging project
-    # added_users: List[User]
+    # added_users: list[User]
 
 
 class ISesTemplateData(BaseModel):
