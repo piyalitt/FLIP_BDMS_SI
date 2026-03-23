@@ -98,8 +98,6 @@ up-xnat-1: create-network-trust-1
 	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_1} \
 	DOCKER_NETWORK_NAME=${network1} \
 	docker stack deploy --with-registry-auth ${STACK_FILES} ${project1}
-# 	wait for a few seconds to ensure the containers are up before configuring
-	sleep 10
 	$(MAKE) xnat-configure-trust-1
 
 up-xnat-2: create-network-trust-2
@@ -109,8 +107,6 @@ up-xnat-2: create-network-trust-2
 	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_2} \
 	DOCKER_NETWORK_NAME=${network2} \
 	docker stack deploy --with-registry-auth ${STACK_FILES} ${project2}
-# 	wait for a few seconds to ensure the containers are up before configuring
-	sleep 10
 	$(MAKE) xnat-configure-trust-2
 
 # Get a shell in the running xnat container (for project1)
@@ -127,9 +123,7 @@ down-xnat-2:
 down: down-xnat-1 down-xnat-2
 
 # Stop and clean up images
-clean:
-	docker stack rm ${project1} && \
-	docker stack rm ${project2} && \
+clean: down
 	docker system prune -f
 
 # Download XNAT WAR into the xnat-web Docker build context (skips if already present)
@@ -151,7 +145,16 @@ xnat-plugins-download:
 # Docker Swarm requires host directories to exist before bind-mounting.
 # Note: needs root privileges to clean up previous data.
 xnat-reset:
-	echo "Deleting previous XNAT data ..."; \
+	@case "$$(pwd)" in */trust/xnat) ;; *) \
+		echo "ERROR: xnat-reset must be run from the trust/xnat/ directory (pwd: $$(pwd))"; exit 1;; \
+	esac
+	@if ! echo "$(XNAT_PORT_TRUST_1)" | grep -qE '^[0-9]+$$'; then \
+		echo "ERROR: XNAT_PORT_TRUST_1 must be set to a numeric value, got '$(XNAT_PORT_TRUST_1)'"; exit 1; \
+	fi; \
+	if ! echo "$(XNAT_PORT_TRUST_2)" | grep -qE '^[0-9]+$$'; then \
+		echo "ERROR: XNAT_PORT_TRUST_2 must be set to a numeric value, got '$(XNAT_PORT_TRUST_2)'"; exit 1; \
+	fi
+	echo "Deleting previous XNAT data and creating new directories ..."; \
 	sudo rm -rf ${XNAT_PORT_TRUST_1}; \
 	sudo rm -rf ${XNAT_PORT_TRUST_2}; \
 	mkdir -p ${XNAT_PORT_TRUST_1}/xnat-data/tomcat_logs; \

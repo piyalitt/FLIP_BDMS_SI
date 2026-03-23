@@ -10,7 +10,7 @@ services:
       - /opt/flip/xnat/xnat-data/archive:${XNAT_ROOT}/archive
       - /opt/flip/xnat/xnat-data/build:${XNAT_ROOT}/build
       - /opt/flip/xnat/xnat-data/cache:${XNAT_ROOT}/cache
-  
+
   xnat-db:
     volumes:
       - /opt/flip/xnat/xnat-db-data:/var/lib/postgresql/data
