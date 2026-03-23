@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-from typing import Annotated, List
+from typing import Annotated
 
 import pandas as pd
 from fastapi import Depends, HTTPException, status
@@ -84,7 +84,7 @@ async def retrieve_images_for_project(project_id: str, query: str, headers: XNAT
 
     # For each accession ID, unencrypt it and find the study
     accession_ids: list[str] = cohort_df["accession_id"]
-    studies_list: List[ImportStudy] = []
+    studies_list: list[ImportStudy] = []
 
     for accession_number in accession_ids:
         # TODO Unlike in the old repo, accession numbers are now not encrypted in OMOP database.
@@ -289,7 +289,7 @@ async def retry_retrieve_images_for_project(project_id: str, query: str, headers
     logger.info(f"Retrying import for accession numbers: {failed_accession_numbers}")
 
     # For each accession ID, unencrypt it and find the study
-    studies_list: List[ImportStudy] = []
+    studies_list: list[ImportStudy] = []
 
     for accession_number in failed_accession_numbers:
         # TODO Unlike in the old repo, accession numbers are now not encrypted in OMOP database.
