@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
-from flip_api.auth.access_manager import can_access_project
+from flip_api.auth.access_manager import can_modify_project
 from flip_api.auth.dependencies import verify_token
 from flip_api.db.database import get_session
 from flip_api.db.models.main_models import Model, ModelTrustIntersect, ProjectTrustIntersect
@@ -57,7 +57,7 @@ def save_model(
     logger.info(f"User {user_id} requested model creation for project {payload.project_id}")
 
     # Access control
-    if not can_access_project(user_id, payload.project_id, db):
+    if not can_modify_project(user_id, payload.project_id, db):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=f"User with ID: {user_id} is denied access to this project"
         )

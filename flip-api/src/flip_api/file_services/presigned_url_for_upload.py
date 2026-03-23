@@ -15,6 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, col, select
 
+from flip_api.auth.access_manager import can_modify_model
 from flip_api.auth.dependencies import verify_token
 from flip_api.config import get_settings
 from flip_api.db.database import get_session
@@ -53,6 +54,12 @@ def get_presigned_url_for_upload(
     try:
         # TODO: Implement user authentication if needed
         # Check if user can access the model via your access logic
+
+        if not can_modify_model(user_id, UUID(model_id), db):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"User with ID: {user_id} is not allowed to upload files to this model",
+            )
 
         # Check if model exists and isn't deleted
         statement = (

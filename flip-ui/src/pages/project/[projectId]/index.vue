@@ -240,12 +240,14 @@ const { project } = storeToRefs(projectStore);
 
 const editProjectPermissions: UserPermissions[] = ["CanManageProjects"];
 const unstageProjectPermissions: UserPermissions[] = ["CanUnstageProjects"];
+const isObserver = computed(() => !authStore.hasPermissions(["CanManageProjects"]));
 
 const projectApproved = computed(() => {
     return project?.value?.status === "APPROVED";
 });
 
 const isOwnerOrHasAccess = () => {
+    if (!authStore.hasPermissions(["CanManageProjects"])) return false;
     const projectOwner = project?.value?.ownerId;
     const currentUserId = authStore.user?.userId;
 

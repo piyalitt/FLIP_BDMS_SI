@@ -73,6 +73,65 @@ def can_access_project(user_id: UUID, project_id: UUID, db: Session) -> bool:
         return False
 
 
+def can_modify_project(user_id: UUID, project_id: UUID, db: Session) -> bool:
+    """
+    Check if a user can perform write operations on a project.
+
+    Returns True for users with CAN_MANAGE_PROJECTS permission (Admins, Researchers)
+    or for the project owner. Returns False for Observers.
+
+    Args:
+        user_id: ID of the user
+        project_id: ID of the project
+        db: Database session
+
+    Returns:
+        True if the user can modify the project, False otherwise
+    """
+    logger.debug(f"Checking if user: {user_id} can modify project: {project_id}")
+
+    if has_permissions(user_id, [PermissionRef.CAN_MANAGE_PROJECTS], db):
+        return True
+
+    try:
+        project = db.exec(select(Projects).where(Projects.id == project_id)).first()
+        if project and project.owner_id == user_id:
+            return True
+    except Exception as e:
+        logger.error(f"Error checking project modify access for user {user_id}, project {project_id}: {str(e)}")
+
+    return False
+
+
+def can_modify_model(user_id: UUID, model_id: UUID, db: Session) -> bool:
+    """
+    Check if a user can perform write operations on a model.
+
+    Looks up the model's project_id, then delegates to can_modify_project.
+
+    Args:
+        user_id: ID of the user
+        model_id: ID of the model
+        db: Database session
+
+    Returns:
+        True if the user can modify the model, False otherwise
+    """
+    logger.debug(f"Checking if user: {user_id} can modify model: {model_id}")
+
+    if has_permissions(user_id, [PermissionRef.CAN_MANAGE_PROJECTS], db):
+        return True
+
+    try:
+        model = db.exec(select(Model).where(Model.id == model_id)).first()
+        if not model or not model.project_id:
+            return False
+        return can_modify_project(user_id, model.project_id, db)
+    except Exception as e:
+        logger.error(f"Error checking model modify access for user {user_id}, model {model_id}: {str(e)}")
+        return False
+
+
 def can_access_model(user_id: UUID, model_id: UUID, db: Session) -> bool:
     """
     Check if a user has access to a specific model.

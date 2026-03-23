@@ -22,6 +22,7 @@ import sqlparse  # type: ignore[import]
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlmodel import Session, select
 
+from flip_api.auth.access_manager import can_modify_project
 from flip_api.auth.dependencies import verify_token
 from flip_api.db.database import get_session
 from flip_api.db.models.main_models import Trust
@@ -118,6 +119,11 @@ def submit_cohort_query(
         or if there is an
     """
     try:
+        if not can_modify_project(user_id, cohort_query.project_id, db):
+            raise HTTPException(
+                status_code=403, detail="Insufficient permissions to modify this project"
+            )
+
         # Validation of inputs is handled by Pydantic
 
         # Additional validation

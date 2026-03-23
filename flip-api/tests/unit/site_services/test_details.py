@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import status
@@ -85,7 +85,8 @@ def test_get_details_not_found(client, mock_db):
     assert "Error fetching site details" in response.json()["detail"]
 
 
-def test_put_details_success(client, mock_db):
+@patch("flip_api.site_services.details.has_permissions", return_value=True)
+def test_put_details_success(mock_perms, client, mock_db):
     # Input payload to update
     payload = {
         "banner": {"message": "Updated!", "link": "https://example.com/", "enabled": True},
@@ -121,7 +122,8 @@ def test_put_details_success(client, mock_db):
     assert response.json() == payload  # expecting updated result
 
 
-def test_put_details_failure(client, mock_db):
+@patch("flip_api.site_services.details.has_permissions", return_value=True)
+def test_put_details_failure(mock_perms, client, mock_db):
     # Simulate an exception during the first DB exec (e.g., fetching banner)
     mock_db.exec.side_effect = Exception("DB failure")
 

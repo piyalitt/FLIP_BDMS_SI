@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
-from flip_api.auth.access_manager import can_access_model
+from flip_api.auth.access_manager import can_modify_model
 from flip_api.auth.dependencies import verify_token
 from flip_api.db.database import get_session
 from flip_api.fl_services.services.fl_service import abort_model_training
@@ -53,7 +53,7 @@ def delete_model_endpoint(
     logger.info(f"User {user_id} requested deletion of model {model_id}")
 
     # Check if user has access to the model
-    if not can_access_model(user_id, model_id, db):
+    if not can_modify_model(user_id, model_id, db):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=f"User with ID: {user_id} is denied access to this model"
         )

@@ -42,8 +42,8 @@ def mock_s3_client():
 
 @pytest.fixture
 def mock_access_manager():
-    """Mock can_access_model function."""
-    with patch("flip_api.file_services.download_file.can_access_model") as mock_access:
+    """Mock can_modify_model function."""
+    with patch("flip_api.file_services.download_file.can_modify_model") as mock_access:
         # Default to allowing access
         mock_access.return_value = True
         yield mock_access

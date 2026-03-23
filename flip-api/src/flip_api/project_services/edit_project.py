@@ -15,7 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, status
 from sqlmodel import Session
 
-from flip_api.auth.access_manager import can_access_project
+from flip_api.auth.access_manager import can_modify_project
 from flip_api.auth.dependencies import verify_token
 from flip_api.db.database import get_session
 from flip_api.db.models.main_models import Projects
@@ -62,7 +62,7 @@ def edit_project_endpoint(
     """
     logger.debug(f"Attempting to edit project by user: {user_id}")
 
-    if not can_access_project(user_id=user_id, project_id=project_id, db=db):
+    if not can_modify_project(user_id=user_id, project_id=project_id, db=db):
         logger.error(f"User {user_id} is not allowed to edit project {project_id}.")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

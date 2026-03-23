@@ -15,6 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlmodel import Session
 
+from flip_api.auth.access_manager import can_modify_project
 from flip_api.auth.dependencies import verify_token
 from flip_api.db.database import get_session
 from flip_api.db.models.main_models import Queries
@@ -58,6 +59,11 @@ def save_cohort_query(
         internal server error
     """
     try:
+        if not can_modify_project(user_id, cohort_query.project_id, db):
+            raise HTTPException(
+                status_code=403, detail="Insufficient permissions to modify this project"
+            )
+
         # Validation is handled automatically by Pydantic
 
         # Validate whether project has UNSTAGED status

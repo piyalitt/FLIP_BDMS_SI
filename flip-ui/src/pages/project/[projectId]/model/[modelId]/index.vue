@@ -28,7 +28,7 @@
                 <span class="max-w-lg truncate">{{ modelData.modelName }}</span>
             </div>
             <div class="flex items-center space-x-8">
-                <AiGuard :permissions="editProjectPermissions" :bypass="isOwnerOrHasAccess()">
+                <AiGuard v-if="!isObserver" :permissions="editProjectPermissions" :bypass="isOwnerOrHasAccess()">
                     <AiButton light data-test="edit-model-btn" @click="openEditModelDrawer">
                         <icon-mdi-pencil-outline class="mr-2" />
                         Edit Model
@@ -47,7 +47,7 @@
                     <ModelUpload
                         :files="modelData.files ?? []"
                         :loading="!modelData"
-                        :can-upload="!trainingStartedOrStopped"
+                        :can-upload="!trainingStartedOrStopped && !isObserver"
                         :model-id="modelData.modelId"
                         :required-files="requiredFiles"
                         :job-type="currentJobType"
@@ -120,6 +120,7 @@ const projectStore = useProjectStore();
 const project = projectStore.project;
 const authStore = useAuthStore();
 const errorStore = useErrorStore();
+const isObserver = computed(() => !authStore.hasPermissions(["CanManageProjects"]));
 
 const allFilesUploaded = ref(false);
 const allFilesPassScan = ref(false);
