@@ -112,7 +112,7 @@ class TrustFactory(factory.Factory):
 
     id = factory.LazyFunction(uuid.uuid4)
     name = factory.Faker("word")
-    endpoint = factory.Faker("url")
+    last_heartbeat = None
 
 
 class ProjectTrustIntersectFactory(factory.Factory):

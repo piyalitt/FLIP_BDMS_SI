@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, Optional
 from uuid import UUID, uuid4
 
@@ -216,7 +216,8 @@ class TrustTask(SQLModel, table=True):
     payload: str = Field()  # JSON-serialized task data
     status: TaskStatus = Field(default=TaskStatus.PENDING)
     result: str | None = Field(default=None)  # JSON-serialized result data
-    created_at: Annotated[datetime, Field(default_factory=datetime.utcnow)]
+    needs_post_processing: bool = Field(default=False)
+    created_at: Annotated[datetime, Field(default_factory=lambda: datetime.now(timezone.utc))]
     updated_at: datetime | None = Field(default=None)
 
 
@@ -239,5 +240,5 @@ class XNATProjectStatus(SQLModel, table=True):
     trust_id: UUID | None = Field(default=None, foreign_key="trust.id")
     retrieve_image_status: XNATImageStatus = Field()
     query_at_creation: UUID | None = Field(default=None)
-    last_reimport: Annotated[datetime, Field(default_factory=datetime.utcnow)]
+    last_reimport: Annotated[datetime, Field(default_factory=lambda: datetime.now(timezone.utc))]
     reimport_count: int = Field(default=0)

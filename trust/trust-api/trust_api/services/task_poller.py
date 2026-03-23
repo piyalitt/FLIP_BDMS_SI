@@ -84,28 +84,56 @@ async def _send_heartbeat(client: httpx.AsyncClient) -> None:
         logger.error(f"Error sending heartbeat: {e}")
 
 
+_REPORT_MAX_RETRIES = 3
+_REPORT_RETRY_DELAY_SECONDS = 2
+
+
 async def _report_task_result(client: httpx.AsyncClient, task_id: str, result: dict) -> None:
     """
     Report the result of a completed task back to the central hub.
+
+    Retries up to ``_REPORT_MAX_RETRIES`` times with exponential backoff on failure,
+    since a lost result can leave a task permanently stuck in IN_PROGRESS on the hub.
 
     Args:
         client: HTTP client for making requests.
         task_id: The ID of the completed task.
         result: The result dict containing success status and optional result data.
     """
-    try:
-        payload = {
-            "success": result.get("success", False),
-            "result": result.get("result"),
-        }
-        await client.post(
-            f"{CENTRAL_HUB_API_URL}/tasks/{task_id}/result",
-            headers=_auth_headers(),
-            json=payload,
-        )
-        logger.debug(f"Reported result for task {task_id}")
-    except Exception as e:
-        logger.error(f"Error reporting result for task {task_id}: {e}")
+    result_data = result.get("result")
+    # Include error details in the result field when reporting failures
+    if not result.get("success", False) and result.get("error") and not result_data:
+        result_data = json.dumps({"error": result["error"]})
+
+    payload = {
+        "success": result.get("success", False),
+        "result": result_data,
+    }
+
+    for attempt in range(_REPORT_MAX_RETRIES):
+        try:
+            response = await client.post(
+                f"{CENTRAL_HUB_API_URL}/tasks/{task_id}/result",
+                headers=_auth_headers(),
+                json=payload,
+            )
+            if response.status_code == 200:
+                logger.debug(f"Reported result for task {task_id}")
+                return
+            logger.warning(
+                f"Unexpected status {response.status_code} reporting result for task {task_id} "
+                f"(attempt {attempt + 1}/{_REPORT_MAX_RETRIES})"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Error reporting result for task {task_id} "
+                f"(attempt {attempt + 1}/{_REPORT_MAX_RETRIES}): {e}"
+            )
+        if attempt < _REPORT_MAX_RETRIES - 1:
+            delay = _REPORT_RETRY_DELAY_SECONDS * (2 ** attempt)
+            await asyncio.sleep(delay)
+
+    logger.error(f"Failed to report result for task {task_id} after {_REPORT_MAX_RETRIES} attempts")
 
 
 async def _process_task(task: dict) -> dict:

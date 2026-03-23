@@ -31,8 +31,8 @@ def mock_trusts_online():
     """Trusts with recent heartbeats (should be online)."""
     now = datetime.now(timezone.utc)
     return [
-        Trust(id=uuid4(), name="Trust A", endpoint="http://trust-a.com", last_heartbeat=now - timedelta(seconds=5)),
-        Trust(id=uuid4(), name="Trust B", endpoint="http://trust-b.com", last_heartbeat=now - timedelta(seconds=10)),
+        Trust(id=uuid4(), name="Trust A", last_heartbeat=now - timedelta(seconds=5)),
+        Trust(id=uuid4(), name="Trust B", last_heartbeat=now - timedelta(seconds=10)),
     ]
 
 
@@ -41,8 +41,8 @@ def mock_trusts_stale():
     """Trusts with stale heartbeats (should be offline)."""
     old_time = datetime.now(timezone.utc) - timedelta(minutes=5)
     return [
-        Trust(id=uuid4(), name="Trust A", endpoint="http://trust-a.com", last_heartbeat=old_time),
-        Trust(id=uuid4(), name="Trust B", endpoint="http://trust-b.com", last_heartbeat=old_time),
+        Trust(id=uuid4(), name="Trust A", last_heartbeat=old_time),
+        Trust(id=uuid4(), name="Trust B", last_heartbeat=old_time),
     ]
 
 
@@ -50,8 +50,8 @@ def mock_trusts_stale():
 def mock_trusts_no_heartbeat():
     """Trusts that have never sent a heartbeat."""
     return [
-        Trust(id=uuid4(), name="Trust A", endpoint="http://trust-a.com", last_heartbeat=None),
-        Trust(id=uuid4(), name="Trust B", endpoint="http://trust-b.com", last_heartbeat=None),
+        Trust(id=uuid4(), name="Trust A", last_heartbeat=None),
+        Trust(id=uuid4(), name="Trust B", last_heartbeat=None),
     ]
 
 
@@ -118,14 +118,14 @@ async def test_check_trusts_health_mixed():
     now = datetime.now(timezone.utc)
     trusts = [
         Trust(
-            id=uuid4(), name="Online Trust", endpoint="http://online.com",
+            id=uuid4(), name="Online Trust",
             last_heartbeat=now - timedelta(seconds=5),
         ),
         Trust(
-            id=uuid4(), name="Offline Trust", endpoint="http://offline.com",
+            id=uuid4(), name="Offline Trust",
             last_heartbeat=now - timedelta(minutes=5),
         ),
-        Trust(id=uuid4(), name="Never Seen", endpoint="http://never.com", last_heartbeat=None),
+        Trust(id=uuid4(), name="Never Seen", last_heartbeat=None),
     ]
 
     mock_db = MagicMock()
@@ -172,6 +172,6 @@ async def test_check_trusts_health_internal_server_error():
     response = client.get("/api/trust/health")
 
     assert response.status_code == 500
-    assert response.json() == {"detail": "Internal server error: Database error"}
+    assert response.json() == {"detail": "Internal server error"}
 
     del app.dependency_overrides[get_session]

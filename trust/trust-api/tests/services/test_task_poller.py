@@ -113,7 +113,10 @@ async def test_send_heartbeat_error():
 @pytest.mark.asyncio
 async def test_report_task_result_success():
     """Should POST result to hub."""
+    mock_response = AsyncMock()
+    mock_response.status_code = 200
     mock_client = AsyncMock()
+    mock_client.post.return_value = mock_response
 
     await _report_task_result(mock_client, "task-123", {"success": True, "result": "data"})
 
@@ -125,12 +128,33 @@ async def test_report_task_result_success():
 
 @pytest.mark.asyncio
 async def test_report_task_result_error():
-    """Should not raise on error."""
+    """Should not raise on error, retries then gives up."""
     mock_client = AsyncMock()
     mock_client.post.side_effect = Exception("Network error")
 
     # Should not raise
     await _report_task_result(mock_client, "task-123", {"success": True})
+    # Should have retried 3 times
+    assert mock_client.post.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_report_task_result_includes_error_in_result():
+    """Should include error details in result field for failed tasks."""
+    mock_response = AsyncMock()
+    mock_response.status_code = 200
+    mock_client = AsyncMock()
+    mock_client.post.return_value = mock_response
+
+    await _report_task_result(
+        mock_client, "task-123",
+        {"success": False, "error": "Something went wrong"},
+    )
+
+    call_args = mock_client.post.call_args
+    payload = call_args[1]["json"]
+    assert payload["success"] is False
+    assert "Something went wrong" in payload["result"]
 
 
 # ---- _process_task ----

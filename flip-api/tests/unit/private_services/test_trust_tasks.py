@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -60,7 +60,7 @@ def mock_pending_tasks(trust_id):
             task_type=TaskType.COHORT_QUERY,
             payload='{"query": "SELECT 1"}',
             status=TaskStatus.PENDING,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         ),
         TrustTask(
             id=uuid4(),
@@ -68,7 +68,7 @@ def mock_pending_tasks(trust_id):
             task_type=TaskType.CREATE_IMAGING,
             payload='{"project_id": "123"}',
             status=TaskStatus.PENDING,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         ),
     ]
 
@@ -222,6 +222,28 @@ def test_submit_task_result_not_found(mock_auth):
     )
 
     assert response.status_code == 404
+
+    del app.dependency_overrides[get_session]
+
+
+def test_submit_task_result_conflict_when_not_in_progress(task_id, mock_auth):
+    """Should return 409 when task is not IN_PROGRESS."""
+    mock_task = MagicMock(spec=TrustTask)
+    mock_task.id = task_id
+    mock_task.status = TaskStatus.COMPLETED
+
+    mock_db = MagicMock()
+    mock_db.exec.return_value.first.return_value = mock_task
+
+    app.dependency_overrides[get_session] = lambda: mock_db
+
+    response = client.post(
+        f"/api/tasks/{task_id}/result",
+        json={"success": True},
+    )
+
+    assert response.status_code == 409
+    assert "not in progress" in response.json()["detail"]
 
     del app.dependency_overrides[get_session]
 

@@ -75,6 +75,7 @@ class Settings(BaseSettings):
 
     # Trust task queue settings
     TASK_STALE_TIMEOUT_MINUTES: int = 30  # Tasks older than this in IN_PROGRESS are considered stale
+    SCHEDULER_STALE_TASK_RECOVERY_RATE: int = 10  # How often to check for stale tasks (in minutes)
 
     # Variables only used in testing
     FLIP_API_URL: str = "http://localhost:8080/api"  # this is currently only used in tests (TODO review)

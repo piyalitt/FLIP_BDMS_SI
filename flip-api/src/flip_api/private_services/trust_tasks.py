@@ -150,17 +150,31 @@ def submit_task_result(
                 detail=f"Task {task_id} not found",
             )
 
+        if task.status != TaskStatus.IN_PROGRESS:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Task {task_id} is not in progress (current status: {task.status})",
+            )
+
+        needs_post_processing = task_result.success and task.task_type == TaskType.CREATE_IMAGING
+
         task.status = TaskStatus.COMPLETED if task_result.success else TaskStatus.FAILED
         task.result = task_result.result
         task.updated_at = datetime.now(timezone.utc)
+        task.needs_post_processing = needs_post_processing
         db.commit()
 
         # Post-process successful imaging project creation (persist status + send credential emails)
-        if task_result.success and task.task_type == TaskType.CREATE_IMAGING:
+        if needs_post_processing:
             try:
                 handle_imaging_task_completed(task, db)
+                task.needs_post_processing = False
+                db.commit()
             except Exception as post_err:
-                logger.error(f"Failed post-processing for imaging task {task_id}: {post_err}")
+                logger.error(
+                    f"Failed post-processing for imaging task {task_id}: {post_err}. "
+                    "The stale task recovery job will retry this."
+                )
 
         logger.info(f"Task {task_id} marked as {task.status}")
         return {"message": f"Task {task_id} result recorded"}

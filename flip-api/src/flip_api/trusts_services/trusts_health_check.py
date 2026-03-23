@@ -12,7 +12,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
 from flip_api.db.database import get_session
@@ -29,7 +29,6 @@ HEARTBEAT_TIMEOUT_SECONDS = 30
 # [#114] ✅
 @router.get("/health", status_code=status.HTTP_200_OK, response_model=list[ITrustHealth])
 async def check_trusts_health(
-    request: Request,
     db: Session = Depends(get_session),
 ) -> list[ITrustHealth]:
     """
@@ -39,7 +38,6 @@ async def check_trusts_health(
     the last_heartbeat field updated by the trust's polling service.
 
     Args:
-        request (Request): The incoming HTTP request.
         db (Session): Database session for querying trusts.
 
     Returns:
@@ -85,4 +83,4 @@ async def check_trusts_health(
         raise
     except Exception as e:
         logger.error(f"Error checking trusts health: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")

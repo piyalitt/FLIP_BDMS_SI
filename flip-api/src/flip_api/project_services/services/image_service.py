@@ -334,7 +334,7 @@ def reimport_failed_studies(
             ).one_or_none()
 
             if xnat_project_status:
-                xnat_project_status.last_reimport = datetime.utcnow()
+                xnat_project_status.last_reimport = datetime.now(timezone.utc)
                 xnat_project_status.reimport_count += 1
                 queued_count += 1
             else:
