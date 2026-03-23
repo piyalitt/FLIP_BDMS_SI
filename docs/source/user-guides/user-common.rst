@@ -314,11 +314,11 @@ Additional files may be uploaded, especially if these are referenced by the vali
 
 **For Flower apps**, the required files differ (e.g. ``client_app.py``, ``pyproject.toml``). See the :ref:`FL nodes documentation <flip-fl-nodes>` for Flower-specific file requirements and job types.
 
-For more information on model training and model files, please see the `FLIP Sample Application <https://github.com/londonaicentre/flip-sample-application>`_.
+For more information on model training and model files, please see the `FLIP tutorials <https://github.com/londonaicentre/flip-fl-base/tree/main/tutorials>`_.
 
 .. warning::
 
-   Please ensure that any model files uploaded to FLIP have been tested locally using the FLIP Sample Application, and have been validated to ensure they are free of syntax errors.
+   Please ensure that any model files uploaded to FLIP have been tested locally using the FLIP tutorials workflow, and have been validated to ensure they are free of syntax errors.
 
    Linting tools such as `Pylint <https://pypi.org/project/pylint/>`_ and `JSON Lint <https://www.npmjs.com/package/jsonlint>`_ can provide a simple way to validate any Python or JSON are free of errors before uploading.
 
