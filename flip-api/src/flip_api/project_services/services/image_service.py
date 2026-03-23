@@ -21,6 +21,7 @@ from sqlmodel import Session, col, select, update
 from flip_api.db.models.main_models import Trust as DBTrust
 from flip_api.db.models.main_models import TrustTask, XNATProjectStatus
 from flip_api.domain.interfaces.project import (
+    IImagingImportStatus,
     IImagingStatus,
     IReimportQuery,
     IUpdateXnatProfile,
@@ -170,14 +171,51 @@ def get_xnat_project_status_info(xnat_project_id: UUID, db: Session) -> XnatProj
         raise
 
 
+def _get_latest_imaging_status(trust_id: UUID, db: Session) -> IImagingImportStatus | None:
+    """Look up the most recent completed GET_IMAGING_STATUS task result for a trust.
+
+    Args:
+        trust_id: The trust to look up.
+        db: Database session.
+
+    Returns:
+        Parsed import status counts, or None if no completed result exists.
+    """
+    latest_task = db.exec(
+        select(TrustTask)
+        .where(TrustTask.trust_id == trust_id)
+        .where(TrustTask.task_type == TaskType.GET_IMAGING_STATUS)
+        .where(TrustTask.status == TaskStatus.COMPLETED)
+        .order_by(col(TrustTask.updated_at).desc())
+        .limit(1)
+    ).first()
+
+    if not latest_task or not latest_task.result:
+        return None
+
+    try:
+        result_data = json.loads(latest_task.result)
+        import_status = result_data.get("import_status", result_data)
+        return IImagingImportStatus(
+            successful=import_status.get("successful_count", 0),
+            failed=import_status.get("failed_count", 0),
+            processing=import_status.get("processing_count", 0),
+            queued=import_status.get("queued_count", 0),
+            queueFailed=import_status.get("queue_failed_count", 0),
+        )
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        logger.warning(f"Failed to parse imaging status result for trust {trust_id}: {e}")
+        return None
+
+
 def get_imaging_project_statuses(
     imaging_projects: list[ImagingProject], encoded_query: str, db: Session
 ) -> list[IImagingStatus]:
     """
     Retrieve the imaging project statuses from local DB and queue status refresh tasks for trusts.
 
-    Instead of making direct HTTP calls to each trust, this returns locally cached status
-    and queues GET_IMAGING_STATUS tasks for each trust to report back updated status.
+    Returns the latest known import status from completed GET_IMAGING_STATUS tasks, and queues
+    new refresh tasks so the next poll will have updated data.
 
     Args:
         imaging_projects (List[ImagingProject]): The list of imaging projects to retrieve statuses for.
@@ -185,7 +223,7 @@ def get_imaging_project_statuses(
         db (Session): The database session for executing queries.
 
     Returns:
-        List[IImagingStatus]: A list of IImagingStatus containing the cached status for each imaging project.
+        List[IImagingStatus]: A list of IImagingStatus containing the status for each imaging project.
     """
     logger.debug(
         f"Attempting to retrieve the imaging project status. Trusts requested: {[ip.name for ip in imaging_projects]}"
@@ -202,20 +240,23 @@ def get_imaging_project_statuses(
             project_creation_completed = xnat_status_info.retrieve_image_status == XNATImageStatus.CREATED
             reimport_count_val = xnat_status_info.reimport_count
 
+        # Look up the latest completed status result for this trust
+        import_status = _get_latest_imaging_status(row_project.trust_id, db)
+
         current_project_status = IImagingStatus(
             trust_id=row_project.trust_id,
             trust_name=row_project.name,
             project_creation_completed=project_creation_completed,
             reimport_count=reimport_count_val,
-            import_status=None,
+            import_status=import_status,
         )  # type: ignore[call-arg]
 
-        # Queue a status refresh task only if one isn't already pending
+        # Queue a status refresh task only if one isn't already pending or in progress
         existing_task = db.exec(
             select(TrustTask)
             .where(TrustTask.trust_id == row_project.trust_id)
             .where(TrustTask.task_type == TaskType.GET_IMAGING_STATUS)
-            .where(TrustTask.status == TaskStatus.PENDING)
+            .where(col(TrustTask.status).in_([TaskStatus.PENDING, TaskStatus.IN_PROGRESS]))
         ).first()
         if not existing_task:
             task = TrustTask(

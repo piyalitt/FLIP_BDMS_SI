@@ -11,6 +11,7 @@
 #
 
 import base64
+import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
@@ -29,6 +30,7 @@ from flip_api.domain.schemas.projects import (
 )
 from flip_api.domain.schemas.status import XNATImageStatus
 from flip_api.project_services.services.image_service import (
+    _get_latest_imaging_status,
     delete_imaging_project,
     get_imaging_project_statuses,
     get_imaging_projects,
@@ -168,12 +170,14 @@ class TestGetXnatProjectStatusInfo:
 
 # --- get_imaging_project_statuses ---
 class TestGetImagingProjectStatuses:
+    @patch(f"{MOCK_SERVICE_PATH}._get_latest_imaging_status")
     @patch(f"{MOCK_SERVICE_PATH}.get_xnat_project_status_info")
     @patch(MOCK_LOGGER_PATH)
     def test_returns_statuses_and_queues_tasks(
         self,
         mock_logger: MagicMock,
         mock_get_xnat_status: MagicMock,
+        mock_get_latest_status: MagicMock,
         mock_db_session: MagicMock,
     ):
         trust_id_1, trust_id_2 = uuid4(), uuid4()
@@ -204,7 +208,9 @@ class TestGetImagingProjectStatuses:
             ),
         ]
 
-        # No existing pending tasks
+        mock_get_latest_status.return_value = None
+
+        # No existing pending/in-progress tasks
         mock_db_session.exec.return_value.first.return_value = None
 
         results = get_imaging_project_statuses(imaging_projects_list, encoded_query, mock_db_session)
@@ -216,9 +222,53 @@ class TestGetImagingProjectStatuses:
         assert results[1].project_creation_completed is False
 
         assert mock_get_xnat_status.call_count == 2
+        assert mock_get_latest_status.call_count == 2
         # Should have added task records and committed
         assert mock_db_session.add.call_count == 2
         mock_db_session.commit.assert_called_once()
+
+    @patch(f"{MOCK_SERVICE_PATH}._get_latest_imaging_status")
+    @patch(f"{MOCK_SERVICE_PATH}.get_xnat_project_status_info")
+    @patch(MOCK_LOGGER_PATH)
+    def test_returns_import_status_from_completed_task(
+        self,
+        mock_logger: MagicMock,
+        mock_get_xnat_status: MagicMock,
+        mock_get_latest_status: MagicMock,
+        mock_db_session: MagicMock,
+    ):
+        """Should populate import_status from the latest completed GET_IMAGING_STATUS task."""
+        from flip_api.domain.interfaces.project import IImagingImportStatus
+
+        trust_id = uuid4()
+        imaging_projects_list = [
+            ImagingProject(
+                id=uuid4(),
+                xnat_project_id=uuid4(),
+                trust_id=trust_id,
+                retrieve_image_status=XNATImageStatus.CREATED,
+                name="Trust1",
+                reimport_count=0,
+            ),
+        ]
+
+        mock_get_xnat_status.return_value = XnatProjectStatusInfo(
+            retrieve_image_status=XNATImageStatus.CREATED, reimport_count=0
+        )
+        mock_get_latest_status.return_value = IImagingImportStatus(
+            successful=10, failed=2, processing=3, queued=5, queueFailed=1
+        )
+        mock_db_session.exec.return_value.first.return_value = None
+
+        results = get_imaging_project_statuses(imaging_projects_list, "ZXF1ZXJ5", mock_db_session)
+
+        assert len(results) == 1
+        assert results[0].import_status is not None
+        assert results[0].import_status.successful_count == 10
+        assert results[0].import_status.failed_count == 2
+        assert results[0].import_status.processing_count == 3
+        assert results[0].import_status.queued_count == 5
+        assert results[0].import_status.queue_failed_count == 1
 
 
 # --- update_xnat_user_profile ---
@@ -402,6 +452,77 @@ class TestUpdateXnatUserProfileEdgeCases:
 
         mock_logger.error.assert_called_once()
         mock_db_session.add.assert_not_called()
+
+
+class TestGetLatestImagingStatus:
+    def test_returns_parsed_status(self, mock_db_session: MagicMock):
+        """Should parse import status from completed task result."""
+        trust_id = uuid4()
+        mock_task = MagicMock()
+        mock_task.result = json.dumps({
+            "import_status": {
+                "successful_count": 10,
+                "failed_count": 2,
+                "processing_count": 3,
+                "queued_count": 5,
+                "queue_failed_count": 1,
+            }
+        })
+        mock_db_session.exec.return_value.first.return_value = mock_task
+
+        result = _get_latest_imaging_status(trust_id, mock_db_session)
+
+        assert result is not None
+        assert result.successful_count == 10
+        assert result.failed_count == 2
+        assert result.processing_count == 3
+        assert result.queued_count == 5
+        assert result.queue_failed_count == 1
+
+    def test_returns_none_when_no_task(self, mock_db_session: MagicMock):
+        """Should return None when no completed task exists."""
+        mock_db_session.exec.return_value.first.return_value = None
+
+        result = _get_latest_imaging_status(uuid4(), mock_db_session)
+
+        assert result is None
+
+    def test_returns_none_when_no_result_data(self, mock_db_session: MagicMock):
+        """Should return None when task has no result."""
+        mock_task = MagicMock()
+        mock_task.result = None
+        mock_db_session.exec.return_value.first.return_value = mock_task
+
+        result = _get_latest_imaging_status(uuid4(), mock_db_session)
+
+        assert result is None
+
+    def test_handles_malformed_json(self, mock_db_session: MagicMock):
+        """Should return None and not raise on malformed result JSON."""
+        mock_task = MagicMock()
+        mock_task.result = "not valid json"
+        mock_db_session.exec.return_value.first.return_value = mock_task
+
+        result = _get_latest_imaging_status(uuid4(), mock_db_session)
+
+        assert result is None
+
+    def test_handles_flat_result_structure(self, mock_db_session: MagicMock):
+        """Should handle result where counts are at the top level (no import_status wrapper)."""
+        mock_task = MagicMock()
+        mock_task.result = json.dumps({
+            "successful_count": 5,
+            "failed_count": 0,
+            "processing_count": 1,
+            "queued_count": 2,
+            "queue_failed_count": 0,
+        })
+        mock_db_session.exec.return_value.first.return_value = mock_task
+
+        result = _get_latest_imaging_status(uuid4(), mock_db_session)
+
+        assert result is not None
+        assert result.successful_count == 5
 
 
 class TestGetImagingProjectStatusesEdgeCases:
