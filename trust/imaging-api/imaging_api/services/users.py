@@ -11,7 +11,6 @@
 #
 
 import re
-from typing import List, Tuple
 
 import requests
 
@@ -25,7 +24,7 @@ from imaging_api.utils.passwords import generate_complex_password
 XNAT_URL = get_settings().XNAT_URL
 
 
-def get_xnat_users(headers: dict[str, str]) -> List[User]:
+def get_xnat_users(headers: dict[str, str]) -> list[User]:
     """
     Gets all users from XNAT.
 
@@ -141,7 +140,7 @@ def user_exists(username: str, headers: dict[str, str]) -> bool:
 
 def create_user_from_central_hub_user(
     central_hub_user: CentralHubUser, headers: dict[str, str]
-) -> Tuple[CreatedUser, User]:
+) -> tuple[CreatedUser, User]:
     """
     Convert central hub user to XNAT CreateUser request object, and create user on XNAT.
 
