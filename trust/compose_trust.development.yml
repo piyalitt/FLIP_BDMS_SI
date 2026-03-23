@@ -15,41 +15,6 @@
 
 services:
 
-  # --- Logging infrastructure ---
-
-  loki:
-    image: grafana/loki:3.4.0
-    command: -config.file=/etc/loki/loki-config.yml
-    ports:
-      - "${LOKI_PORT:-3100}:3100"
-    volumes:
-      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
-      - loki-data:/loki
-
-  alloy:
-    image: grafana/alloy:v1.9.0
-    command:
-      - run
-      - --server.http.listen-addr=0.0.0.0:12345
-      - /etc/alloy/config.alloy
-    volumes:
-      - ./alloy-config.alloy:/etc/alloy/config.alloy:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    depends_on:
-      - loki
-
-  grafana:
-    image: grafana/grafana:11.5.0
-    ports:
-      - "${GRAFANA_PORT:-3000}:3000"
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-    depends_on:
-      - loki
-
   # --- Application services ---
 
   omop-db:
@@ -111,7 +76,7 @@ services:
       - ./imaging-api/imaging_api:/app/imaging_api
       - ./imaging-api/tests:/app/tests
       - ${BASE_IMAGES_DOWNLOAD_DIR}:/app/data/images
-      - ./log_config:/app/log_config:ro
+      - ./observability/log_config:/app/log_config:ro
 
   data-access-api:
     build:
@@ -138,7 +103,7 @@ services:
     volumes:
       - ./data-access-api/data_access_api:/app/data_access_api
       - ./data-access-api/tests:/app/tests
-      - ./log_config:/app/log_config:ro
+      - ./observability/log_config:/app/log_config:ro
 
   nginx-tls:
     build:
@@ -161,7 +126,7 @@ services:
         UID: ${UID}
         GID: ${GID}
         UNAME: ${UNAME}
-        DEBUG_PORT: ${TRUST_DEBUG_PORT_TRUST_1}
+        DEBUG_PORT: ${TRUST_DEBUG_PORT}
       context: ./trust-api
       dockerfile: Dockerfile
       target: development
@@ -171,7 +136,7 @@ services:
       CENTRAL_HUB_API_URL: ${CENTRAL_HUB_API_URL}
       DATA_ACCESS_API_URL: ${DATA_ACCESS_API_URL}
       IMAGING_API_URL: ${IMAGING_API_URL}
-      DEBUG_PORT: ${TRUST_DEBUG_PORT_TRUST_1}
+      DEBUG_PORT: ${TRUST_DEBUG_PORT}
       DEBUG: ${DEBUG}
       PRIVATE_API_KEY_HEADER: ${PRIVATE_API_KEY_HEADER}
       PRIVATE_API_KEY: ${PRIVATE_API_KEY}
@@ -180,10 +145,45 @@ services:
     volumes:
       - ./trust-api/trust_api:/app/trust_api
       - ./trust-api/tests:/app/tests
-      - ./log_config:/app/log_config:ro
+      - ./observability/log_config:/app/log_config:ro
     networks:
       - default
       - central-hub-trust-apis-network
+
+  # --- Observability infrastructure ---
+
+  loki:
+    image: grafana/loki:3.4.0
+    command: -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "${LOKI_PORT}:3100"
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+
+  alloy:
+    image: grafana/alloy:v1.9.0
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:11.5.0
+    ports:
+      - "${GRAFANA_PORT}:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - loki
 
 volumes:
   loki-data:

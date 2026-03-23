@@ -57,7 +57,7 @@ Shared library: ``log_config``
 ================================
 
 All trust-side APIs use the ``log_config`` library located at
-``trust/log_config/``. The library provides:
+``trust/observability/log_config/``. The library provides:
 
 - **JSONFormatter** -- serialises every log record as a single-line JSON object
   containing ``timestamp``, ``level``, ``api``, ``logger``,
@@ -145,7 +145,7 @@ Grafana Alloy
 =============
 
 Grafana Alloy discovers containers via the Docker socket and scrapes their
-stdout logs. Configuration is at ``trust/alloy-config.alloy`` (River syntax).
+stdout logs. Configuration is at ``trust/observability/alloy/config.alloy`` (River syntax).
 Alloy replaces the now end-of-life Promtail collector.
 
 Key behaviours:
@@ -161,7 +161,7 @@ Loki
 ====
 
 Loki is the log storage backend. Configuration is at
-``trust/loki/loki-config.yml``.
+``trust/observability/loki/loki-config.yml``.
 
 Key settings:
 
@@ -185,7 +185,7 @@ Grafana
 =======
 
 Grafana provides the web UI for log exploration. It is pre-provisioned with a
-Loki datasource (``trust/grafana/provisioning/datasources/loki.yml``) so no
+Loki datasource (``trust/observability/grafana/provisioning/datasources/loki.yml``) so no
 manual configuration is required on first start.
 
 Default credentials and port:
@@ -320,7 +320,7 @@ High disk usage from Loki
 
 Loki retains logs for 30 days. If disk space is a concern:
 
-- Reduce ``retention_period`` in ``trust/loki/loki-config.yml``.
+- Reduce ``retention_period`` in ``trust/observability/loki/loki-config.yml``.
 - Check that the compactor is running (``compaction_interval: 10m``).
 - Monitor the ``/opt/flip/volumes/loki`` directory size.
 

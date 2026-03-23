@@ -19,14 +19,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Common settings shared across all environments (development and production)."""
 
+    # Environment flag
+    ENV: Literal["development", "production"] = "development"
+
     model_config = SettingsConfigDict(
-        env_file="../.env.development",
+        env_file=f"../.env.{ENV}",
         env_file_encoding="utf-8",
         extra="ignore",
     )
-
-    # Environment flag
-    ENV: Literal["development", "production"] = "development"
 
     PRIVATE_API_KEY_HEADER: str
     PRIVATE_API_KEY: str

@@ -10,11 +10,11 @@
 # limitations under the License.
 #
 
-from log_config.formatter import JSONFormatter, PIIRedactionFilter, request_context
-from log_config.middleware import LoggingMiddleware
-
 import logging
 import sys
+
+from log_config.formatter import JSONFormatter, PIIRedactionFilter, request_context
+from log_config.middleware import LoggingMiddleware
 
 _configured = False
 
