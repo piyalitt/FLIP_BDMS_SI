@@ -68,12 +68,13 @@ class Settings(BaseSettings):
 
     # Variables used during database seeding
     NET_ENDPOINTS: dict[str, str]
-
-    # SSL / TLS settings
-    TRUST_CA_BUNDLE: str | None = None  # Path to the Trust CA certificate PEM file
+    TRUST_NAMES: list[str] = ["Trust_1", "Trust_2"]  # Allowlist of trust names to seed
 
     # FL settings
     FL_BACKEND: Literal["nvflare", "flower"] = "nvflare"
+
+    # Trust task queue settings
+    TASK_STALE_TIMEOUT_MINUTES: int = 30  # Tasks older than this in IN_PROGRESS are considered stale
 
     # Variables only used in testing
     FLIP_API_URL: str = "http://localhost:8080/api"  # this is currently only used in tests (TODO review)
@@ -87,8 +88,6 @@ class DevSettings(Settings):
     POSTGRES_PASSWORD: str  # in dev, get DB password from env variable
 
     AES_KEY_BASE64: str  # in dev, get AES key from env variable
-
-    TRUST_ENDPOINTS: dict[str, str]  # in dev, get trust endpoints from env variables
 
 
 class ProdSettings(Settings):

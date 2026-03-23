@@ -388,8 +388,8 @@ class TestGetApprovedTrustsForProject:
     def test_get_approved_trusts_for_project_success(self, mock_db_session: MagicMock):
         project_id = uuid4()
         mock_results = [
-            MagicMock(id=uuid4(), name="Trust 1", endpoint="endpoint1"),
-            MagicMock(id=uuid4(), name="Trust 2", endpoint="endpoint2"),
+            MagicMock(id=uuid4(), name="Trust 1"),
+            MagicMock(id=uuid4(), name="Trust 2"),
         ]
 
         mock_db_session.execute.return_value.all.return_value = mock_results

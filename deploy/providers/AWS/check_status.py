@@ -812,29 +812,9 @@ def main(
         if trust_ip:
             print_status("INFO", "Checking Trust EC2 service endpoints...")
 
-            # Trust API is now served over HTTPS via the nginx-tls sidecar.
-            # Use -k (skip verify) for SSH-based loopback and cross-EC2 checks since
-            # those go directly to the self-signed cert.  For the direct check from
-            # this machine we use the local trust-ca.crt when available.
-            _trust_ca = str(Path(__file__).parent / "trust-ca.crt")
-
-            # Check if Trust API is reachable from Trust EC2 via SSH
-            check_endpoint_over_ssh("flip-trust", f"https://localhost:{TRUST_API_PORT}/health", 200, verify_ssl=False)
-
-            # Check Trust is reachable from Central Hub EC2 via SSH
-            check_endpoint_over_ssh("flip", f"https://{trust_ip}:{TRUST_API_PORT}/health", 200, verify_ssl=False)
-
-            # SECURITY CHECKS: Verify HTTP is rejected (Trust API must be HTTPS-only)
-            check_endpoint_rejects_insecure_ssh("flip-trust", f"https://localhost:{TRUST_API_PORT}/health")
-            check_endpoint_rejects_insecure_ssh("flip", f"https://{trust_ip}:{TRUST_API_PORT}/health")
-
-            # Check Trust API health endpoint directly from this machine (use CA cert)
-            check_http_endpoint(
-                f"https://{trust_ip}:{TRUST_API_PORT}/health",
-                "Trust API Health",
-                200,
-                cafile=_trust_ca if Path(_trust_ca).exists() else None,
-            )
+            # Trust API is exposed directly (no nginx-tls — all hub communication is outbound polling)
+            check_endpoint_over_ssh("flip-trust", f"http://localhost:{TRUST_API_PORT}/health", 200)
+            check_http_endpoint(f"http://{trust_ip}:{TRUST_API_PORT}/health", "Trust API Health", 200)
 
             # Check XNAT is reachable
             check_http_endpoint(f"http://{trust_ip}:{XNAT_PORT}", "XNAT Service", 200)

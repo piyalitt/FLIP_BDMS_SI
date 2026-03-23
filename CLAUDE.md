@@ -255,7 +255,7 @@ FLIP supports two deployment models:
 1. **Cloud-Only**: Central Hub + Trust services both on AWS EC2
 2. **Hybrid/On-Premises**: Central Hub on AWS EC2 + Trust services on a local/on-premises host
 
-Both models use HTTPS with TLS certificates. Trust communication is encrypted via `AES_KEY_BASE64`.
+Trusts poll the Central Hub for tasks over HTTPS. Trust communication payloads are encrypted via `AES_KEY_BASE64`.
 
 ### Docker Compose (Development vs Production)
 
@@ -290,7 +290,7 @@ Infrastructure-as-code lives in `deploy/providers/AWS/`. Key resources:
 | NLB | gRPC traffic for FL servers |
 | S3 buckets | Model files, federated data, FL app storage |
 | Cognito | User pool (`flip-user-pool`) with email auth |
-| Secrets Manager | `FLIP_API` secret (AES key, DB password, trust endpoints, CA certs) |
+| Secrets Manager | `FLIP_API` secret (AES key, DB password) |
 | SES | Email notifications |
 | Route53 | DNS records for ALB subdomain |
 
@@ -314,11 +314,6 @@ make status                          # Health checks across all services
 
 # On-premises trust
 make add-local-trust LOCAL_TRUST_IP=<ip>       # Provision on-prem trust via Ansible
-make test-local-trust LOCAL_TRUST_IP=<ip>      # Validate trust connectivity (with TLS)
-
-# Certificate management
-make gen-trust-ec2-certs             # Generate TLS certs for cloud Trust EC2
-make regen-trust-certs               # Regenerate expired certs
 ```
 
 ### Trust Services Architecture
@@ -327,8 +322,7 @@ Each Trust environment (cloud or on-prem) runs:
 
 | Service | Port | Purpose |
 | --------- | ------ | --------- |
-| nginx-tls | 8020 | HTTPS termination |
-| trust-api | 8000 | Trust API gateway |
+| trust-api | 8000 | Trust API gateway (polls hub for tasks) |
 | imaging-api | 8000 | DICOM image retrieval |
 | data-access-api | 8000 | OMOP database queries |
 | fl-client | 8002-8003 | Federated learning client |
@@ -336,20 +330,19 @@ Each Trust environment (cloud or on-prem) runs:
 | Orthanc | 4242 | DICOM server |
 | omop-db | 5432 | Patient cohort database |
 
-On-premises trusts are provisioned via Ansible (`deploy/providers/local/`), which installs Docker, generates TLS certificates, configures the firewall, and deploys the Trust Docker Compose stack.
+On-premises trusts are provisioned via Ansible (`deploy/providers/local/`), which installs Docker, configures the firewall, and deploys the Trust Docker Compose stack.
 
 ### Dev/Prod Consistency Rules
 
 When making infrastructure or deployment changes, **always think through both environments end-to-end**:
 
 1. **Compose files** — update both `compose.development.yml` and `compose.production.yml`. They differ in *how* services run (build-from-source vs GHCR images, source volume mounts vs baked-in code), but the set of services, ports, networks, and functional volume mounts must stay in sync.
-2. **Volume mounts and host files** — development mounts files from the local repo (e.g., `../trust/certs:/etc/ssl/trust/:ro`). Production mounts files from the EC2 host filesystem (e.g., `/opt/flip/certs/trust-ca.crt:/etc/ssl/trust/trust-ca.crt:ro`). If you add a file bind mount in development, the same file must exist on the production EC2 instance — ensure it is provisioned by the Ansible playbook (`deploy/providers/AWS/site.yml`) or by a Makefile target, and add the corresponding mount in `compose.production.yml`.
+2. **Volume mounts and host files** — development mounts files from the local repo. Production mounts files from the EC2 host filesystem. If you add a file bind mount in development, the same file must exist on the production EC2 instance — ensure it is provisioned by the Ansible playbook (`deploy/providers/AWS/site.yml`) or by a Makefile target, and add the corresponding mount in `compose.production.yml`.
 3. **FL backend variants** — update both `flower` and `nvflare` compose files if adding services or ports.
 4. **Environment variables** — add to `.env.development.example` and document in `deploy/README.md`. Production uses AWS Secrets Manager instead of `.env` files, so also update `deploy/providers/AWS/services.tf` (the `FLIP_API` secret) if the variable is needed at runtime.
 5. **Terraform variables** — update `variables.tf` with descriptions and defaults; keep `main.tf` and `services.tf` in sync.
-6. **Ansible provisioning** — if production EC2 instances need new directories, files, packages, or data, add tasks to `deploy/providers/AWS/site.yml` (cloud) and `deploy/providers/local/site_local_trust.yml` (on-prem). Key host paths: `/opt/flip/` (app root), `/opt/flip/certs/` (TLS certs), `/opt/flip/data/` (FL data), `/opt/flip/services/` (FL participant kits), `/opt/flip/volumes/` (database data).
+6. **Ansible provisioning** — if production EC2 instances need new directories, files, packages, or data, add tasks to `deploy/providers/AWS/site.yml` (cloud) and `deploy/providers/local/site_local_trust.yml` (on-prem). Key host paths: `/opt/flip/` (app root), `/opt/flip/data/` (FL data), `/opt/flip/services/` (FL participant kits), `/opt/flip/volumes/` (database data).
 7. **Trust changes** — update both cloud (`deploy/providers/AWS/`) and on-prem (`deploy/providers/local/`) Ansible playbooks so both deployment models stay consistent.
-8. **Certificates** — never bypass TLS validation; fix certificates instead.
 
 ## Security Rules
 

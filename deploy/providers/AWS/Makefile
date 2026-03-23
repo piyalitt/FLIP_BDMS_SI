@@ -224,45 +224,6 @@ destroy-cert: ## Destroy only the ACM certificate (use with caution - will break
 	@terraform destroy -target=aws_acm_certificate.flip -target=aws_acm_certificate_validation.flip -target=aws_route53_record.cert_validation
 	@echo "✅ Certificate destroyed! Now run 'make plan' and 'make apply' to remove DNS validation."
 
-.PHONY: update-trust-secret
-update-trust-secret: ## Update Secrets Manager with the current trust-ca.crt (run after cert regeneration)
-	@echo "🔐 Updating Secrets Manager with the current trust-ca.crt..."
-	@terraform apply -target='module.flip_api_secret.aws_secretsmanager_secret_version.this[0]' -auto-approve
-	@echo "✅ Secrets Manager updated with new trust CA certificate!"
-
-.PHONY: gen-trust-ec2-certs
-gen-trust-ec2-certs: ## Generate TLS certs for the cloud Trust EC2 using its Terraform-provisioned public IP
-	@echo "🔑 Generating TLS certificates for cloud Trust EC2..."
-	@TRUST_HOST="$$(terraform output -raw TrustEc2PublicIp)" \
-		bash ../../../trust/certs/generate-trust-certs.sh
-	@echo "📋 Copying CA cert to Terraform directory (picked up by Secrets Manager on next apply)..."
-	@cp ../../../trust/certs/trust-ca.crt ./trust-ca.crt
-	@echo "📦 Deploying server certificate and key to Trust EC2..."
-	@TRUST_IP="$$(terraform output -raw TrustEc2PublicIp)"; \
-	ssh -i ~/.ssh/host-aws -o StrictHostKeyChecking=accept-new ubuntu@$$TRUST_IP "sudo mkdir -p /opt/flip/certs && sudo chown ubuntu:ubuntu /opt/flip/certs" && \
-	scp -i ~/.ssh/host-aws -o StrictHostKeyChecking=accept-new \
-		../../../trust/certs/trust-server.crt \
-		../../../trust/certs/trust-server.key \
-		ubuntu@$$TRUST_IP:/opt/flip/certs/
-	@echo "✅ TLS certificates generated and deployed to Trust EC2!"
-.PHONY: regen-trust-certs
-regen-trust-certs: ## Re-generate TLS certs for Trust EC2, deploy to EC2, and update Secrets Manager
-	@echo "🔑 Regenerating TLS certificates for Trust EC2..."
-	@TRUST_HOST="$$(terraform output -raw TrustEc2PublicIp)" bash ../../../trust/certs/generate-trust-certs.sh
-	@echo "📋 Copying new CA cert to provider directory..."
-	@cp ../../../trust/certs/trust-ca.crt trust-ca.crt
-	@echo "📦 Copying certificates to Trust EC2..."
-	@scp -i ~/.ssh/host-aws \
-		../../../trust/certs/trust-server.crt \
-		../../../trust/certs/trust-server.key \
-		../../../trust/certs/trust-ca.crt \
-		ubuntu@$$(terraform output -raw TrustEc2PublicIp):/opt/flip/certs/
-	@echo "🔄 Restarting nginx-tls on Trust EC2 to load new certificate..."
-	@ssh flip-trust "docker restart trust1-nginx-tls-1"
-	@echo "🔐 Updating Secrets Manager..."
-	@$(MAKE) update-trust-secret
-	@echo "✅ Certificate rotation complete!"
-
 .PHONY: apply
 apply: ## Apply Terraform configuration to update AWS infrastructure
 	@echo "🛠️ Applying Terraform configuration..."
@@ -289,19 +250,8 @@ ansible-init: ## Initialize Ansible configuration on EC2 instances (if failed tr
 	@uv run ansible-galaxy install -r requirements.yml
 	@uv run ansible-playbook site.yml -e flip_aicentre_bucket=$(AICENTRE_BUCKET_NAME) -e fl_kit_date=$(FL_KIT_DATE)
 
-.PHONY: write-trust-ca
-write-trust-ca: ## Fetch trust_ca_cert from Secrets Manager and write to CH EC2 host for volume mount
-	@echo "🔐 Fetching Trust CA cert from Secrets Manager and writing to CH EC2..."
-	@CH_IP=$$(terraform output -raw Ec2PublicIp) && \
-	  CA_CERT=$$(AWS_PROFILE=$(AWS_PROFILE) aws secretsmanager get-secret-value \
-	    --secret-id $(AWS_SECRET_NAME) \
-	    --query 'SecretString' --output text | python3 -c \
-	    "import json,sys; s=json.load(sys.stdin); print(s['trust_ca_cert'])") && \
-	  ssh -i ~/.ssh/host-aws ubuntu@$$CH_IP "mkdir -p /opt/flip/certs && printf '%s\n' '$$CA_CERT' > /opt/flip/certs/trust-ca.crt && chmod 0644 /opt/flip/certs/trust-ca.crt" && \
-	  echo "✅ Trust CA cert written to CH EC2 at /opt/flip/certs/trust-ca.crt"
-
 .PHONY: deploy-centralhub
-deploy-centralhub: write-trust-ca ## Deploy FLIP containers to flip context with environment from Terraform
+deploy-centralhub: ## Deploy FLIP containers to flip context with environment from Terraform
 	@echo "📋 Loading environment variables from Terraform outputs..."
 	@echo "👷 Create docker context if not exists, pointing to flip to ssh://flip"
 	@docker context create flip --docker "host=ssh://flip" || echo "   Context 'flip' already exists"
@@ -331,14 +281,6 @@ deploy-trust: update-env ## Deploy trust relationships after central hub is depl
 	@docker context use flip-trust
 	@echo "🐳 Deploying containers to Trust EC2 ..."
 	docker swarm init || echo "   Swarm already initialized"
-	@echo "🗒️ Copying TLS certificates to Trust EC2..."
-	ssh -i ~/.ssh/host-aws ubuntu@$$(terraform output -raw TrustEc2PublicIp) "mkdir -p /opt/flip/certs"
-	scp -i ~/.ssh/host-aws \
-		../../../trust/certs/trust-server.crt \
-		../../../trust/certs/trust-server.key \
-		../../../trust/certs/trust-ca.crt \
-		ubuntu@$$(terraform output -raw TrustEc2PublicIp):/opt/flip/certs/
-	@echo "✅ Certificates copied!"
 	@echo "🚀 Deploying Trust services..."
 	$(MAKE) -C ../../../ up-trust-ec2 PROD=${PROD}
 	@echo "✅ Trust deployment complete!"
@@ -412,24 +354,10 @@ add-local-trust: ## Provision an on-prem Trust host via Ansible and register it 
 	  fi && \
 	  rm -rf $$LOCAL_TRUST_KIT_DIR && \
 	  echo "✅ Trust_$(LOCAL_TRUST_NUMBER) FL kit deployed"
-	@echo "📋 Building CA bundle (EC2 trust CA + local trust CA) for Secrets Manager..."
-	@# trust-ca.crt is the cloud Trust EC2 CA (written by gen-trust-ec2-certs).
-	@# local-trust-ca.crt is the on-prem trust CA (just fetched by Ansible above).
-	@# Bundle them so flip-api can verify HTTPS connections to both trusts.
-	@if [ -f ./trust-ca.crt ]; then \
-		cat ./trust-ca.crt ../../../trust/certs/local-trust-ca.crt > /tmp/trust-ca-bundle.crt && \
-		cp /tmp/trust-ca-bundle.crt ./trust-ca.crt && \
-		rm /tmp/trust-ca-bundle.crt && \
-		echo "   Bundled EC2 CA + local CA → trust-ca.crt"; \
-	else \
-		cp ../../../trust/certs/local-trust-ca.crt ./trust-ca.crt && \
-		echo "   No EC2 CA found — using local CA only"; \
-	fi
-	@echo "🔐 Updating AWS security group rules and Secrets Manager CA cert..."
+	@echo "🔐 Updating AWS security group rules..."
 	@TF_VAR_local_trust_public_ip=$(LOCAL_TRUST_IP) terraform plan \
 		-target=aws_security_group_rule.local_trust_fl_server \
 		-target=aws_security_group_rule.local_trust_fl_admin \
-		-target='module.flip_api_secret.aws_secretsmanager_secret_version.this[0]' \
 		-out=local-trust.tfplan
 	@TF_VAR_local_trust_public_ip=$(LOCAL_TRUST_IP) terraform apply local-trust.tfplan
 	@rm -f local-trust.tfplan
@@ -437,47 +365,8 @@ add-local-trust: ## Provision an on-prem Trust host via Ansible and register it 
 	@echo "✅ On-premises Trust host provisioned!"
 	@echo ""
 	@echo "⚠️  REMAINING MANUAL STEPS:"
-	@echo "   1. Configure border router NAT: forward $(TRUST_API_PORT)/tcp → <trust-host-lan-ip>:$(TRUST_API_PORT)"
-	@echo "   2. Update Trust endpoint in Secrets Manager (recommended helper target):"
-	@echo "      make set-local-trust-endpoint LOCAL_TRUST_IP=$(LOCAL_TRUST_IP)"
-	@echo "   3. On the trust host — start the trust stack: cd trust && PROD=$(PROD) make up-local-trust-stag"
-	@echo "   4. Verify with CA validation: make test-local-trust LOCAL_TRUST_IP=$(LOCAL_TRUST_IP)"
-	@echo "      (or handshake-only test: make test-local-trust-insecure LOCAL_TRUST_IP=$(LOCAL_TRUST_IP))"
-
-.PHONY: set-local-trust-endpoint
-set-local-trust-endpoint: ## Update FLIP_API Trust_1-endpoint to the local trust HTTPS URL
-	@[ -n "$(LOCAL_TRUST_IP)" ] || (echo ""; echo "❌  ERROR: LOCAL_TRUST_IP is required."; echo "   Usage: make set-local-trust-endpoint LOCAL_TRUST_IP=<public-ip>"; echo ""; exit 1)
-	@echo "🔐 Updating $(AWS_SECRET_NAME) secret Trust_1-endpoint to https://$(LOCAL_TRUST_IP):$(TRUST_API_PORT)..."
-	@AWS_PROFILE=$(AWS_PROFILE) aws secretsmanager get-secret-value \
-		--secret-id $(AWS_SECRET_NAME) \
-		--query SecretString \
-		--output text | \
-	python3 -c "import json, sys; s=json.load(sys.stdin); s['Trust_1-endpoint']='https://$(LOCAL_TRUST_IP):$(TRUST_API_PORT)'; print(json.dumps(s))" | \
-	AWS_PROFILE=$(AWS_PROFILE) aws secretsmanager update-secret \
-		--secret-id $(AWS_SECRET_NAME) \
-		--secret-string file:///dev/stdin >/dev/null
-	@echo "✅ $(AWS_SECRET_NAME) Trust_1-endpoint updated."
-
-.PHONY: test-local-trust
-test-local-trust: ## Verify HTTPS connectivity to an on-premises Trust host
-	@[ -n "$(LOCAL_TRUST_IP)" ] || (echo ""; echo "❌  ERROR: LOCAL_TRUST_IP is required."; echo "   Usage: make test-local-trust LOCAL_TRUST_IP=<public-ip>"; echo ""; exit 1)
-	@echo "🔍 Testing HTTPS connection: https://$(LOCAL_TRUST_IP):$(TRUST_API_PORT)/health"
-	@curl -sf --cacert ../../../trust/certs/local-trust-ca.crt \
-		https://$(LOCAL_TRUST_IP):$(TRUST_API_PORT)/health \
-	&& echo "✅ HTTPS connection to local Trust host successful!" \
-	|| (echo "❌ Connection failed. Check:"; \
-	    echo "   - Trust stack is running on the host: PROD=$(PROD) make up-local-trust-stag"; \
-	    echo "   - UFW allows $(TRUST_API_PORT) from this machine (run: make add-local-trust)"; \
-	    echo "   - Border router forwards $(TRUST_API_PORT)/tcp to the trust host LAN IP"; \
-	    exit 1)
-
-.PHONY: test-local-trust-insecure
-test-local-trust-insecure: ## Verify HTTPS handshake to local trust without CA validation (-k)
-	@[ -n "$(LOCAL_TRUST_IP)" ] || (echo ""; echo "❌  ERROR: LOCAL_TRUST_IP is required."; echo "   Usage: make test-local-trust-insecure LOCAL_TRUST_IP=<public-ip>"; echo ""; exit 1)
-	@echo "🔍 Testing HTTPS handshake without CA validation: https://$(LOCAL_TRUST_IP):$(TRUST_API_PORT)/health"
-	@curl -skf https://$(LOCAL_TRUST_IP):$(TRUST_API_PORT)/health \
-	&& echo "✅ HTTPS handshake successful (insecure mode)." \
-	|| (echo "❌ Connection failed. Check network/NAT/UFW and service health."; exit 1)
+	@echo "   1. On the trust host — start the trust stack: cd trust && PROD=$(PROD) make up-local-trust-stag"
+	@echo "   2. Verify the trust can poll the hub (check trust-api logs for successful task polling)"
 
 .PHONY: down
 down:
@@ -532,49 +421,39 @@ help: ## Show this help message
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?##"}; {printf "  \033[36m%-20s\033[0m %s\n", $$0, $$1, $$2}'
 
 .PHONY: full-deploy
-full-deploy: ## Full AWS deployment: provision infrastructure, generate TLS certs, deploy cloud Trust + Central Hub
+full-deploy: ## Full AWS deployment: provision infrastructure, deploy cloud Trust + Central Hub
 	## Step order:
 	## 1. login + init + import: auth, Terraform init, import any pre-existing resources
-	## 2. First plan+apply: provision all AWS infrastructure (EC2, RDS, VPC, secrets – CA cert placeholder)
+	## 2. plan+apply: provision all AWS infrastructure (EC2, RDS, VPC, secrets)
 	## 3. update-env: refresh .env with Terraform outputs (EC2 IPs, DB endpoint, Cognito IDs)
-	## 4. gen-trust-ec2-certs: generate TLS certs using the now-known Trust EC2 IP; copy CA cert to
-	##    Terraform dir so the next apply can embed it into the Secrets Manager secret
-	## 5. Second plan+apply: update Secrets Manager with real CA cert
-	## 6. ssh-config + ansible-init: configure SSH aliases and provision EC2s with Docker
-	## 7. deploy-centralhub + deploy-trust + status: deploy containers and verify
-full-deploy: github-login aws-login init import-persistent plan apply update-env gen-trust-ec2-certs plan apply ssh-config ansible-init deploy-centralhub deploy-trust status
+	## 4. ssh-config + ansible-init: configure SSH aliases and provision EC2s with Docker
+	## 5. deploy-centralhub + deploy-trust + status: deploy containers and verify
+full-deploy: github-login aws-login init import-persistent plan apply update-env ssh-config ansible-init deploy-centralhub deploy-trust status
 
 .PHONY: full-deploy-stag
 full-deploy-stag: ## Full staging deployment with on-prem local trust (requires LOCAL_TRUST_IP=<public-ip>)
 	## Step order:
 	## 1. login + init + import: auth, Terraform init, import pre-existing persistent resources
-	## 2. First plan+apply (PROD=stag): provision all AWS infrastructure (EC2, RDS, VPC, ALB, secrets)
+	## 2. plan+apply (PROD=stag): provision all AWS infrastructure (EC2, RDS, VPC, ALB, secrets)
 	## 3. update-env: refresh .env.stag with Terraform outputs (EC2 IPs, DB endpoint, Cognito IDs)
-	## 4. gen-trust-ec2-certs: generate TLS certs for cloud Trust EC2; copy CA cert to Terraform dir
-	## 5. Second plan+apply (PROD=stag): update Secrets Manager with real EC2 trust CA cert
-	## 6. ssh-config + ansible-init: configure SSH aliases, provision EC2s with Docker + FL kit
-	## 7. deploy-centralhub + deploy-trust: deploy Central Hub and cloud Trust containers
-	## 8. add-local-trust LOCAL_TRUST_IP=<ip>: generate local trust TLS certs, configure UFW,
-	##    deploy local Trust_$(LOCAL_TRUST_NUMBER) FL kit, update CA bundle in Secrets Manager,
-	##    and update AWS security groups
-	## 9. status: verify all services healthy
+	## 4. ssh-config + ansible-init: configure SSH aliases, provision EC2s with Docker + FL kit
+	## 5. deploy-centralhub + deploy-trust: deploy Central Hub and cloud Trust containers
+	## 6. add-local-trust LOCAL_TRUST_IP=<ip>: configure UFW,
+	##    deploy local Trust_$(LOCAL_TRUST_NUMBER) FL kit, and update AWS security groups
+	## 7. status: verify all services healthy
 	## NOTE: After this completes you must manually:
-	##   - Update Trust endpoint in FLIP_API secret: make set-local-trust-endpoint LOCAL_TRUST_IP=<public-ip>
 	##   - Start local trust stack: cd ../../../trust && env PROD=stag make up-local-trust-stag
-	##   - Restart Central Hub API: make deploy-centralhub PROD=stag
 	@[ -n "$(LOCAL_TRUST_IP)" ] || (echo ""; echo "❌  ERROR: LOCAL_TRUST_IP is required."; echo "   Usage: make full-deploy-stag LOCAL_TRUST_IP=<public-ip>"; echo ""; exit 1)
-full-deploy-stag: github-login aws-login init import-persistent plan apply update-env gen-trust-ec2-certs plan apply ssh-config ansible-init deploy-centralhub deploy-trust add-local-trust status
+full-deploy-stag: github-login aws-login init import-persistent plan apply update-env ssh-config ansible-init deploy-centralhub deploy-trust add-local-trust status
 
 .PHONY: full-deploy-stag-hybrid
-full-deploy-stag-hybrid: ## Full staging hybrid deployment including endpoint update and CH redeploy
-	## This wraps full-deploy-stag, then updates Trust_1-endpoint and redeploys Central Hub.
+full-deploy-stag-hybrid: ## Full staging hybrid deployment including local trust provisioning
+	## This wraps full-deploy-stag and then redeploys the Central Hub.
 	## You still need to start the local trust stack on the trust host.
 	@[ -n "$(LOCAL_TRUST_IP)" ] || (echo ""; echo "❌  ERROR: LOCAL_TRUST_IP is required."; echo "   Usage: make full-deploy-stag-hybrid LOCAL_TRUST_IP=<public-ip>"; echo ""; exit 1)
 	@$(MAKE) full-deploy-stag LOCAL_TRUST_IP=$(LOCAL_TRUST_IP) LOCAL_TRUST_SSH_KEY="$(LOCAL_TRUST_SSH_KEY)" LOCAL_TRUST_SSH_USER="$(LOCAL_TRUST_SSH_USER)" LOCAL_TRUST_NUMBER="$(LOCAL_TRUST_NUMBER)"
-	@$(MAKE) set-local-trust-endpoint LOCAL_TRUST_IP=$(LOCAL_TRUST_IP)
 	@$(MAKE) deploy-centralhub PROD=stag
 	@echo ""
 	@echo "✅ Hybrid staging deployment complete."
 	@echo "➡️  Final manual step: start the local trust stack on the trust host:"
 	@echo "   cd ../../../trust && env PROD=stag make up-local-trust-stag"
-	@echo "➡️  Then verify: make test-local-trust LOCAL_TRUST_IP=$(LOCAL_TRUST_IP)"

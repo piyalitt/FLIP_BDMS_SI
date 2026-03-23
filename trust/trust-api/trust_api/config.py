@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     PRIVATE_API_KEY: str
     PRIVATE_API_KEY_HEADER: str
 
+    # Polling configuration
+    TRUST_NAME: str  # Must match Trust.name in hub DB (e.g. "Trust_1")
+    POLL_INTERVAL_SECONDS: int = 5  # How often to poll the hub for tasks (seconds)
+
 
 # Eager load once (for app use)
 _settings = Settings()  # type: ignore

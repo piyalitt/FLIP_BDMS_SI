@@ -25,6 +25,8 @@ from flip_api.domain.schemas.status import (
     ModelStatus,
     NetStatus,
     ProjectStatus,
+    TaskStatus,
+    TaskType,
     TrustIntersectStatus,
     XNATImageStatus,
 )
@@ -203,7 +205,19 @@ class Trust(SQLModel, table=True):
     __tablename__ = "trust"  # type: ignore
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     name: str = Field()
-    endpoint: str = Field()
+    last_heartbeat: datetime | None = Field(default=None)
+
+
+class TrustTask(SQLModel, table=True):
+    __tablename__ = "trust_task"  # type: ignore
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    trust_id: UUID = Field(foreign_key="trust.id", index=True)
+    task_type: TaskType = Field()
+    payload: str = Field()  # JSON-serialized task data
+    status: TaskStatus = Field(default=TaskStatus.PENDING)
+    result: str | None = Field(default=None)  # JSON-serialized result data
+    created_at: Annotated[datetime, Field(default_factory=datetime.utcnow)]
+    updated_at: datetime | None = Field(default=None)
 
 
 class UploadedFiles(SQLModel, table=True):

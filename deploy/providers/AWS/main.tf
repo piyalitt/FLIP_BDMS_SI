@@ -77,6 +77,8 @@ module "ec2_security_group" {
 }
 
 # Trust Security Group for Trust EC2 instance
+# NOTE: Trust API port removed — trusts now poll the hub outbound (no inbound connections needed).
+# XNAT and PACS UI ports kept for direct researcher access to imaging tools.
 
 module "trust_security_group" {
   source      = "./modules/secgroup"
@@ -85,10 +87,6 @@ module "trust_security_group" {
   description = "Security group for FLIP Trust EC2 instance"
 
   ingress_rules = [
-    {
-      port        = var.TRUST_API_PORT
-      description = "Trust API"
-    },
     {
       port        = var.XNAT_PORT
       description = "XNAT access"
@@ -175,11 +173,6 @@ module "flip_api_secret" {
 
   secret_string = jsonencode({
     aes_key = var.AES_KEY_BASE64
-    trust_endpoints = {
-      "Trust_1" = "https://${module.trust_ec2.public_ip}:${var.TRUST_API_PORT}",
-      "Trust_2" = "https://${module.trust_ec2.public_ip}:${var.TRUST_API_PORT}"
-    }
-    trust_ca_cert = try(file("${path.module}/trust-ca.crt"), "")
   })
 }
 
@@ -590,6 +583,13 @@ resource "aws_ses_template" "flip_xnat_credentials" {
   subject = "Your XNAT credentials for {{trust_name}}"
   html    = file("${path.module}/templates/ses/flip-xnat-credentials.html")
   text    = file("${path.module}/templates/ses/flip-xnat-credentials.txt")
+}
+
+resource "aws_ses_template" "flip_xnat_added_to_project" {
+  name    = "flip-xnat-added-to-project"
+  subject = "You have been added to a project at {{trust_name}}"
+  html    = file("${path.module}/templates/ses/flip-xnat-added-to-project.html")
+  text    = file("${path.module}/templates/ses/flip-xnat-added-to-project.txt")
 }
 
 

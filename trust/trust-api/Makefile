@@ -45,6 +45,6 @@ local_lint:
 local_mypy:
 	$(mypy_command)
 local_test:
-	@export BASE_IMAGES_DOWNLOAD_DIR=/tmp/images; \
+	@export BASE_IMAGES_DOWNLOAD_DIR=/tmp/images TRUST_NAME=TestTrust; \
 	$(lint_command) && $(mypy_command) && $(test_coverage_html_command)
 unit_test: local_test

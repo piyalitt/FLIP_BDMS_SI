@@ -75,7 +75,7 @@ def retrieve_trusts_in_model_endpoint(
 
         # Join ModelTrustIntersect -> Trust
         result = db.exec(
-            select(Trust.id, Trust.name, Trust.endpoint, ModelTrustIntersect.fl_client_endpoint)
+            select(Trust.id, Trust.name, ModelTrustIntersect.fl_client_endpoint)
             .join(ModelTrustIntersect, ModelTrustIntersect.trust_id == Trust.id)  # type: ignore[arg-type]
             .where(ModelTrustIntersect.model_id == model_id)
         ).all()

@@ -89,7 +89,6 @@ class ImagingProject(BaseModel):
     trust_id: UUID
     retrieve_image_status: XNATImageStatus
     name: str
-    endpoint: str
     reimport_count: int
 
     def model_dump(

@@ -9,17 +9,3 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-services:
-
-  imaging-api:
-    ports:
-      - "${IMAGING_API_PORT}:8000"
-
-  data-access-api:
-    ports:
-      - "${DATA_ACCESS_API_PORT}:8000"
-
-  trust-api:
-    ports:
-      - "${TRUST_API_PORT}:8000"

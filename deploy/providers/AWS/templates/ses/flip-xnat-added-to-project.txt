@@ -8,6 +8,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
 
-FROM nginx:alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+You have been added to project {{project_name}} (ID: {{project_id}}) at trust {{trust_name}}.
+
+Your XNAT username is: {{username}}
+You can log in with your existing XNAT credentials.
+
+This is an automated message. Please do not reply.

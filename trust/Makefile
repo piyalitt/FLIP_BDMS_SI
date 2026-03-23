@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-.PHONY: build dev prod clean stop up down up-trust-1 up-trust-2 down-trust-1 down-trust-2 up-local-trust-stag create-networks remove-networks recreate-networks tests generate-trust-certs verify-trust-certs test-trust-https
+.PHONY: build dev prod clean stop up down up-trust-1 up-trust-2 down-trust-1 down-trust-2 up-local-trust-stag create-networks remove-networks recreate-networks tests
 # if tag PROD=true is passed, set PROD=true
 ifeq ($(PROD),true)
 MAIN_ENV_FILE=../.env.production
@@ -135,7 +135,7 @@ LOCAL_TRUST_NUMBER ?= 2
 
 up-local-trust-stag:
 	## Starts Trust 1 compose stack with TRUST_NUMBER overridden for the local trust FL kit.
-	## Uses project name 'trust1' so nginx-tls, trust-api, etc. keep their normal names,
+	## Uses project name 'trust1' so trust-api, imaging-api, etc. keep their normal names,
 	## but overrides TRUST_NUMBER so the FL client mounts Trust_$(LOCAL_TRUST_NUMBER)/ kit dir.
 	@echo "🚢 Starting local Trust services (TRUST_NUMBER=$(LOCAL_TRUST_NUMBER))..."
 	@echo "⚙️ Using environment file ${MAIN_ENV_FILE}"
@@ -213,18 +213,3 @@ debug-imaging-api-off:
 debug-trust-api-off:
 	DEBUG=false $(TRUST_1_VARS) ${DEBUG_OVERRIDE_COMPOSE_COMMAND} -p ${trust1} up --remove-orphans -d trust-api
 
-generate-trust-certs:
-	TRUST_HOST="$(TRUST_HOST)" bash certs/generate-trust-certs.sh
-
-verify-trust-certs:
-	@echo "--- Verifying cert chain ---"
-	openssl verify -CAfile certs/trust-ca.crt certs/trust-server.crt
-	@echo "--- Server cert SANs ---"
-	openssl x509 -in certs/trust-server.crt -noout -ext subjectAltName
-	@echo "--- Expiry ---"
-	openssl x509 -in certs/trust-server.crt -noout -dates
-
-test-trust-https:
-	@[ -n "$(TRUST_HOST)" ] || (echo "ERROR: TRUST_HOST is required. Usage: make test-trust-https TRUST_HOST=<ip-or-hostname>"; exit 1)
-	@echo "--- HTTPS health check: https://$(TRUST_HOST):$(TRUST_API_PORT)/health ---"
-	curl -sf --cacert certs/trust-ca.crt https://$(TRUST_HOST):$(TRUST_API_PORT)/health

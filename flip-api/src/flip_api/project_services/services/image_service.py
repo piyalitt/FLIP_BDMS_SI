@@ -11,26 +11,23 @@
 #
 
 import base64
-import json  # For serializing request data if needed by http client
+import json
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-import httpx
-from sqlalchemy.exc import SQLAlchemyError  # For more specific DB error handling
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, col, select, update
 
 from flip_api.db.models.main_models import Trust as DBTrust
-from flip_api.db.models.main_models import XNATProjectStatus  # Assuming these exist
+from flip_api.db.models.main_models import TrustTask, XNATProjectStatus
 from flip_api.domain.interfaces.project import (
     IImagingStatus,
-    IImagingStatusResponse,
     IReimportQuery,
     IUpdateXnatProfile,
 )
 from flip_api.domain.schemas.projects import ImagingProject, XnatProjectStatusInfo
-from flip_api.domain.schemas.status import XNATImageStatus
+from flip_api.domain.schemas.status import TaskStatus, TaskType, XNATImageStatus
 from flip_api.trusts_services.services.trust import get_trusts
-from flip_api.utils.http import trust_ssl_context
 from flip_api.utils.logger import logger
 
 
@@ -71,7 +68,6 @@ def get_imaging_projects(project_id: UUID, db: Session) -> list[ImagingProject]:
                 XNATProjectStatus.trust_id,
                 XNATProjectStatus.retrieve_image_status,
                 DBTrust.name,
-                DBTrust.endpoint,
                 XNATProjectStatus.reimport_count,
             )
             .join(DBTrust, col(XNATProjectStatus.trust_id) == DBTrust.id)
@@ -87,8 +83,7 @@ def get_imaging_projects(project_id: UUID, db: Session) -> list[ImagingProject]:
                 trust_id=row[2],
                 retrieve_image_status=XNATImageStatus(row[3]),
                 name=row[4],
-                endpoint=row[5],
-                reimport_count=row[6],
+                reimport_count=row[5],
             )
             for row in results
         ]
@@ -103,21 +98,23 @@ def get_imaging_projects(project_id: UUID, db: Session) -> list[ImagingProject]:
 
 def delete_imaging_project(imaging_project: ImagingProject, db: Session) -> bool:
     """
-    Delete an imaging project via its API endpoint and update its status in the database.
+    Queue a task to delete an imaging project and update its status in the database.
 
     Args:
         imaging_project (ImagingProject): The imaging project to delete.
         db (Session): The database session for executing queries.
 
     Returns:
-        bool: True if the deletion and status update were successful, False otherwise.
+        bool: True if the task was queued and status updated successfully, False otherwise.
     """
     try:
-        trust_endpoint = f"{imaging_project.endpoint}/imaging/{imaging_project.xnat_project_id}"
-
-        with httpx.Client(timeout=10.0, verify=trust_ssl_context()) as client:
-            response = client.delete(trust_endpoint)
-            logger.debug(f"Delete request to {trust_endpoint} returned status {response.status_code}")
+        # Queue deletion task for the trust
+        task = TrustTask(
+            trust_id=imaging_project.trust_id,
+            task_type=TaskType.DELETE_IMAGING,
+            payload=json.dumps({"imaging_project_id": str(imaging_project.xnat_project_id)}),
+        )
+        db.add(task)
 
         statement = (
             update(XNATProjectStatus)
@@ -127,12 +124,12 @@ def delete_imaging_project(imaging_project: ImagingProject, db: Session) -> bool
         db.execute(statement)
         db.commit()
         logger.info(
-            f"Successfully marked imaging project {imaging_project.xnat_project_id} (ID: {imaging_project.id}) as "
-            "DELETED."
+            f"Queued deletion task and marked imaging project {imaging_project.xnat_project_id} "
+            f"(ID: {imaging_project.id}) as DELETED."
         )
         return True
     except Exception as e:
-        logger.error(f"Error deleting imaging project via API or updating DB: {e}", exc_info=True)
+        logger.error(f"Error queuing imaging project deletion: {e}", exc_info=True)
         db.rollback()
         return False
 
@@ -177,15 +174,18 @@ def get_imaging_project_statuses(
     imaging_projects: list[ImagingProject], encoded_query: str, db: Session
 ) -> list[IImagingStatus]:
     """
-    Retrieve the imaging project statuses for a list of imaging projects.
+    Retrieve the imaging project statuses from local DB and queue status refresh tasks for trusts.
+
+    Instead of making direct HTTP calls to each trust, this returns locally cached status
+    and queues GET_IMAGING_STATUS tasks for each trust to report back updated status.
 
     Args:
         imaging_projects (List[ImagingProject]): The list of imaging projects to retrieve statuses for.
-        encoded_query (str): The Base64 URL encoded query to send to the imaging project endpoints.
+        encoded_query (str): The Base64 URL encoded query.
         db (Session): The database session for executing queries.
 
     Returns:
-        List[IImagingStatus]: A list of IImagingStatus containing the status information for each imaging project.
+        List[IImagingStatus]: A list of IImagingStatus containing the cached status for each imaging project.
     """
     logger.debug(
         f"Attempting to retrieve the imaging project status. Trusts requested: {[ip.name for ip in imaging_projects]}"
@@ -210,32 +210,32 @@ def get_imaging_project_statuses(
             import_status=None,
         )  # type: ignore[call-arg]
 
-        try:
-            logger.debug(f"Encoded query: {encoded_query}")
-            api_url = f"{row_project.endpoint}/imaging/{row_project.xnat_project_id}"
-            with httpx.Client(timeout=10.0, verify=trust_ssl_context()) as client:
-                response = client.get(api_url, params={"encoded_query": encoded_query})
-            logger.debug(f"API response for {row_project.name}: {response.status_code} - {response.text}")
-
-            # Assuming trust_api_response.data is a dict that can be parsed by IImagingStatusResponse
-            if response.status_code == 200 and response.json():
-                parsed_import_status = IImagingStatusResponse.model_validate(response.json())
-                current_project_status.import_status = parsed_import_status.import_status
-            else:
-                logger.error(f"Failed API call or no data for {row_project.name}. Status: {response.status_code}")
-
-        except httpx.RequestError as e:
-            logger.error(f"Request to {api_url} failed: {str(e)}")
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error for {api_url}: {e.response.status_code}")
+        # Queue a status refresh task only if one isn't already pending
+        existing_task = db.exec(
+            select(TrustTask)
+            .where(TrustTask.trust_id == row_project.trust_id)
+            .where(TrustTask.task_type == TaskType.GET_IMAGING_STATUS)
+            .where(TrustTask.status == TaskStatus.PENDING)
+        ).first()
+        if not existing_task:
+            task = TrustTask(
+                trust_id=row_project.trust_id,
+                task_type=TaskType.GET_IMAGING_STATUS,
+                payload=json.dumps({
+                    "imaging_project_id": str(row_project.xnat_project_id),
+                    "encoded_query": encoded_query,
+                }),
+            )
+            db.add(task)
 
         response_statuses.append(current_project_status)
 
+    db.commit()
+
     if response_statuses:
-        logger.info(f"Imaging statuses retrieved: {len(response_statuses)} trusts reported.")
-        logger.debug(f"Response statuses: {response_statuses}")
+        logger.info(f"Imaging statuses retrieved from DB: {len(response_statuses)} trusts. Refresh tasks queued.")
     else:
-        logger.error("No trusts reported back with the status. An empty list will be returned")
+        logger.error("No imaging projects found. An empty list will be returned")
 
     return response_statuses
 
@@ -245,7 +245,7 @@ def update_xnat_user_profile(
     db: Session,
 ) -> None:
     """
-    Update a user's profile across all trusts' XNAT instances.
+    Queue user profile update tasks for all trusts' XNAT instances.
 
     Args:
         request_data (IUpdateXnatProfile): The user profile data to update.
@@ -254,32 +254,24 @@ def update_xnat_user_profile(
     Returns:
         None
     """
-    logger.debug(f"Attempting to update XNAT user profile: {request_data.email} at all trusts")
+    logger.debug(f"Queuing XNAT user profile update for: {request_data.email} at all trusts")
 
     trusts = get_trusts(db)
-    trusts_responses: list[dict] = []
+
+    if not trusts:
+        logger.error("No trusts found to queue user profile update tasks.")
+        return
 
     for trust in trusts:
-        try:
-            with httpx.Client(timeout=10.0, verify=trust_ssl_context()) as client:
-                response = client.put(
-                    f"{trust.endpoint}/imaging/users",
-                    json=request_data.model_dump(mode="json"),
-                )
-            trusts_responses.append({
-                "trust_name": trust.name,
-                "status": response.status_code,
-                "status_text": response.text,  # Assuming statusText on response
-                "data": response.json(),  # Assuming data on response
-            })
-        except Exception as error:
-            logger.error(f"Unable to update XNAT user profile '{request_data.email}' at {trust.name} | Error: {error}")
-            trusts_responses.append({"trust_name": trust.name, "status": "ERROR", "error_message": str(error)})
+        task = TrustTask(
+            trust_id=trust.id,
+            task_type=TaskType.UPDATE_USER_PROFILE,
+            payload=json.dumps(request_data.model_dump(mode="json")),
+        )
+        db.add(task)
 
-    if trusts_responses:
-        logger.info(f"XNAT user profile update responses: {json.dumps(trusts_responses)}")
-    else:
-        logger.error("No trusts to update or no responses received.")
+    db.commit()
+    logger.info(f"Queued user profile update tasks for {len(trusts)} trusts")
 
 
 def reimport_failed_studies(
@@ -288,7 +280,7 @@ def reimport_failed_studies(
     project_reimport_rate_minutes: int,
 ) -> bool:
     """
-    Reimport failed studies for a list of reimport queries, ensuring that reimports are only attempted if the
+    Queue reimport tasks for failed studies, ensuring that reimports are only attempted if the
     specified time interval has passed since the last reimport.
 
     Args:
@@ -299,17 +291,13 @@ def reimport_failed_studies(
             reimport before attempting another reimport for the same project and trust.
 
     Returns:
-        bool: True if all eligible reimport attempts were successful, False if any eligible reimport attempt failed.
+        bool: True if all eligible reimport tasks were queued successfully.
     """
-    successful_reimports_count = 0
     total_eligible_queries = 0
-
-    # TODO determine if we need to use a private API key for the reimport endpoint
-    # private_api_key = get_settings().PRIVATE_API_KEY
+    queued_count = 0
 
     for query in reimport_queries:
-        encoded_query = base64_url_encode(query.query)  # query from IReimportQuery
-        url = f"{query.trust_endpoint}/imaging/reimport/{query.xnat_project_id}"
+        encoded_query = base64_url_encode(query.query)
 
         last_reimport_time_utc = to_utc_aware(query.last_reimport)
         reimport_interval = timedelta(minutes=project_reimport_rate_minutes)
@@ -324,15 +312,19 @@ def reimport_failed_studies(
             )
             continue
 
-        # Eligible queries are the ones that pass the time check
         total_eligible_queries += 1
 
         try:
-            with httpx.Client(timeout=10.0, verify=trust_ssl_context()) as client:
-                response = client.put(url, params={"encoded_query": encoded_query})
-                response.raise_for_status()
-
-            logger.info(f"Successfully initiated reimport for {query.xnat_project_id} at {query.trust_name}")
+            # Queue reimport task for the trust
+            task = TrustTask(
+                trust_id=query.trust_id,
+                task_type=TaskType.REIMPORT_STUDIES,
+                payload=json.dumps({
+                    "imaging_project_id": str(query.xnat_project_id),
+                    "encoded_query": encoded_query,
+                }),
+            )
+            db.add(task)
 
             # Update the last_reimport and increment reimport_count in the database
             xnat_project_status = db.exec(
@@ -344,46 +336,33 @@ def reimport_failed_studies(
             if xnat_project_status:
                 xnat_project_status.last_reimport = datetime.utcnow()
                 xnat_project_status.reimport_count += 1
-                db.commit()
-                db.refresh(xnat_project_status)
-                successful_reimports_count += 1
+                queued_count += 1
             else:
                 logger.error(
                     f"Could not find XNATProjectStatus record to update for project {query.xnat_project_id} "
                     f"at trust {query.trust_name}"
                 )
-                continue  # Move to next query
-
-        except httpx.HTTPStatusError as e:
-            logger.error(
-                "Failed to initiate reimport for project %s at %s. Status: %s, Response: %s",
-                query.xnat_project_id,
-                query.trust_name,
-                e.response.status_code,
-                e.response.text,
-            )
+                continue
 
         except Exception as error:
             logger.error(
-                "There was an unexpected error when reimporting studies for project %s at trust %s: %s",
+                "There was an unexpected error when queuing reimport for project %s at trust %s: %s",
                 query.xnat_project_id,
                 query.trust_name,
                 error,
                 exc_info=True,
             )
-            # db.rollback() # Rollback if an error occurs before commit for this item
-            # No, commit is per item, so only previous successful items are committed.
-            continue  # Move to next query
+            continue
 
-    if total_eligible_queries > 0 and successful_reimports_count < total_eligible_queries:
-        logger.error("Not all eligible reimport requests resulted in a successful response and DB update.")
-        return False
+    db.commit()
 
     if total_eligible_queries == 0:
         logger.info("No queries were eligible for reimport at this time.")
-        return True  # No failures if no queries were eligible
+        return True
 
-    logger.info(
-        f"Reimport process completed. Successful reimports: {successful_reimports_count}/{total_eligible_queries}"
-    )
+    if queued_count < total_eligible_queries:
+        logger.error(f"Not all eligible reimport tasks were queued: {queued_count}/{total_eligible_queries}")
+        return False
+
+    logger.info(f"Reimport tasks queued: {queued_count}/{total_eligible_queries}")
     return True
