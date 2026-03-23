@@ -51,17 +51,14 @@ def get_cached_result(query: str) -> pd.DataFrame | None:
 
 
 def set_cached_result(query: str, df: pd.DataFrame) -> None:
-    settings = get_settings()
-    max_rows = settings.CACHE_MAX_RESULT_ROWS
-    max_entries = settings.CACHE_MAX_ENTRIES
+    max_rows = get_settings().CACHE_MAX_RESULT_ROWS
+    max_entries = get_settings().CACHE_MAX_ENTRIES
 
     key = _make_cache_key(query)
 
     # Skip caching results that are too large to keep memory usage bounded
     if len(df) > max_rows:
-        logger.info(
-            f"Skipping cache for query hash {key[:12]}...: {len(df)} rows exceeds limit of {max_rows}"
-        )
+        logger.info(f"Skipping cache for query hash {key[:12]}...: {len(df)} rows exceeds limit of {max_rows}")
         return
 
     # Evict oldest entry when cache is full to bound total memory usage

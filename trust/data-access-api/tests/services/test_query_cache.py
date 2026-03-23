@@ -66,6 +66,8 @@ class TestGetCachedResult:
     @patch("data_access_api.services.query_cache.get_settings")
     def test_returns_cached_dataframe(self, mock_settings):
         mock_settings.return_value.CACHE_TTL_DAYS = 60
+        mock_settings.return_value.CACHE_MAX_RESULT_ROWS = 50_000
+        mock_settings.return_value.CACHE_MAX_ENTRIES = 64
         df = pd.DataFrame({"col": [1, 2, 3]})
         set_cached_result("SELECT 1", df)
 
@@ -76,6 +78,8 @@ class TestGetCachedResult:
     @patch("data_access_api.services.query_cache.get_settings")
     def test_returns_copy_not_reference(self, mock_settings):
         mock_settings.return_value.CACHE_TTL_DAYS = 60
+        mock_settings.return_value.CACHE_MAX_RESULT_ROWS = 50_000
+        mock_settings.return_value.CACHE_MAX_ENTRIES = 64
         df = pd.DataFrame({"col": [1, 2, 3]})
         set_cached_result("SELECT 1", df)
 
@@ -105,6 +109,8 @@ class TestSetCachedResult:
     @patch("data_access_api.services.query_cache.get_settings")
     def test_stores_entry(self, mock_settings):
         mock_settings.return_value.CACHE_TTL_DAYS = 60
+        mock_settings.return_value.CACHE_MAX_RESULT_ROWS = 50_000
+        mock_settings.return_value.CACHE_MAX_ENTRIES = 64
         df = pd.DataFrame({"col": [1, 2]})
         set_cached_result("SELECT 1", df)
         assert len(_cache) == 1
@@ -112,6 +118,8 @@ class TestSetCachedResult:
     @patch("data_access_api.services.query_cache.get_settings")
     def test_stores_copy(self, mock_settings):
         mock_settings.return_value.CACHE_TTL_DAYS = 60
+        mock_settings.return_value.CACHE_MAX_RESULT_ROWS = 50_000
+        mock_settings.return_value.CACHE_MAX_ENTRIES = 64
         df = pd.DataFrame({"col": [1, 2]})
         set_cached_result("SELECT 1", df)
 
@@ -119,6 +127,55 @@ class TestSetCachedResult:
         df["col"] = [99, 99]
         result = get_cached_result("SELECT 1")
         assert list(result["col"]) == [1, 2]
+
+    @patch("data_access_api.services.query_cache.get_settings")
+    def test_skips_caching_when_exceeding_max_rows(self, mock_settings):
+        mock_settings.return_value.CACHE_TTL_DAYS = 60
+        mock_settings.return_value.CACHE_MAX_RESULT_ROWS = 5
+        mock_settings.return_value.CACHE_MAX_ENTRIES = 64
+        df = pd.DataFrame({"col": range(10)})  # 10 rows > limit of 5
+        set_cached_result("SELECT big", df)
+        assert len(_cache) == 0
+
+    @patch("data_access_api.services.query_cache.get_settings")
+    def test_caches_dataframe_within_row_limit(self, mock_settings):
+        mock_settings.return_value.CACHE_TTL_DAYS = 60
+        mock_settings.return_value.CACHE_MAX_RESULT_ROWS = 10
+        mock_settings.return_value.CACHE_MAX_ENTRIES = 64
+        df = pd.DataFrame({"col": range(5)})  # 5 rows <= limit of 10
+        set_cached_result("SELECT small", df)
+        assert len(_cache) == 1
+
+    @patch("data_access_api.services.query_cache.get_settings")
+    def test_evicts_oldest_when_max_entries_reached(self, mock_settings):
+        mock_settings.return_value.CACHE_TTL_DAYS = 60
+        mock_settings.return_value.CACHE_MAX_RESULT_ROWS = 50_000
+        mock_settings.return_value.CACHE_MAX_ENTRIES = 2
+
+        set_cached_result("SELECT 1", pd.DataFrame({"col": [1]}))
+        set_cached_result("SELECT 2", pd.DataFrame({"col": [2]}))
+        assert len(_cache) == 2
+
+        # Adding a 3rd entry should evict the oldest (SELECT 1)
+        set_cached_result("SELECT 3", pd.DataFrame({"col": [3]}))
+        assert len(_cache) == 2
+
+        key1 = _make_cache_key("SELECT 1")
+        key3 = _make_cache_key("SELECT 3")
+        assert key1 not in _cache  # oldest evicted
+        assert key3 in _cache  # newest present
+
+    @patch("data_access_api.services.query_cache.get_settings")
+    def test_max_entries_config_value_read_from_settings(self, mock_settings):
+        mock_settings.return_value.CACHE_TTL_DAYS = 60
+        mock_settings.return_value.CACHE_MAX_RESULT_ROWS = 50_000
+        mock_settings.return_value.CACHE_MAX_ENTRIES = 3  # Not the old hardcoded 256
+
+        for i in range(5):
+            set_cached_result(f"SELECT {i}", pd.DataFrame({"col": [i]}))
+
+        # Cache should never exceed configured max of 3
+        assert len(_cache) == 3
 
 
 class TestClearCache:
