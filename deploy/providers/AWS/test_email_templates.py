@@ -126,7 +126,7 @@ class EmailTemplateTester:
                 issues.append(f"Missing required text: '{text}'")
 
         # Validate accessibility
-        if "<alt=" not in template and "<img" in template:
+        if "alt=" not in template and "<img" in template:
             warnings.append("Images present without alt text")
 
         return {
