@@ -132,7 +132,7 @@ aws cognito-idp admin-create-user \
 # - Mobile email clients
 ```
 
-**Verification Checklist:**
+**Manual Verification Checklist:**
 
 - [ ] SES email identity shows "Verified" status in AWS Console
 - [ ] Temporary password email includes username and temporary password

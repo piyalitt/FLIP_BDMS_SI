@@ -575,7 +575,7 @@ Before testing Cognito emails:
 
 Both systems use exact same template content—no sync required!
 
-### Pre-Deployment Checklist
+### Manual Pre-Deployment Checklist
 
 Before merging email template changes:
 
