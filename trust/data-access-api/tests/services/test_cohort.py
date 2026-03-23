@@ -19,7 +19,6 @@ from psycopg2 import errors as pg_errors
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 
 from data_access_api.routers.schema import CohortQueryInput
-from data_access_api.services.query_cache import clear_cache
 from data_access_api.services.cohort import (
     get_age_distribution,
     get_counts,
@@ -31,6 +30,7 @@ from data_access_api.services.cohort import (
     validate_query,
     verify_cardinality,
 )
+from data_access_api.services.query_cache import clear_cache
 
 
 @pytest.fixture(autouse=True)
