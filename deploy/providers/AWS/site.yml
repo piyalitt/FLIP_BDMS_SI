@@ -212,6 +212,7 @@
         - /opt/flip/config/observability/alloy
         - /opt/flip/config/observability/loki
         - /opt/flip/config/observability/grafana/provisioning/datasources
+        - /opt/flip/config/observability/grafana/provisioning/dashboards
 
     - name: copy Alloy config
       copy:
@@ -233,6 +234,22 @@
       copy:
         src: ../../../trust/observability/grafana/provisioning/datasources/loki.yml
         dest: /opt/flip/config/observability/grafana/provisioning/datasources/loki.yml
+        owner: ubuntu
+        group: ubuntu
+        mode: "0644"
+
+    - name: copy Grafana dashboard provider config
+      copy:
+        src: ../../../trust/observability/grafana/provisioning/dashboards/dashboards.yml
+        dest: /opt/flip/config/observability/grafana/provisioning/dashboards/dashboards.yml
+        owner: ubuntu
+        group: ubuntu
+        mode: "0644"
+
+    - name: copy Grafana Trust APIs dashboard
+      copy:
+        src: ../../../trust/observability/grafana/provisioning/dashboards/trust-apis.json
+        dest: /opt/flip/config/observability/grafana/provisioning/dashboards/trust-apis.json
         owner: ubuntu
         group: ubuntu
         mode: "0644"
