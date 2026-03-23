@@ -10,10 +10,11 @@
 # limitations under the License.
 #
 
-from pydantic import BaseModel, Field
+from typing import Annotated
+from uuid import UUID
 
-from flip_api.domain.schemas.types import TrimStr
+from pydantic import Field, StringConstraints
 
+TrimStr = Annotated[str, StringConstraints(min_length=1, strip_whitespace=True)]
 
-class UpdateTrustStatusSchema(BaseModel):
-    fl_client_endpoint: TrimStr = Field(..., description="'fl_client_endpoint' is required")
+NonEmptyUUIDList = Annotated[list[UUID], Field(min_length=1)]

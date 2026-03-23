@@ -13,12 +13,12 @@
 import json
 from enum import Enum
 from pathlib import Path
-from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, computed_field, field_validator
 
 from flip_api.domain.schemas.status import ClientStatus
+from flip_api.domain.schemas.types import TrimStr
 from flip_api.utils.constants import JOB_TYPES_REQUIRED_FILES_FILE
 
 # Path to the JSON file containing job types and required files (relative to this file)
@@ -29,7 +29,7 @@ def _load_job_types_config() -> dict[str, list[str]]:
     """Loads the job types configuration from the JSON file.
 
     Returns:
-        Dict[str, List[str]]: A dictionary mapping job type names to their required files.
+        dict[str, list[str]]: A dictionary mapping job type names to their required files.
 
     Raises:
         FileNotFoundError: If the JOB_TYPES_REQUIRED_FILES_FILE file is not found.
@@ -84,7 +84,7 @@ class IRequiredTrainingInformation(BaseModel):
 
 
 class IInitiateTrainingInputPayload(BaseModel):
-    trusts: list[Annotated[str, Field(strip_whitespace=True, min_length=1)]]
+    trusts: list[TrimStr]
 
     @field_validator("trusts")
     @classmethod
@@ -181,6 +181,6 @@ class JobRequiredFiles(BaseModel):
         """Returns a list of all valid job type names.
 
         Returns:
-            List[str]: List of job type names.
+            list[str]: List of job type names.
         """
         return list(_JOB_TYPES_CONFIG.keys())
