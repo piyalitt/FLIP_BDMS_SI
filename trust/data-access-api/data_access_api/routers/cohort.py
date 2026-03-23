@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-from typing import Any, Dict, List
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
@@ -83,7 +83,7 @@ def receive_cohort_query(query_input: CohortQueryInput) -> StatisticsResponse:
 
 
 @router.post("/dataframe")
-def get_dataframe(query_input: DataframeQuery) -> Dict[str, List[Any]]:
+def get_dataframe(query_input: DataframeQuery) -> dict[str, list[Any]]:
     """
     Retrieves query results in a DataFrame-like structure (column-oriented dictionary).
 
