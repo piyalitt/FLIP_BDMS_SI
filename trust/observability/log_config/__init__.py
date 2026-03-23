@@ -13,7 +13,7 @@
 import logging
 import sys
 
-from log_config.formatter import JSONFormatter, PIIRedactionFilter, request_context
+from log_config.formatter import JSONFormatter, request_context
 from log_config.middleware import LoggingMiddleware
 
 _configured = False
@@ -39,7 +39,6 @@ def configure_logging(
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JSONFormatter(api_name=api_name))
-    handler.addFilter(PIIRedactionFilter())
 
     root.handlers.clear()
     root.addHandler(handler)
@@ -58,6 +57,5 @@ __all__ = [
     "get_logger",
     "JSONFormatter",
     "LoggingMiddleware",
-    "PIIRedactionFilter",
     "request_context",
 ]

@@ -69,7 +69,7 @@ def test_get_user_profile_by_nonexistent_username(mock_get_xnat_users, headers):
     username = "nonexistent"
     with pytest.raises(NotFoundError) as e:
         get_user_profile_by("username", username, headers)
-    assert str(e.value) == f"404: User with username '{username}' not found"
+    assert str(e.value) == "404: User not found by username"
 
 
 def test_get_user_profile_by_nonexistent_email(mock_get_xnat_users, headers):
@@ -77,7 +77,7 @@ def test_get_user_profile_by_nonexistent_email(mock_get_xnat_users, headers):
     email = "nonexistent@user.com"
     with pytest.raises(NotFoundError) as e:
         get_user_profile_by("email", email, headers)
-    assert str(e.value) == f"404: User with email '{email}' not found"
+    assert str(e.value) == "404: User not found by email"
 
 
 def test_user_exists(mock_get_xnat_users, headers):

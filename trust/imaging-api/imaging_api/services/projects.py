@@ -305,23 +305,18 @@ def add_central_hub_users_to_project(
         # If central hub user is disabled, do not attempt to create account.
         if central_hub_user.is_disabled:
             logger.info(
-                "Central Hub user with email '%s' is disabled. "
+                "Central Hub user is disabled. "
                 "It will not be created on XNAT or added to the imaging project.",
-                central_hub_user.email,
             )
             continue
 
         # Check if user already exists on XNAT, check by 'email' key
         try:
             user_profile = get_user_profile_by("email", central_hub_user.email, headers)
-            logger.info(
-                "User with email '%s' exists on XNAT. Username: '%s'",
-                central_hub_user.email,
-                user_profile.username,
-            )
+            logger.info("User '%s' already exists on XNAT", user_profile.username)
 
         except NotFoundError:
-            logger.info(f"User with email '{central_hub_user.email}' not found on XNAT. Creating user...")
+            logger.info("User not found on XNAT. Creating user...")
             # Create user on XNAT from Central Hub user
             created_user, user_profile = create_user_from_central_hub_user(central_hub_user, headers)
             # Append to list of created users

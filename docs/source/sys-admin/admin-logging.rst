@@ -5,8 +5,7 @@ Logging Stack
 FLIP uses a structured logging stack at each Trust site to collect, store and
 visualise application logs. The stack consists of three layers:
 
-1. **log_config** -- a shared Python library that emits structured JSON logs
-   with PII redaction.
+1. **log_config** -- a shared Python library that emits structured JSON logs.
 2. **Grafana Alloy + Loki** -- Docker-native log collection and storage with
    30-day retention.
 3. **Grafana** -- a web dashboard for querying and visualising logs.
@@ -62,8 +61,6 @@ All trust-side APIs use the ``log_config`` library located at
 - **JSONFormatter** -- serialises every log record as a single-line JSON object
   containing ``timestamp``, ``level``, ``api``, ``logger``,
   ``message`` and any extra fields.
-- **PIIRedactionFilter** -- defence-in-depth filter that redacts NHS numbers
-  (10-digit sequences) and email addresses before they reach the log output.
 - **LoggingMiddleware** -- FastAPI/Starlette middleware that generates a
   ``request_id`` (from the ``X-Request-ID`` header or a UUID), logs
   ``REQUEST_STARTED`` / ``REQUEST_COMPLETED`` / ``REQUEST_FAILED`` events and
@@ -185,13 +182,37 @@ Grafana
 =======
 
 Grafana provides the web UI for log exploration. It is pre-provisioned with a
-Loki datasource (``trust/observability/grafana/provisioning/datasources/loki.yml``) so no
-manual configuration is required on first start.
+Loki datasource and a **Trust APIs** dashboard so no manual configuration is
+required on first start.
+
+Provisioning files are located at
+``trust/observability/grafana/provisioning/``:
+
+- ``datasources/loki.yml`` -- Loki datasource (uid: ``loki``)
+- ``dashboards/dashboards.yml`` -- dashboard provider configuration
+- ``dashboards/trust-apis.json`` -- Trust APIs overview dashboard
 
 Default credentials and port:
 
 - **URL**: ``http://<trust-host>:3000``
 - **Admin password**: set via ``GRAFANA_ADMIN_PASSWORD`` environment variable
+
+Trust APIs dashboard
+--------------------
+
+The provisioned **Trust APIs** dashboard (under the **Observability** folder)
+provides an overview of all three trust API services. It includes:
+
+- **Stat panels** -- request rate, error count, p95 latency, active APIs
+- **Time series** -- request rate and error rate by API over time
+- **p95 request duration** -- latency trends by API
+- **Status code distribution** -- breakdown of HTTP response codes
+- **Slowest requests** -- table of completed requests sorted by duration
+- **Recent errors** -- filtered log view of ``ERROR``-level entries
+- **All logs** -- full log stream with label filtering
+
+An **API** dropdown at the top of the dashboard allows filtering by
+``trust-api``, ``data-access-api``, ``imaging-api``, or all three.
 
 *************
 Configuration
@@ -254,7 +275,9 @@ Accessing Grafana
 
 1. Open ``http://<trust-host>:3000`` in a browser.
 2. Log in with the admin credentials.
-3. Navigate to **Explore** and select the **Loki** datasource.
+3. Open the **Trust APIs** dashboard from the **Observability** folder for an
+   overview of all API services, or navigate to **Explore** and select the
+   **Loki** datasource for ad-hoc queries.
 
 Example LogQL queries
 =====================
@@ -288,19 +311,6 @@ Correlate logs by request ID:
 .. code-block:: text
 
    {api=~"trust-api|data-access-api|imaging-api"} |= "d4e5f6a7-..."
-
-PII redaction
-=============
-
-The ``PIIRedactionFilter`` automatically redacts:
-
-- **NHS numbers** -- any sequence of 10 consecutive digits (with optional
-  spaces) is replaced with ``[NHS_NUMBER_REDACTED]``.
-- **Email addresses** -- patterns matching ``user@domain`` are replaced with
-  ``[EMAIL_REDACTED]``.
-
-This is a defence-in-depth measure. Application code should avoid logging PII
-in the first place.
 
 ***************
 Troubleshooting
