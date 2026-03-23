@@ -11,13 +11,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Email Template Testing Utility for FLIP Cognito Emails
+Email Template Testing Utility for FLIP Email Templates
 
 This script tests and renders email templates locally with placeholder substitution.
 It validates template rendering and generates HTML preview files for manual testing.
 
-Templates are loaded from email_templates/ directory for single source of truth between
-Python testing and Terraform/HCL configuration.
+Templates are loaded from templates/cognito/ and templates/ses/ directories for single
+source of truth between Python testing and Terraform/HCL configuration.
 
 Usage:
     python3 test_email_templates.py                    # Test all templates
@@ -44,35 +44,65 @@ class TestUser:
     reset_link: str = "https://flip-staging.example.com/reset?token=abc123xyz789"
 
 
-class EmailTemplateTester:
-    """Tests and renders FLIP Cognito email templates loaded from files."""
+@dataclass
+class TestSesData:
+    """Test data for SES email template substitution."""
 
-    def __init__(self, test_user: Optional[TestUser] = None):
-        """Initialize the tester with test user data and load templates from files.
-        
-        Templates are loaded from email_templates/ directory. This ensures Python
-        and Terraform reference the same source files, preventing drift.
+    name: str = "Jane Doe"
+    email: str = "jane.doe@example.com"
+    purpose: str = "Research collaboration on federated learning models"
+    trust_name: str = "Guy's and St Thomas' NHS Foundation Trust"
+    project_name: str = "Brain Tumour Segmentation"
+    project_id: str = "BTS-001"
+    username: str = "jdoe"
+    password: str = "X7k!mP2$vR9n"
+
+
+class EmailTemplateTester:
+    """Tests and renders FLIP email templates loaded from files."""
+
+    def __init__(self, test_user: Optional[TestUser] = None, test_ses: Optional[TestSesData] = None):
+        """Initialize the tester with test data and load templates from files.
+
+        Templates are loaded from templates/cognito/ and templates/ses/ directories.
+        This ensures Python and Terraform reference the same source files, preventing drift.
         """
         self.test_user = test_user or TestUser()
-        
-        # Load templates from files (single source of truth)
-        template_dir = Path(__file__).parent / "email_templates"
-        self.INVITE_TEMPLATE_HTML = (template_dir / "invite.html").read_text()
-        self.PASSWORD_RESET_CODE_TEMPLATE_HTML = (template_dir / "password_reset_code.html").read_text()
-        self.PASSWORD_RESET_LINK_TEMPLATE_HTML = (template_dir / "password_reset_link.html").read_text()
+        self.test_ses = test_ses or TestSesData()
+
+        # Load Cognito templates
+        cognito_dir = Path(__file__).parent / "templates" / "cognito"
+        self.INVITE_TEMPLATE_HTML = (cognito_dir / "invite.html").read_text()
+        self.PASSWORD_RESET_CODE_TEMPLATE_HTML = (cognito_dir / "password_reset_code.html").read_text()
+        self.PASSWORD_RESET_LINK_TEMPLATE_HTML = (cognito_dir / "password_reset_link.html").read_text()
+
+        # Load SES templates
+        ses_dir = Path(__file__).parent / "templates" / "ses"
+        self.ACCESS_REQUEST_TEMPLATE_HTML = (ses_dir / "flip-access-request.html").read_text()
+        self.XNAT_CREDENTIALS_TEMPLATE_HTML = (ses_dir / "flip-xnat-credentials.html").read_text()
 
     def substitute_placeholders(self, template: str) -> tuple[str, Dict[str, str]]:
         """
-        Substitute Cognito placeholders in email template.
+        Substitute Cognito and SES placeholders in email template.
 
         Returns:
             Tuple of (rendered_html, substitutions_dict)
         """
         substitutions = {
+            # Cognito placeholders
             "{username}": self.test_user.username,
             "{####}": self.test_user.verification_code,
             "{flip_alb_subdomain}": self.test_user.subdomain,
             "{reset_link}": self.test_user.reset_link,
+            # SES placeholders
+            "{{name}}": self.test_ses.name,
+            "{{email}}": self.test_ses.email,
+            "{{purpose}}": self.test_ses.purpose,
+            "{{trust_name}}": self.test_ses.trust_name,
+            "{{project_name}}": self.test_ses.project_name,
+            "{{project_id}}": self.test_ses.project_id,
+            "{{username}}": self.test_ses.username,
+            "{{password}}": self.test_ses.password,
         }
 
         rendered = template
@@ -151,6 +181,8 @@ class EmailTemplateTester:
             ("invite", self.INVITE_TEMPLATE_HTML),
             ("password_reset_code", self.PASSWORD_RESET_CODE_TEMPLATE_HTML),
             ("password_reset_link", self.PASSWORD_RESET_LINK_TEMPLATE_HTML),
+            ("access_request", self.ACCESS_REQUEST_TEMPLATE_HTML),
+            ("xnat_credentials", self.XNAT_CREDENTIALS_TEMPLATE_HTML),
         ]
 
         for name, template in templates:
@@ -204,7 +236,7 @@ class EmailTemplateTester:
 
     def test_all(self) -> list[Dict]:
         """Run all validation tests.
-        
+
         Returns:
             List of test results for each template
         """
@@ -212,6 +244,8 @@ class EmailTemplateTester:
             ("Temporary Password Invitation", self.INVITE_TEMPLATE_HTML),
             ("Password Reset (Code)", self.PASSWORD_RESET_CODE_TEMPLATE_HTML),
             ("Password Reset (Link)", self.PASSWORD_RESET_LINK_TEMPLATE_HTML),
+            ("Access Request", self.ACCESS_REQUEST_TEMPLATE_HTML),
+            ("XNAT Credentials", self.XNAT_CREDENTIALS_TEMPLATE_HTML),
         ]
 
         results = []
@@ -303,7 +337,7 @@ def main():
     if args.serve:
         print(f"\n📧 Starting local HTTP server at http://localhost:{args.port}")
         print("Open the following URLs in your browser:")
-        for name in ["invite", "password_reset_code", "password_reset_link"]:
+        for name in ["invite", "password_reset_code", "password_reset_link", "access_request", "xnat_credentials"]:
             print(f"  • http://localhost:{args.port}/flip_email_{name}.html")
         print("\nPress Ctrl+C to stop the server.\n")
 
