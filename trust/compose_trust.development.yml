@@ -70,7 +70,7 @@ services:
       DEBUG: ${DEBUG}
       ENV: development
       BASE_IMAGES_DOWNLOAD_DIR: /app/data/images
-      LOG_LEVEL: ${TRUST_LOG_LEVEL:-DEBUG}
+      LOG_LEVEL: ${TRUST_LOG_LEVEL}
     # NOTE the volume BASE_IMAGES_DOWNLOAD_DIR is mounted to share images downloaded from XNAT with FL clients
     volumes:
       - ./imaging-api/imaging_api:/app/imaging_api
@@ -99,7 +99,7 @@ services:
       DEBUG_PORT: ${DATA_ACCESS_DEBUG_PORT_TRUST_1}
       DEBUG: ${DEBUG}
       ENV: development
-      LOG_LEVEL: ${TRUST_LOG_LEVEL:-DEBUG}
+      LOG_LEVEL: ${TRUST_LOG_LEVEL}
     volumes:
       - ./data-access-api/data_access_api:/app/data_access_api
       - ./data-access-api/tests:/app/tests
@@ -141,7 +141,7 @@ services:
       PRIVATE_API_KEY_HEADER: ${PRIVATE_API_KEY_HEADER}
       PRIVATE_API_KEY: ${PRIVATE_API_KEY}
       ENV: development
-      LOG_LEVEL: ${TRUST_LOG_LEVEL:-DEBUG}
+      LOG_LEVEL: ${TRUST_LOG_LEVEL}
     volumes:
       - ./trust-api/trust_api:/app/trust_api
       - ./trust-api/tests:/app/tests
