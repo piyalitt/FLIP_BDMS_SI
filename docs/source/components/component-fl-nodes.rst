@@ -1,3 +1,5 @@
+.. _flip-fl-nodes:
+
 #########################
 Federated Learning Nodes
 #########################
@@ -46,8 +48,8 @@ Then, the Central Hub API will take care of bundling together:
 - The files the user has uploaded
 - The static (non-modifiable) files that are required for the specific job type.
 
-For more information about currently supported apps, visit: <https://github.com/londonaicentre/flip-fl-base/tree/main/src>`_
-and <https://github.com/flwrlabs-partners/flip-flower/tree/main/src>`_ for NVFLARE and Flower respectively. 
+For more information about currently supported apps, visit `flip-fl-base <https://github.com/londonaicentre/flip-fl-base/tree/main/src>`_
+and `flip-fl-base-flower <https://github.com/londonaicentre/flip-fl-base-flower/tree/main/src>`_ for NVFLARE and Flower respectively.
 
 Examples of how the same job type (standard -> federated averaging) can run different user-uploaded applications are:
 

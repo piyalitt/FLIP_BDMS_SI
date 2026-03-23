@@ -48,11 +48,11 @@ or as part of the full platform:
 make up
 ```
 
-The API is served on the port defined by `FLIP_API_PORT` in [`.env.development.example`](../.env.development.example)
-(default: `8000`). Interactive API documentation (Swagger UI) is available at:
+The API is served on the port defined by `API_PORT` in [`.env.development.example`](../.env.development.example)
+(default: `8080`). Interactive API documentation (Swagger UI) is available at:
 
 ```
-http://localhost:<FLIP_API_PORT>/docs
+http://localhost:<API_PORT>/api/docs
 ```
 
 ## Configuration
