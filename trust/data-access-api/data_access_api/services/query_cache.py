@@ -19,8 +19,6 @@ import pandas as pd
 from data_access_api.config import get_settings
 from data_access_api.utils.logger import logger
 
-_MAX_CACHE_ENTRIES = 256
-
 
 @dataclass
 class CacheEntry:
@@ -53,9 +51,21 @@ def get_cached_result(query: str) -> pd.DataFrame | None:
 
 
 def set_cached_result(query: str, df: pd.DataFrame) -> None:
+    settings = get_settings()
+    max_rows = settings.CACHE_MAX_RESULT_ROWS
+    max_entries = settings.CACHE_MAX_ENTRIES
+
     key = _make_cache_key(query)
-    # Evict oldest entries when cache is full
-    if len(_cache) >= _MAX_CACHE_ENTRIES and key not in _cache:
+
+    # Skip caching results that are too large to keep memory usage bounded
+    if len(df) > max_rows:
+        logger.info(
+            f"Skipping cache for query hash {key[:12]}...: {len(df)} rows exceeds limit of {max_rows}"
+        )
+        return
+
+    # Evict oldest entry when cache is full to bound total memory usage
+    if len(_cache) >= max_entries and key not in _cache:
         oldest_key = min(_cache, key=lambda k: _cache[k].created_at)
         del _cache[oldest_key]
     _cache[key] = CacheEntry(df=df.copy(), created_at=datetime.now(UTC))
