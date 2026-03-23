@@ -363,3 +363,7 @@ SECURITY_INCIDENT.md
 trust/certs/
 
 *.crt
+
+*.jar
+
+*.war
