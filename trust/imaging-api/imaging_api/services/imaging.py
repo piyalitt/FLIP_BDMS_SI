@@ -10,7 +10,6 @@
 # limitations under the License.
 #
 
-from typing import List
 
 import requests
 from pydantic import TypeAdapter
@@ -86,7 +85,7 @@ def check_pacs(headers: dict[str, str], pacs_id: int = PACS_ID) -> None:
     logger.info(f"PACS with ID '{pacs_id}' is reachable.")
 
 
-def query_by_accession_number(accession_number: str, headers: dict[str, str]) -> List[Study]:
+def query_by_accession_number(accession_number: str, headers: dict[str, str]) -> list[Study]:
     """
     Queries the imaging provider (PACS) to retrieve a list of studies associated with the provided accession number.
 
@@ -130,7 +129,7 @@ def query_by_accession_number(accession_number: str, headers: dict[str, str]) ->
 
 def queue_image_import_request(
     import_request: ImportStudyRequest, headers: dict[str, str]
-) -> List[ImportStudyResponse]:
+) -> list[ImportStudyResponse]:
     """
     Queues an image import request via DQR for the provided XNAT project ID.
     Handles duplicate studies by StudyInstanceUID and checks if all studies were successfully queued.
@@ -169,7 +168,7 @@ def queue_image_import_request(
     )
 
     if response.status_code == 200:
-        import_response: List[ImportStudyResponse] = TypeAdapter(list[ImportStudyResponse]).validate_json(response.text)
+        import_response: list[ImportStudyResponse] = TypeAdapter(list[ImportStudyResponse]).validate_json(response.text)
         logger.info(f"Import response returned {len(import_response)} studies.")
     elif response.status_code == 404:
         raise NotFoundError(f"Not found error for request: {import_request}")

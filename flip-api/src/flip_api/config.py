@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import EmailStr, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     PRIVATE_API_KEY: str
 
     # AWS settings
-    AWS_PROFILE: Optional[str] = None
+    AWS_PROFILE: str | None = None
     AWS_REGION: str
     AWS_COGNITO_USER_POOL_ID: str
     AWS_COGNITO_APP_CLIENT_ID: str
@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     UPLOADED_FEDERATED_DATA_BUCKET: str
     FL_APP_BASE_BUCKET: str
     FL_APP_DESTINATION_BUCKET: str
-    PRE_SIGNED_URL: Optional[str] = None
+    PRE_SIGNED_URL: str | None = None
 
     # Reimport imaging project studies
     PROJECT_REIMPORT_RATE: int = 60  # How often to reimport studies for a given project (in minutes)
@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     NET_ENDPOINTS: dict[str, str]
 
     # SSL / TLS settings
-    TRUST_CA_BUNDLE: Optional[str] = None  # Path to the Trust CA certificate PEM file
+    TRUST_CA_BUNDLE: str | None = None  # Path to the Trust CA certificate PEM file
 
     # FL settings
     FL_BACKEND: Literal["nvflare", "flower"] = "nvflare"
