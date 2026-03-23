@@ -245,6 +245,26 @@ def test_malformed_result_json_raises():
         handle_imaging_task_completed(task, mock_db)
 
 
+def test_missing_required_fields_raises_value_error():
+    """Should raise ValueError when result is missing required ID or name fields."""
+    task = MagicMock()
+    task.result = json.dumps({"created_users": []})  # Missing ID and name
+    mock_db = MagicMock()
+
+    with pytest.raises(ValueError, match="missing required fields"):
+        handle_imaging_task_completed(task, mock_db)
+
+
+def test_missing_id_field_raises_value_error():
+    """Should raise ValueError when result is missing the ID field."""
+    task = MagicMock()
+    task.result = json.dumps({"name": "Test", "created_users": []})  # Missing ID
+    mock_db = MagicMock()
+
+    with pytest.raises(ValueError, match="ID"):
+        handle_imaging_task_completed(task, mock_db)
+
+
 def test_sends_project_access_email_to_added_users(mock_ses, mock_decrypt, mock_settings, mock_insert_status):
     """Should send project access emails (no password) to existing users added to the project."""
     added_users = [

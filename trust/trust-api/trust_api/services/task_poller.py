@@ -113,7 +113,7 @@ async def _report_task_result(client: httpx.AsyncClient, task_id: str, result: d
     for attempt in range(_REPORT_MAX_RETRIES):
         try:
             response = await client.post(
-                f"{CENTRAL_HUB_API_URL}/tasks/{task_id}/result",
+                f"{CENTRAL_HUB_API_URL}/tasks/{TRUST_NAME}/{task_id}/result",
                 headers=_auth_headers(),
                 json=payload,
             )

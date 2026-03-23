@@ -81,6 +81,16 @@ def mock_auth():
     del app.dependency_overrides[check_authorization_token]
 
 
+def _mock_task_owned_by(trust_id, task_id, task_type=TaskType.COHORT_QUERY):
+    """Create a mock TrustTask owned by the given trust."""
+    mock_task = MagicMock(spec=TrustTask)
+    mock_task.id = task_id
+    mock_task.trust_id = trust_id
+    mock_task.status = TaskStatus.IN_PROGRESS
+    mock_task.task_type = task_type
+    return mock_task
+
+
 # ---- GET /tasks/{trust_name}/pending ----
 
 
@@ -159,22 +169,25 @@ def test_get_pending_tasks_requires_auth():
     del app.dependency_overrides[get_session]
 
 
-# ---- POST /tasks/{task_id}/result ----
+# ---- POST /tasks/{trust_name}/{task_id}/result ----
 
 
-def test_submit_task_result_success(task_id, mock_auth):
+def test_submit_task_result_success(trust_id, task_id, mock_trust, mock_auth):
     """Should mark task as COMPLETED on success."""
-    mock_task = MagicMock(spec=TrustTask)
-    mock_task.id = task_id
-    mock_task.status = TaskStatus.IN_PROGRESS
+    mock_task = _mock_task_owned_by(trust_id, task_id)
 
     mock_db = MagicMock()
-    mock_db.exec.return_value.first.return_value = mock_task
+    # First exec: trust lookup; second: task lookup
+    trust_result = MagicMock()
+    trust_result.first.return_value = mock_trust
+    task_result = MagicMock()
+    task_result.first.return_value = mock_task
+    mock_db.exec.side_effect = [trust_result, task_result]
 
     app.dependency_overrides[get_session] = lambda: mock_db
 
     response = client.post(
-        f"/api/tasks/{task_id}/result",
+        f"/api/tasks/{TRUST_NAME}/{task_id}/result",
         json={"success": True, "result": '{"data": "test"}'},
     )
 
@@ -186,19 +199,21 @@ def test_submit_task_result_success(task_id, mock_auth):
     del app.dependency_overrides[get_session]
 
 
-def test_submit_task_result_failure(task_id, mock_auth):
+def test_submit_task_result_failure(trust_id, task_id, mock_trust, mock_auth):
     """Should mark task as FAILED on failure."""
-    mock_task = MagicMock(spec=TrustTask)
-    mock_task.id = task_id
-    mock_task.status = TaskStatus.IN_PROGRESS
+    mock_task = _mock_task_owned_by(trust_id, task_id)
 
     mock_db = MagicMock()
-    mock_db.exec.return_value.first.return_value = mock_task
+    trust_result = MagicMock()
+    trust_result.first.return_value = mock_trust
+    task_result = MagicMock()
+    task_result.first.return_value = mock_task
+    mock_db.exec.side_effect = [trust_result, task_result]
 
     app.dependency_overrides[get_session] = lambda: mock_db
 
     response = client.post(
-        f"/api/tasks/{task_id}/result",
+        f"/api/tasks/{TRUST_NAME}/{task_id}/result",
         json={"success": False, "result": None},
     )
 
@@ -209,15 +224,19 @@ def test_submit_task_result_failure(task_id, mock_auth):
     del app.dependency_overrides[get_session]
 
 
-def test_submit_task_result_not_found(mock_auth):
+def test_submit_task_result_not_found(mock_trust, mock_auth):
     """Should return 404 for unknown task."""
     mock_db = MagicMock()
-    mock_db.exec.return_value.first.return_value = None
+    trust_result = MagicMock()
+    trust_result.first.return_value = mock_trust
+    task_result = MagicMock()
+    task_result.first.return_value = None
+    mock_db.exec.side_effect = [trust_result, task_result]
 
     app.dependency_overrides[get_session] = lambda: mock_db
 
     response = client.post(
-        f"/api/tasks/{uuid4()}/result",
+        f"/api/tasks/{TRUST_NAME}/{uuid4()}/result",
         json={"success": True},
     )
 
@@ -226,24 +245,73 @@ def test_submit_task_result_not_found(mock_auth):
     del app.dependency_overrides[get_session]
 
 
-def test_submit_task_result_conflict_when_not_in_progress(task_id, mock_auth):
+def test_submit_task_result_conflict_when_not_in_progress(trust_id, task_id, mock_trust, mock_auth):
     """Should return 409 when task is not IN_PROGRESS."""
-    mock_task = MagicMock(spec=TrustTask)
-    mock_task.id = task_id
+    mock_task = _mock_task_owned_by(trust_id, task_id)
     mock_task.status = TaskStatus.COMPLETED
 
     mock_db = MagicMock()
-    mock_db.exec.return_value.first.return_value = mock_task
+    trust_result = MagicMock()
+    trust_result.first.return_value = mock_trust
+    task_result = MagicMock()
+    task_result.first.return_value = mock_task
+    mock_db.exec.side_effect = [trust_result, task_result]
 
     app.dependency_overrides[get_session] = lambda: mock_db
 
     response = client.post(
-        f"/api/tasks/{task_id}/result",
+        f"/api/tasks/{TRUST_NAME}/{task_id}/result",
         json={"success": True},
     )
 
     assert response.status_code == 409
     assert "not in progress" in response.json()["detail"]
+
+    del app.dependency_overrides[get_session]
+
+
+def test_submit_task_result_forbidden_for_wrong_trust(trust_id, task_id, mock_auth):
+    """Should return 403 when trust tries to submit result for another trust's task."""
+    other_trust_id = uuid4()
+    mock_task = _mock_task_owned_by(other_trust_id, task_id)  # Task owned by a different trust
+
+    mock_trust = MagicMock(spec=Trust)
+    mock_trust.id = trust_id
+    mock_trust.name = TRUST_NAME
+
+    mock_db = MagicMock()
+    trust_result = MagicMock()
+    trust_result.first.return_value = mock_trust
+    task_result = MagicMock()
+    task_result.first.return_value = mock_task
+    mock_db.exec.side_effect = [trust_result, task_result]
+
+    app.dependency_overrides[get_session] = lambda: mock_db
+
+    response = client.post(
+        f"/api/tasks/{TRUST_NAME}/{task_id}/result",
+        json={"success": True},
+    )
+
+    assert response.status_code == 403
+    assert "does not belong" in response.json()["detail"]
+
+    del app.dependency_overrides[get_session]
+
+
+def test_submit_task_result_trust_not_found(mock_auth):
+    """Should return 404 when trust name is not found."""
+    mock_db = MagicMock()
+    mock_db.exec.return_value.first.return_value = None
+
+    app.dependency_overrides[get_session] = lambda: mock_db
+
+    response = client.post(
+        f"/api/tasks/NonExistentTrust/{uuid4()}/result",
+        json={"success": True},
+    )
+
+    assert response.status_code == 404
 
     del app.dependency_overrides[get_session]
 
@@ -285,20 +353,21 @@ def test_heartbeat_trust_not_found(mock_auth):
 
 
 @patch("flip_api.private_services.trust_tasks.handle_imaging_task_completed")
-def test_submit_create_imaging_result_triggers_email(mock_send_emails, task_id, mock_auth):
+def test_submit_create_imaging_result_triggers_email(mock_send_emails, trust_id, task_id, mock_trust, mock_auth):
     """Should call handle_imaging_task_completed for successful CREATE_IMAGING tasks."""
-    mock_task = MagicMock(spec=TrustTask)
-    mock_task.id = task_id
-    mock_task.status = TaskStatus.IN_PROGRESS
-    mock_task.task_type = TaskType.CREATE_IMAGING
+    mock_task = _mock_task_owned_by(trust_id, task_id, TaskType.CREATE_IMAGING)
 
     mock_db = MagicMock()
-    mock_db.exec.return_value.first.return_value = mock_task
+    trust_result = MagicMock()
+    trust_result.first.return_value = mock_trust
+    task_result = MagicMock()
+    task_result.first.return_value = mock_task
+    mock_db.exec.side_effect = [trust_result, task_result]
 
     app.dependency_overrides[get_session] = lambda: mock_db
 
     response = client.post(
-        f"/api/tasks/{task_id}/result",
+        f"/api/tasks/{TRUST_NAME}/{task_id}/result",
         json={"success": True, "result": '{"ID": "img-1", "name": "Test", "created_users": []}'},
     )
 
@@ -309,20 +378,21 @@ def test_submit_create_imaging_result_triggers_email(mock_send_emails, task_id, 
 
 
 @patch("flip_api.private_services.trust_tasks.handle_imaging_task_completed")
-def test_submit_non_imaging_result_does_not_trigger_email(mock_send_emails, task_id, mock_auth):
+def test_submit_non_imaging_result_does_not_trigger_email(mock_send_emails, trust_id, task_id, mock_trust, mock_auth):
     """Should NOT call handle_imaging_task_completed for non-CREATE_IMAGING tasks."""
-    mock_task = MagicMock(spec=TrustTask)
-    mock_task.id = task_id
-    mock_task.status = TaskStatus.IN_PROGRESS
-    mock_task.task_type = TaskType.COHORT_QUERY
+    mock_task = _mock_task_owned_by(trust_id, task_id, TaskType.COHORT_QUERY)
 
     mock_db = MagicMock()
-    mock_db.exec.return_value.first.return_value = mock_task
+    trust_result = MagicMock()
+    trust_result.first.return_value = mock_trust
+    task_result = MagicMock()
+    task_result.first.return_value = mock_task
+    mock_db.exec.side_effect = [trust_result, task_result]
 
     app.dependency_overrides[get_session] = lambda: mock_db
 
     response = client.post(
-        f"/api/tasks/{task_id}/result",
+        f"/api/tasks/{TRUST_NAME}/{task_id}/result",
         json={"success": True, "result": '{"data": "test"}'},
     )
 
@@ -333,22 +403,23 @@ def test_submit_non_imaging_result_does_not_trigger_email(mock_send_emails, task
 
 
 @patch("flip_api.private_services.trust_tasks.handle_imaging_task_completed")
-def test_email_failure_does_not_fail_task_submission(mock_send_emails, task_id, mock_auth):
+def test_email_failure_does_not_fail_task_submission(mock_send_emails, trust_id, task_id, mock_trust, mock_auth):
     """Email failure should not prevent task result from being recorded."""
     mock_send_emails.side_effect = Exception("SES unavailable")
 
-    mock_task = MagicMock(spec=TrustTask)
-    mock_task.id = task_id
-    mock_task.status = TaskStatus.IN_PROGRESS
-    mock_task.task_type = TaskType.CREATE_IMAGING
+    mock_task = _mock_task_owned_by(trust_id, task_id, TaskType.CREATE_IMAGING)
 
     mock_db = MagicMock()
-    mock_db.exec.return_value.first.return_value = mock_task
+    trust_result = MagicMock()
+    trust_result.first.return_value = mock_trust
+    task_result = MagicMock()
+    task_result.first.return_value = mock_task
+    mock_db.exec.side_effect = [trust_result, task_result]
 
     app.dependency_overrides[get_session] = lambda: mock_db
 
     response = client.post(
-        f"/api/tasks/{task_id}/result",
+        f"/api/tasks/{TRUST_NAME}/{task_id}/result",
         json={"success": True, "result": '{"ID": "img-1", "name": "Test", "created_users": []}'},
     )
 

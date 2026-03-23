@@ -29,18 +29,24 @@ from flip_api.utils.logger import logger
 
 
 def recover_stale_tasks(db: Session) -> int:
-    """Reset stale IN_PROGRESS tasks back to PENDING.
+    """Reset stale IN_PROGRESS tasks back to PENDING, or mark them FAILED if retries are exhausted.
 
     A task is considered stale if it has been IN_PROGRESS for longer than
     ``TASK_STALE_TIMEOUT_MINUTES`` without a result being reported.
+
+    Tasks that have already been retried ``TASK_MAX_RETRIES`` times are marked
+    as FAILED instead of being re-queued, preventing poison tasks from looping
+    indefinitely.
 
     Args:
         db: Database session.
 
     Returns:
-        Number of tasks recovered.
+        Number of tasks recovered (re-queued or failed).
     """
-    timeout_minutes = get_settings().TASK_STALE_TIMEOUT_MINUTES
+    settings = get_settings()
+    timeout_minutes = settings.TASK_STALE_TIMEOUT_MINUTES
+    max_retries = settings.TASK_MAX_RETRIES
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
 
     statement = (
@@ -54,17 +60,33 @@ def recover_stale_tasks(db: Session) -> int:
         return 0
 
     now = datetime.now(timezone.utc)
+    recovered = 0
+    failed = 0
     for task in stale_tasks:
-        logger.warning(
-            f"Recovering stale task {task.id} (type={task.task_type}, "
-            f"stuck since {task.updated_at})"
-        )
-        task.status = TaskStatus.PENDING
-        task.updated_at = now
+        if task.retry_count >= max_retries:
+            logger.error(
+                f"Task {task.id} (type={task.task_type}) exceeded max retries ({max_retries}), marking as FAILED"
+            )
+            task.status = TaskStatus.FAILED
+            task.result = f'{{"error": "Exceeded maximum retries ({max_retries})"}}'
+            task.updated_at = now
+            failed += 1
+        else:
+            logger.warning(
+                f"Recovering stale task {task.id} (type={task.task_type}, "
+                f"retry_count={task.retry_count}, stuck since {task.updated_at})"
+            )
+            task.status = TaskStatus.PENDING
+            task.retry_count += 1
+            task.updated_at = now
+            recovered += 1
 
     db.commit()
-    logger.info(f"Recovered {len(stale_tasks)} stale tasks back to PENDING")
-    return len(stale_tasks)
+    if recovered:
+        logger.info(f"Recovered {recovered} stale tasks back to PENDING")
+    if failed:
+        logger.info(f"Marked {failed} stale tasks as FAILED (max retries exceeded)")
+    return recovered + failed
 
 
 def retry_failed_post_processing(db: Session) -> int:

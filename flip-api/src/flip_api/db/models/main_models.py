@@ -217,6 +217,7 @@ class TrustTask(SQLModel, table=True):
     status: TaskStatus = Field(default=TaskStatus.PENDING)
     result: str | None = Field(default=None)  # JSON-serialized result data
     needs_post_processing: bool = Field(default=False)
+    retry_count: int = Field(default=0)  # Number of times this task has been retried via stale recovery
     created_at: Annotated[datetime, Field(default_factory=lambda: datetime.now(timezone.utc))]
     updated_at: datetime | None = Field(default=None)
 

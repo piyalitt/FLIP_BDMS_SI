@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlmodel import Session, col, select
 
 from flip_api.auth.access_manager import check_authorization_token
@@ -28,6 +28,9 @@ router = APIRouter(tags=["private_services"])
 
 # Max tasks returned per poll to prevent unbounded responses
 PENDING_TASKS_LIMIT = 50
+
+# Max size (in characters) for task result payloads to prevent database bloat
+MAX_TASK_RESULT_LENGTH = 10_000_000
 
 
 class TrustTaskResponse(BaseModel):
@@ -43,7 +46,7 @@ class TaskResultInput(BaseModel):
     """Input model for submitting a task result."""
 
     success: bool
-    result: str | None = None
+    result: str | None = Field(default=None, max_length=MAX_TASK_RESULT_LENGTH)
 
 
 def _get_trust_by_name(trust_name: str, db: Session) -> Trust:
@@ -125,12 +128,13 @@ def get_pending_tasks(
 
 
 @router.post(
-    "/tasks/{task_id}/result",
+    "/tasks/{trust_name}/{task_id}/result",
     summary="Submit task result",
     status_code=status.HTTP_200_OK,
     response_model=dict[str, str],
 )
 def submit_task_result(
+    trust_name: str,
     task_id: UUID,
     task_result: TaskResultInput = Body(...),
     db: Session = Depends(get_session),
@@ -138,16 +142,31 @@ def submit_task_result(
 ) -> dict[str, str]:
     """
     Receives the result of a completed task from a trust.
+
+    The trust_name path parameter is verified against the task's owning trust
+    to prevent one trust from submitting results for another trust's tasks.
     """
     del token
-    logger.info(f"Received result for task {task_id}")
+    logger.info(f"Received result for task {task_id} from trust '{trust_name}'")
 
     try:
+        trust = _get_trust_by_name(trust_name, db)
+
         task = db.exec(select(TrustTask).where(TrustTask.id == task_id)).first()
         if not task:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Task {task_id} not found",
+            )
+
+        if task.trust_id != trust.id:
+            logger.warning(
+                f"Trust '{trust_name}' attempted to submit result for task {task_id} "
+                f"which belongs to a different trust"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Task {task_id} does not belong to trust '{trust_name}'",
             )
 
         if task.status != TaskStatus.IN_PROGRESS:

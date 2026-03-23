@@ -136,8 +136,18 @@ def _get_latest_query_id(project_id: UUID, db: Session) -> UUID | None:
 
 
 def _parse_imaging_result(result_json: str) -> ICreatedImagingProject:
-    """Parse the task result JSON into a structured imaging project response."""
+    """Parse the task result JSON into a structured imaging project response.
+
+    Raises:
+        json.JSONDecodeError: If result_json is not valid JSON.
+        ValueError: If required fields (ID, name) are missing from the result.
+    """
     data = json.loads(result_json)
+
+    if "ID" not in data or "name" not in data:
+        missing = [field for field in ("ID", "name") if field not in data]
+        raise ValueError(f"Imaging result missing required fields: {missing}")
+
     return ICreatedImagingProject(
         imaging_project_id=data["ID"],
         name=data["name"],
