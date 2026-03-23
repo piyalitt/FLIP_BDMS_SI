@@ -151,7 +151,7 @@ up-trust-ec2: create-networks
 	@echo "🚢 Starting Trust services..."
 	$(MAKE) -e DEBUG=$(DEBUG) -C trust up-trust-1-ec2 PROD=${PROD}
 	@echo "🚢 Starting XNAT services..."
-	$(MAKE) -e DEBUG=$(DEBUG) -C trust/xnat up-xnat-1-ec2 PROD=${PROD}
+	$(MAKE) -e DEBUG=$(DEBUG) -C trust/xnat up-xnat-1 PROD=${PROD}
 	@echo "✅ Trust services started successfully!"
 
 up-local-trust-stag: create-networks

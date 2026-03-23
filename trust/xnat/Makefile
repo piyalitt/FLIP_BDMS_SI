@@ -13,7 +13,7 @@
 .PHONY: build up down clean xnat-shell xnat-war-download xnat-plugins-download \
 	xnat-reset xnat-configure-trust-1 xnat-configure-trust-2 \
 	create-network-trust-1 create-network-trust-2 up-xnat-1 up-xnat-2 \
-	up-xnat-1-ec2 down-xnat-1-ec2
+	down-xnat-1 down-xnat-2
 
 # if tag PROD=true is passed, set PROD=true
 ifeq ($(PROD),true)
@@ -102,9 +102,6 @@ up-xnat-1: create-network-trust-1
 	sleep 10
 	$(MAKE) xnat-configure-trust-1
 
-up-xnat-1-ec2:
-	$(MAKE) up-xnat-1
-
 up-xnat-2: create-network-trust-2
 	XNAT_PATH=${XNAT_PATH} \
 	XNAT_PORT=${XNAT_PORT_TRUST_2} \
@@ -121,13 +118,13 @@ xnat-shell:
 	CONTAINER=$$(docker ps --filter "name=${project1}_xnat-web" -q); \
 	docker exec -it $$CONTAINER bash
 
-# Stop all containers
-down:
-	docker stack rm ${project1} && \
+down-xnat-1:
+	docker stack rm ${project1}
+
+down-xnat-2:
 	docker stack rm ${project2}
 
-down-xnat-1-ec2:
-	docker stack rm ${project1}
+down: down-xnat-1 down-xnat-2
 
 # Stop and clean up images
 clean:

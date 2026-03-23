@@ -34,7 +34,6 @@ XNAT is deployed using Docker Swarm (both locally and on EC2). This is because S
 
   The base file defines the three services (`xnat-web`, `xnat-db`, `xnat-nginx`). The development overlay adds host bind-mounts for hot-reload and resource limits sized for dev machines. The production overlay mounts persistent data volumes under `/opt/flip/xnat/`.
 - Two XNAT instances are deployed as separate Swarm stacks (`xnat1`, `xnat2`), one per trust
-- EC2 deployments reuse the same Swarm targets (`up-xnat-1-ec2` delegates to `up-xnat-1`)
 
 ## Setup
 
