@@ -13,7 +13,7 @@
 import os
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import PositiveInt, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     #
     COHORT_QUERY_THRESHOLD: int = 10  # Minimum number of records required to return statistics
     CACHE_TTL_DAYS: int = 60  # Number of days before cached query results expire
+    CACHE_MAX_RESULT_ROWS: PositiveInt = 50_000  # Max rows per cached result; larger results skip caching
+    CACHE_MAX_ENTRIES: PositiveInt = 64  # Max number of cached query results
 
     #
     OMOP_DB_SERVICE_NAME: str = "omop-db"  # The name of the OMOP database service in Docker Compose or Kubernetes
