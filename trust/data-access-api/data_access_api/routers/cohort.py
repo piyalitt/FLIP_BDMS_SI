@@ -39,7 +39,7 @@ def receive_cohort_query(query_input: CohortQueryInput) -> StatisticsResponse:
     Raises:
         HTTPException: If there is an error during the execution of the query or if the query returns too few records.
     """
-    logger.info(f"Received cohort query: {query_input}")
+    logger.info("Received cohort query")
 
     minimum_cohort_size = get_settings().COHORT_QUERY_THRESHOLD
     logger.info(f"Minimum cohort size needed to return statistics: {minimum_cohort_size}")
@@ -57,7 +57,7 @@ def receive_cohort_query(query_input: CohortQueryInput) -> StatisticsResponse:
     # TODO: Move this check to centralhub and use the aggregated results only, here we are using partial results from
     # each trust
     try:
-        logger.info(f"Executing query: {query_input.query}")
+        logger.info("Executing cohort query")
 
         df = get_records(query_input.query)
         df = df.dropna(axis=1, how="all")  # Ignore entirely empty columns
@@ -78,7 +78,7 @@ def receive_cohort_query(query_input: CohortQueryInput) -> StatisticsResponse:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    logger.info(f"Response: {results}")
+    logger.info("Cohort query returned results")
     return results
 
 
@@ -103,7 +103,7 @@ def get_dataframe(query_input: DataframeQuery) -> dict[str, list[Any]]:
     """
     project_id = decrypt(query_input.encrypted_project_id)
 
-    logger.info(f"Received DataFrame query for project {project_id} with query: {query_input.query}")
+    logger.info(f"Received DataFrame query for project {project_id}")
 
     # Validate the query
     try:
@@ -124,5 +124,4 @@ def get_dataframe(query_input: DataframeQuery) -> dict[str, list[Any]]:
     # This avoids re-running the query if the same one is requested multiple times
 
     # df.to_csv("data.csv", index=False) # debugging
-    return df.to_dict(orient="list")
     return df.to_dict(orient="list")
