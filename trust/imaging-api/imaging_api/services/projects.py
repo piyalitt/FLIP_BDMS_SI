@@ -264,9 +264,7 @@ def get_command_info(container: str, headers: dict[str, str]) -> tuple[int, str]
     return command["id"], command["xnat"][0]["name"]
 
 
-def create_project_event_subscription(
-    project_id: str, container: str, active: bool, headers: dict[str, str]
-) -> None:
+def create_project_event_subscription(project_id: str, container: str, active: bool, headers: dict[str, str]) -> None:
     """
     Creates a project-scoped event subscription in XNAT that auto-triggers a command on scan upload.
 
@@ -284,7 +282,19 @@ def create_project_event_subscription(
     Raises:
         Exception: If the subscription creation fails.
     """
-    command_id, _ = get_command_info(container, headers)
+    command_id, wrapper_name = get_command_info(container, headers)
+
+    # Enable the command at the project level — required by XNAT to validate the action key
+    # in project-scoped event subscriptions
+    response = requests.put(
+        f"{XNAT_URL}/xapi/projects/{project_id}/commands/{command_id}/wrappers/{wrapper_name}/enabled",
+        headers=headers,
+    )
+    if response.status_code != 200:
+        raise Exception(
+            f"Error: Enabling command '{container}' for project '{project_id}' failed: "
+            f"{response.status_code} - {response.text}"
+        )
 
     subscription_payload = {
         "name": "DICOM-NIfTI Conversion",
@@ -295,6 +305,7 @@ def create_project_event_subscription(
         "event-filter": {
             "event-type": "org.nrg.xnat.eventservice.events.ScanEvent",
             "status": "CREATED",
+            "project-ids": [project_id],
             "payload-filter": '(@.resources.length() > 0 && "DICOM" in @.resources[*].label)',
         },
         "act-as-event-user": False,
@@ -305,7 +316,7 @@ def create_project_event_subscription(
         headers=headers,
         json=subscription_payload,
     )
-    if response.status_code == 200:
+    if response.status_code in (200, 201):
         state = "active" if active else "inactive"
         logger.info(f"Event subscription for '{container}' created ({state}) for project '{project_id}'")
     else:
@@ -343,8 +354,7 @@ def add_central_hub_users_to_project(
         # If central hub user is disabled, do not attempt to create account.
         if central_hub_user.is_disabled:
             logger.info(
-                "Central Hub user is disabled. "
-                "It will not be created on XNAT or added to the imaging project.",
+                "Central Hub user is disabled. It will not be created on XNAT or added to the imaging project.",
             )
             continue
 

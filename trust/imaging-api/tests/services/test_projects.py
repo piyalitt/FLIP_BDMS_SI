@@ -251,13 +251,17 @@ def test_get_command_info_fetch_failure(mock_get, headers):
 # create_project_event_subscription
 # ===========================================================================
 @patch("imaging_api.services.projects.requests.post")
+@patch("imaging_api.services.projects.requests.put")
 @patch("imaging_api.services.projects.get_command_info")
-def test_create_project_event_subscription_active(mock_cmd_info, mock_post, headers):
+def test_create_project_event_subscription_active(mock_cmd_info, mock_put, mock_post, headers):
     mock_cmd_info.return_value = (1, "dcm2niix-scan")
+    mock_put.return_value = MagicMock(status_code=200)
     mock_post.return_value = MagicMock(status_code=200)
 
     create_project_event_subscription("TEST", "xnat/dcm2niix:latest", True, headers)
 
+    mock_put.assert_called_once()
+    assert "/commands/1/wrappers/dcm2niix-scan/enabled" in mock_put.call_args[0][0]
     mock_post.assert_called_once()
     call_url = mock_post.call_args[0][0]
     call_payload = mock_post.call_args[1]["json"]
@@ -267,9 +271,11 @@ def test_create_project_event_subscription_active(mock_cmd_info, mock_post, head
 
 
 @patch("imaging_api.services.projects.requests.post")
+@patch("imaging_api.services.projects.requests.put")
 @patch("imaging_api.services.projects.get_command_info")
-def test_create_project_event_subscription_inactive(mock_cmd_info, mock_post, headers):
+def test_create_project_event_subscription_inactive(mock_cmd_info, mock_put, mock_post, headers):
     mock_cmd_info.return_value = (1, "dcm2niix-scan")
+    mock_put.return_value = MagicMock(status_code=200)
     mock_post.return_value = MagicMock(status_code=200)
 
     create_project_event_subscription("TEST", "xnat/dcm2niix:latest", False, headers)
@@ -280,9 +286,11 @@ def test_create_project_event_subscription_inactive(mock_cmd_info, mock_post, he
 
 
 @patch("imaging_api.services.projects.requests.post")
+@patch("imaging_api.services.projects.requests.put")
 @patch("imaging_api.services.projects.get_command_info")
-def test_create_project_event_subscription_failure(mock_cmd_info, mock_post, headers):
+def test_create_project_event_subscription_failure(mock_cmd_info, mock_put, mock_post, headers):
     mock_cmd_info.return_value = (1, "dcm2niix-scan")
+    mock_put.return_value = MagicMock(status_code=200)
     mock_post.return_value = MagicMock(status_code=500, text="Internal Server Error")
 
     with pytest.raises(Exception, match="Creating event subscription"):
