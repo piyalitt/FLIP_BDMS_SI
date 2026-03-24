@@ -132,7 +132,7 @@ const runCohortQuery = async (v: unknown) => {
             projectId: route.params["projectId"].toString()
         });
 
-        if (response && response.trust.every(r => r.statusCode === 200)) {
+        if (response && response.trust.every(r => r.statusCode >= 200 && r.statusCode < 300)) {
             queryId.value = response.queryId;
 
             hasResults();
