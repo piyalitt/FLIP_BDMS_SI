@@ -15,7 +15,7 @@ from uuid import uuid4
 
 import pytest
 
-from imaging_api.routers.schemas import CentralHubProject, CreatedProject, Project
+from imaging_api.routers.schemas import CentralHubProject, Project
 
 
 @pytest.fixture
@@ -66,7 +66,7 @@ def central_hub_project_nifti_disabled():
 @pytest.mark.asyncio
 @patch("imaging_api.routers.projects.retrieve_images_for_project")
 @patch("imaging_api.routers.projects.add_central_hub_users_to_project")
-@patch("imaging_api.routers.projects.enable_project_command")
+@patch("imaging_api.routers.projects.set_project_command_enabled")
 @patch("imaging_api.routers.projects.set_project_prearchive_settings")
 @patch("imaging_api.routers.projects.create_project")
 @patch("imaging_api.routers.projects.to_create_project")
@@ -76,14 +76,14 @@ async def test_create_project_nifti_enabled_calls_enable_command(
     mock_to_create,
     mock_create,
     mock_prearchive,
-    mock_enable_cmd,
+    mock_set_cmd,
     mock_add_users,
     mock_retrieve,
     mock_project,
     central_hub_project_nifti_enabled,
     mock_headers,
 ):
-    """When dicom_to_nifti is True, enable_project_command should be called."""
+    """When dicom_to_nifti is True, set_project_command_enabled should be called with enabled=True."""
     mock_to_create.return_value = MagicMock(id="TEST", secondary_id="TEST", name="Test", description="")
     mock_create.return_value = mock_project
     mock_add_users.return_value = ([], [])
@@ -91,34 +91,32 @@ async def test_create_project_nifti_enabled_calls_enable_command(
     from imaging_api.routers.projects import create_project_from_central_hub_project
 
     background_tasks = MagicMock()
-    await create_project_from_central_hub_project(
-        central_hub_project_nifti_enabled, mock_headers, background_tasks
-    )
+    await create_project_from_central_hub_project(central_hub_project_nifti_enabled, mock_headers, background_tasks)
 
-    mock_enable_cmd.assert_called_once_with(TEST_XNAT_PROJECT_ID, "xnat/dcm2niix:latest", mock_headers)
+    mock_set_cmd.assert_called_once_with(TEST_XNAT_PROJECT_ID, "xnat/dcm2niix:latest", mock_headers, enabled=True)
 
 
 @pytest.mark.asyncio
 @patch("imaging_api.routers.projects.retrieve_images_for_project")
 @patch("imaging_api.routers.projects.add_central_hub_users_to_project")
-@patch("imaging_api.routers.projects.enable_project_command")
+@patch("imaging_api.routers.projects.set_project_command_enabled")
 @patch("imaging_api.routers.projects.set_project_prearchive_settings")
 @patch("imaging_api.routers.projects.create_project")
 @patch("imaging_api.routers.projects.to_create_project")
 @patch("imaging_api.routers.projects.get_xnat_auth_headers")
-async def test_create_project_nifti_disabled_skips_enable_command(
+async def test_create_project_nifti_disabled_calls_disable_command(
     mock_auth,
     mock_to_create,
     mock_create,
     mock_prearchive,
-    mock_enable_cmd,
+    mock_set_cmd,
     mock_add_users,
     mock_retrieve,
     mock_project,
     central_hub_project_nifti_disabled,
     mock_headers,
 ):
-    """When dicom_to_nifti is False, enable_project_command should NOT be called."""
+    """When dicom_to_nifti is False, set_project_command_enabled should be called with enabled=False."""
     mock_to_create.return_value = MagicMock(id="TEST", secondary_id="TEST", name="Test", description="")
     mock_create.return_value = mock_project
     mock_add_users.return_value = ([], [])
@@ -126,8 +124,6 @@ async def test_create_project_nifti_disabled_skips_enable_command(
     from imaging_api.routers.projects import create_project_from_central_hub_project
 
     background_tasks = MagicMock()
-    await create_project_from_central_hub_project(
-        central_hub_project_nifti_disabled, mock_headers, background_tasks
-    )
+    await create_project_from_central_hub_project(central_hub_project_nifti_disabled, mock_headers, background_tasks)
 
-    mock_enable_cmd.assert_not_called()
+    mock_set_cmd.assert_called_once_with(TEST_XNAT_PROJECT_ID, "xnat/dcm2niix:latest", mock_headers, enabled=False)

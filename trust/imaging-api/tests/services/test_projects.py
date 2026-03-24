@@ -16,7 +16,13 @@ import pytest
 
 from imaging_api.db.models import QueuedPacsRequest
 from imaging_api.routers.schemas import Project
-from imaging_api.services.projects import create_project, delete_project, delete_queued_import_requests
+from imaging_api.services.projects import (
+    create_project,
+    delete_project,
+    delete_queued_import_requests,
+    set_project_command_enabled,
+    set_project_prearchive_settings,
+)
 
 
 @pytest.fixture
@@ -111,3 +117,72 @@ async def test_delete_queued_import_requests(mock_post, mock_get_queued_pacs_req
     project_id = "TEST"
     result = await delete_queued_import_requests(project_id, headers)
     assert result is True
+
+
+@patch("imaging_api.services.projects.requests.put")
+def test_set_project_prearchive_settings_success(mock_put, headers):
+    mock_put.return_value = MagicMock(status_code=200)
+
+    set_project_prearchive_settings("TEST", headers)
+
+    mock_put.assert_called_once()
+    assert "/data/projects/TEST/prearchive_code/" in mock_put.call_args[0][0]
+
+
+@patch("imaging_api.services.projects.requests.put")
+def test_set_project_prearchive_settings_failure(mock_put, headers):
+    mock_put.return_value = MagicMock(status_code=500, text="Internal Server Error")
+
+    with pytest.raises(Exception, match="XNAT Setting project prearchive settings failed"):
+        set_project_prearchive_settings("TEST", headers)
+
+
+@patch("imaging_api.services.projects.requests.put")
+@patch("imaging_api.services.projects.requests.get")
+def test_set_project_command_enabled_success(mock_get, mock_put, headers):
+    mock_get.return_value = MagicMock(
+        status_code=200,
+        json=MagicMock(return_value=[{"id": 1, "xnat": [{"name": "dcm2niix"}]}]),
+    )
+    mock_put.return_value = MagicMock(status_code=200)
+
+    set_project_command_enabled("TEST", "xnat/dcm2niix:latest", headers, enabled=True)
+
+    mock_put.assert_called_once()
+    assert "/commands/1/wrappers/dcm2niix/enabled" in mock_put.call_args[0][0]
+
+
+@patch("imaging_api.services.projects.requests.put")
+@patch("imaging_api.services.projects.requests.get")
+def test_set_project_command_disabled_success(mock_get, mock_put, headers):
+    mock_get.return_value = MagicMock(
+        status_code=200,
+        json=MagicMock(return_value=[{"id": 1, "xnat": [{"name": "dcm2niix"}]}]),
+    )
+    mock_put.return_value = MagicMock(status_code=200)
+
+    set_project_command_enabled("TEST", "xnat/dcm2niix:latest", headers, enabled=False)
+
+    mock_put.assert_called_once()
+    assert "/commands/1/wrappers/dcm2niix/disabled" in mock_put.call_args[0][0]
+
+
+@patch("imaging_api.services.projects.requests.get")
+def test_set_project_command_enabled_fetch_failure(mock_get, headers):
+    mock_get.return_value = MagicMock(status_code=500, text="Internal Server Error")
+
+    with pytest.raises(Exception, match="XNAT command fetch failed"):
+        set_project_command_enabled("TEST", "xnat/dcm2niix:latest", headers, enabled=True)
+
+
+@patch("imaging_api.services.projects.requests.put")
+@patch("imaging_api.services.projects.requests.get")
+def test_set_project_command_enabled_put_failure(mock_get, mock_put, headers):
+    mock_get.return_value = MagicMock(
+        status_code=200,
+        json=MagicMock(return_value=[{"id": 1, "xnat": [{"name": "dcm2niix"}]}]),
+    )
+    mock_put.return_value = MagicMock(status_code=500, text="Internal Server Error")
+
+    with pytest.raises(Exception, match="Enabled XNAT command"):
+        set_project_command_enabled("TEST", "xnat/dcm2niix:latest", headers, enabled=True)

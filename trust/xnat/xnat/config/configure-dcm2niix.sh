@@ -90,14 +90,15 @@ echo "Command ID: $CMD_ID"
 dcm2niix_wrapper_name=$(echo "$RESPONSE" | jq -r '.[0].xnat[0].name')
 echo "Wrapper Name: $dcm2niix_wrapper_name"
 
-# Enable the dcm2niix command
+# Enable the dcm2niix command at the site level (makes it available for per-project use)
+# See https://wiki.xnat.org/container-service/container-service-api for more details
 echo "Enabling $DCM2NIIX_NAME command..."
 curl -s -X PUT "$XNAT_URL/xapi/commands/$CMD_ID/wrappers/$dcm2niix_wrapper_name/enabled" \
   -u "${XNAT_ADMIN_USER}:${XNAT_ADMIN_PASSWORD}"
 
-# Keep in mind that this does not enable the command at the project level
-# This should be done in the imaging-api when a project is created
-# But I think the default is that it will be enabled at the project level
+# Note: this only enables the command site-wide so it can be toggled per-project.
+# The per-project enable is done in the imaging-api when a project is created,
+# controlled by the dicom_to_nifti flag.
 
 # Replace ${CMD_ID} in the file and store in a variable
 dcm2niix_event=$(sed "s/\${CMD_ID}/$CMD_ID/g" dcm2niix_event.json)

@@ -241,39 +241,42 @@ def set_project_prearchive_settings(project_id: str, headers: dict[str, str]) ->
         )
 
 
-def enable_project_command(project_id: str, container: str, headers: dict[str, str]) -> None:
+def set_project_command_enabled(project_id: str, container: str, headers: dict[str, str], *, enabled: bool) -> None:
     """
-    Enables a command for a specific project in XNAT.
+    Enables or disables a command for a specific project in XNAT.
 
     Args:
         project_id (str): Unique identifier for the project
         container (str): Name of the command container. For example, for dcm2niix command, "xnat/dcm2niix:latest".
         headers (dict[str, str]): XNAT authentication headers
+        enabled (bool): If True, enable the command; if False, disable it
 
     Returns:
         None
 
     Raises:
-        Exception: If there is an error during the process of enabling the command for the project.
+        Exception: If there is an error during the process of enabling/disabling the command for the project.
     """
     container_name_formatted = urllib.parse.quote(container)
     response = requests.get(f"{XNAT_URL}/xapi/commands?image={container_name_formatted}", headers=headers)
     if response.status_code != 200:
         raise Exception(f"Error: XNAT command fetch failed: {response.status_code} - {response.text}")
 
-    # Now use put request to enable the dcm2niix command for the project
     command = response.json()[0]
     command_id = command["id"]
     command_xnat_name = command["xnat"][0]["name"]
 
+    action = "enabled" if enabled else "disabled"
     response = requests.put(
-        f"{XNAT_URL}/xapi/projects/{project_id}/commands/{command_id}/wrappers/{command_xnat_name}/enabled",
+        f"{XNAT_URL}/xapi/projects/{project_id}/commands/{command_id}/wrappers/{command_xnat_name}/{action}",
         headers=headers,
     )
     if response.status_code == 200:
-        logger.info(f"Command '{container}' enabled for project '{project_id}'")
+        logger.info(f"Command '{container}' {action} for project '{project_id}'")
     else:
-        raise Exception(f"Error: Enabling XNAT command '{container}' failed: {response.status_code} - {response.text}")
+        raise Exception(
+            f"Error: {action.capitalize()} XNAT command '{container}' failed: {response.status_code} - {response.text}"
+        )
 
 
 def add_central_hub_users_to_project(
