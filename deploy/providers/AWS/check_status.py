@@ -226,8 +226,8 @@ def run_ssh_command(ssh_key: str, host: str, command: str, timeout: int = 10) ->
 def check_elastic_ip_stability(
     central_hub_id: str,
     central_hub_eip: str,
-    trust_id: Optional[str],
-    trust_eip: Optional[str],
+    trust_id: str | None,
+    trust_eip: str | None,
 ) -> bool:
     """Verify Elastic IP stability and correct instance association.
 
@@ -452,7 +452,7 @@ def check_endpoint_rejects_insecure_ssh(
 def check_endpoint_blocked_from_ssh(
     host: str,
     endpoint: str,
-    allowed_source_ip: Optional[str] = None,
+    allowed_source_ip: str | None = None,
     connect_timeout: int = 5,
 ) -> bool:
     """Verify that an endpoint is unreachable from a remote host (firewall enforcement).
@@ -500,17 +500,12 @@ def check_endpoint_blocked_from_ssh(
             )
             return True
 
-    command = (
-        f"curl -sk --connect-timeout {connect_timeout} "
-        f"-o /dev/null -w '%{{http_code}}' {endpoint}"
-    )
+    command = f"curl -sk --connect-timeout {connect_timeout} -o /dev/null -w '%{{http_code}}' {endpoint}"
     print_status(
         "INFO",
         f"SECURITY: Verifying {endpoint} is blocked from {host} (firewall enforcement)...",
     )
-    success, output = run_ssh_command(
-        ssh_key="", host=host, command=command, timeout=connect_timeout + 5
-    )
+    success, output = run_ssh_command(ssh_key="", host=host, command=command, timeout=connect_timeout + 5)
 
     if success and output.strip() == "200":
         print_status(
@@ -1060,9 +1055,7 @@ def main(
         if local_trust_ip:
             print_section("Local Trust Checks")
 
-            _local_trust_ca = str(
-                Path(__file__).parent.parents[2] / "trust" / "certs" / "local-trust-ca.crt"
-            )
+            _local_trust_ca = str(Path(__file__).parent.parents[2] / "trust" / "certs" / "local-trust-ca.crt")
 
             # 1. Verify local trust health endpoint is reachable from this machine
             check_http_endpoint(
