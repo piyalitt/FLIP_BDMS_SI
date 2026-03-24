@@ -68,7 +68,7 @@ class Settings(BaseSettings):
 
     # Variables used during database seeding
     NET_ENDPOINTS: dict[str, str]
-    TRUST_NAMES: list[str] = ["Trust_1", "Trust_2"]  # Allowlist of trust names to seed
+    TRUST_NAMES: list[str]
 
     # FL settings
     FL_BACKEND: Literal["nvflare", "flower"] = "nvflare"
