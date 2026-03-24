@@ -10,9 +10,19 @@
 # limitations under the License.
 #
 
-You have been added to project {{project_name}} (ID: {{project_id}}) at trust {{trust_name}}.
+FLIP - Federated Learning & Interoperability Platform
 
-Your XNAT username is: {{username}}
+Hello,
+
+You have been added to an XNAT project at trust {{trust_name}}.
+
+Project details:
+  Project: {{project_name}} (ID: {{project_id}})
+  Username: {{username}}
+
 You can log in with your existing XNAT credentials.
 
-This is an automated message. Please do not reply.
+This is an automated message. Please do not reply to this email. This message may contain confidential information. If you are not the intended recipient, please do not disclose, copy, or distribute it.
+
+The FLIP Team
+Federated Learning and Interoperability Platform
