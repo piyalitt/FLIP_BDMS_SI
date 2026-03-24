@@ -429,7 +429,6 @@ async def test_dicom_to_nifti_false_forwarded_to_trust(
     # Verify the POST body includes dicom_to_nifti=False
     post_call = mock_trust_client.__aenter__.return_value.post
     call_kwargs = post_call.call_args
-    import json
 
     body = call_kwargs.kwargs.get("json", {})
     assert body["dicom_to_nifti"] is False
