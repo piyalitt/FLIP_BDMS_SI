@@ -25,13 +25,13 @@ from imaging_api.routers.schemas import (
 from imaging_api.services.projects import (
     add_central_hub_users_to_project,
     create_project,
+    create_project_event_subscription,
     delete_project,
     get_all_projects,
     get_experiment,
     get_experiments,
     get_project,
     get_subjects,
-    set_project_command_enabled,
     set_project_prearchive_settings,
     to_create_project,
 )
@@ -146,11 +146,11 @@ async def create_project_from_central_hub_project(
     # Set the project pre-archive settings
     set_project_prearchive_settings(project.ID, headers)
 
-    # Enable or disable dcm2niix command at the project level
-    set_project_command_enabled(project.ID, "xnat/dcm2niix:latest", central_hub_project.dicom_to_nifti, headers)
-
-    # TODO We may want to enable/disable more commands here in the future, e.g. quality control (QC)
-    # ...
+    # Create a project-scoped event subscription for automatic DICOM-to-NIfTI conversion
+    # Active when dicom_to_nifti=True, deactivated when False (can be toggled later via XNAT API)
+    create_project_event_subscription(
+        project.ID, "xnat/dcm2niix:latest", central_hub_project.dicom_to_nifti, headers
+    )
 
     # Add central hub users to imaging project
     # Will create XNAT users if they do not exist, and add them to the XNAT project

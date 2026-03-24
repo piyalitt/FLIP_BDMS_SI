@@ -241,21 +241,19 @@ def set_project_prearchive_settings(project_id: str, headers: dict[str, str]) ->
         )
 
 
-def set_project_command_enabled(project_id: str, container: str, enabled: bool, headers: dict[str, str]) -> None:
+def get_command_info(container: str, headers: dict[str, str]) -> tuple[int, str]:
     """
-    Enables or disables a command for a specific project in XNAT.
+    Fetches the XNAT command ID and wrapper name for a given container image.
 
     Args:
-        project_id (str): Unique identifier for the project
-        container (str): Name of the command container. For example, for dcm2niix command, "xnat/dcm2niix:latest".
-        enabled (bool): If True, enable the command; if False, disable it
-        headers (dict[str, str]): XNAT authentication headers
+        container (str): Container image name, e.g. "xnat/dcm2niix:latest".
+        headers (dict[str, str]): XNAT authentication headers.
 
     Returns:
-        None
+        tuple[int, str]: A tuple of (command_id, wrapper_name).
 
     Raises:
-        Exception: If there is an error during the process of enabling/disabling the command for the project.
+        Exception: If the command cannot be fetched from XNAT.
     """
     container_name_formatted = urllib.parse.quote(container)
     response = requests.get(f"{XNAT_URL}/xapi/commands?image={container_name_formatted}", headers=headers)
@@ -263,19 +261,56 @@ def set_project_command_enabled(project_id: str, container: str, enabled: bool, 
         raise Exception(f"Error: XNAT command fetch failed: {response.status_code} - {response.text}")
 
     command = response.json()[0]
-    command_id = command["id"]
-    command_xnat_name = command["xnat"][0]["name"]
+    return command["id"], command["xnat"][0]["name"]
 
-    action = "enabled" if enabled else "disabled"
-    response = requests.put(
-        f"{XNAT_URL}/xapi/projects/{project_id}/commands/{command_id}/wrappers/{command_xnat_name}/{action}",
+
+def create_project_event_subscription(
+    project_id: str, container: str, active: bool, headers: dict[str, str]
+) -> None:
+    """
+    Creates a project-scoped event subscription in XNAT that auto-triggers a command on scan upload.
+
+    The subscription listens for ScanEvent:CREATED events within the specified project and triggers
+    the given container command when a scan with DICOM resources is created. The active flag controls
+    whether the subscription is enabled or deactivated on creation.
+
+    Args:
+        project_id (str): XNAT project ID to scope the subscription to.
+        container (str): Container image name, e.g. "xnat/dcm2niix:latest".
+        headers (dict[str, str]): XNAT authentication headers.
+        active (bool): If True, the subscription is active immediately. If False, it is created
+            but deactivated (can be toggled later via the XNAT API).
+
+    Raises:
+        Exception: If the subscription creation fails.
+    """
+    command_id, _ = get_command_info(container, headers)
+
+    subscription_payload = {
+        "name": "DICOM-NIfTI Conversion",
+        "event-selector": "org.nrg.xnat.eventservice.events.ScanEvent:CREATED",
+        "action-key": f"org.nrg.containers.services.CommandActionProvider:{command_id}",
+        "attributes": {},
+        "active": active,
+        "event-filter": {
+            "event-type": "org.nrg.xnat.eventservice.events.ScanEvent",
+            "status": "CREATED",
+            "payload-filter": '(@.resources.length() > 0 && "DICOM" in @.resources[*].label)',
+        },
+        "act-as-event-user": False,
+    }
+
+    response = requests.post(
+        f"{XNAT_URL}/xapi/projects/{project_id}/events/subscription",
         headers=headers,
+        json=subscription_payload,
     )
     if response.status_code == 200:
-        logger.info(f"Command '{container}' {action} for project '{project_id}'")
+        state = "active" if active else "inactive"
+        logger.info(f"Event subscription for '{container}' created ({state}) for project '{project_id}'")
     else:
         raise Exception(
-            f"Error: {action.capitalize()} XNAT command '{container}' failed: {response.status_code} - {response.text}"
+            f"Error: Creating event subscription for '{container}' failed: {response.status_code} - {response.text}"
         )
 
 

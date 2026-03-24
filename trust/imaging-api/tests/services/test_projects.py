@@ -21,16 +21,17 @@ from imaging_api.services.projects import (
     add_central_hub_users_to_project,
     create_payload_for_project_creation,
     create_project,
+    create_project_event_subscription,
     delete_project,
     delete_queued_import_requests,
     get_all_projects,
+    get_command_info,
     get_experiment,
     get_experiments,
     get_project,
     get_project_from_central_hub_project_id,
     get_subject_id_from_experiment_response,
     get_subjects,
-    set_project_command_enabled,
     set_project_prearchive_settings,
     to_create_project,
 )
@@ -223,59 +224,69 @@ def test_set_project_prearchive_settings_failure(mock_put, headers):
 
 
 # ===========================================================================
-# set_project_command_enabled
+# get_command_info
 # ===========================================================================
-
-
-@patch("imaging_api.services.projects.requests.put")
 @patch("imaging_api.services.projects.requests.get")
-def test_set_project_command_enabled_success(mock_get, mock_put, headers):
+def test_get_command_info_success(mock_get, headers):
     mock_get.return_value = MagicMock(
         status_code=200,
-        json=MagicMock(return_value=[{"id": 1, "xnat": [{"name": "dcm2niix"}]}]),
+        json=MagicMock(return_value=[{"id": 1, "xnat": [{"name": "dcm2niix-scan"}]}]),
     )
-    mock_put.return_value = MagicMock(status_code=200)
 
-    set_project_command_enabled("TEST", "xnat/dcm2niix:latest", True, headers)
+    command_id, wrapper_name = get_command_info("xnat/dcm2niix:latest", headers)
 
-    mock_put.assert_called_once()
-    assert "/commands/1/wrappers/dcm2niix/enabled" in mock_put.call_args[0][0]
-
-
-@patch("imaging_api.services.projects.requests.put")
-@patch("imaging_api.services.projects.requests.get")
-def test_set_project_command_disabled_success(mock_get, mock_put, headers):
-    mock_get.return_value = MagicMock(
-        status_code=200,
-        json=MagicMock(return_value=[{"id": 1, "xnat": [{"name": "dcm2niix"}]}]),
-    )
-    mock_put.return_value = MagicMock(status_code=200)
-
-    set_project_command_enabled("TEST", "xnat/dcm2niix:latest", False, headers)
-
-    mock_put.assert_called_once()
-    assert "/commands/1/wrappers/dcm2niix/disabled" in mock_put.call_args[0][0]
+    assert command_id == 1
+    assert wrapper_name == "dcm2niix-scan"
 
 
 @patch("imaging_api.services.projects.requests.get")
-def test_set_project_command_enabled_fetch_failure(mock_get, headers):
+def test_get_command_info_fetch_failure(mock_get, headers):
     mock_get.return_value = MagicMock(status_code=500, text="Internal Server Error")
 
     with pytest.raises(Exception, match="XNAT command fetch failed"):
-        set_project_command_enabled("TEST", "xnat/dcm2niix:latest", True, headers)
+        get_command_info("xnat/dcm2niix:latest", headers)
 
 
-@patch("imaging_api.services.projects.requests.put")
-@patch("imaging_api.services.projects.requests.get")
-def test_set_project_command_enabled_put_failure(mock_get, mock_put, headers):
-    mock_get.return_value = MagicMock(
-        status_code=200,
-        json=MagicMock(return_value=[{"id": 1, "xnat": [{"name": "dcm2niix"}]}]),
-    )
-    mock_put.return_value = MagicMock(status_code=500, text="Internal Server Error")
+# ===========================================================================
+# create_project_event_subscription
+# ===========================================================================
+@patch("imaging_api.services.projects.requests.post")
+@patch("imaging_api.services.projects.get_command_info")
+def test_create_project_event_subscription_active(mock_cmd_info, mock_post, headers):
+    mock_cmd_info.return_value = (1, "dcm2niix-scan")
+    mock_post.return_value = MagicMock(status_code=200)
 
-    with pytest.raises(Exception, match="Enabled XNAT command"):
-        set_project_command_enabled("TEST", "xnat/dcm2niix:latest", True, headers)
+    create_project_event_subscription("TEST", "xnat/dcm2niix:latest", True, headers)
+
+    mock_post.assert_called_once()
+    call_url = mock_post.call_args[0][0]
+    call_payload = mock_post.call_args[1]["json"]
+    assert "/xapi/projects/TEST/events/subscription" in call_url
+    assert call_payload["active"] is True
+    assert "CommandActionProvider:1" in call_payload["action-key"]
+
+
+@patch("imaging_api.services.projects.requests.post")
+@patch("imaging_api.services.projects.get_command_info")
+def test_create_project_event_subscription_inactive(mock_cmd_info, mock_post, headers):
+    mock_cmd_info.return_value = (1, "dcm2niix-scan")
+    mock_post.return_value = MagicMock(status_code=200)
+
+    create_project_event_subscription("TEST", "xnat/dcm2niix:latest", False, headers)
+
+    mock_post.assert_called_once()
+    call_payload = mock_post.call_args[1]["json"]
+    assert call_payload["active"] is False
+
+
+@patch("imaging_api.services.projects.requests.post")
+@patch("imaging_api.services.projects.get_command_info")
+def test_create_project_event_subscription_failure(mock_cmd_info, mock_post, headers):
+    mock_cmd_info.return_value = (1, "dcm2niix-scan")
+    mock_post.return_value = MagicMock(status_code=500, text="Internal Server Error")
+
+    with pytest.raises(Exception, match="Creating event subscription"):
+        create_project_event_subscription("TEST", "xnat/dcm2niix:latest", True, headers)
 
 
 # ===========================================================================
