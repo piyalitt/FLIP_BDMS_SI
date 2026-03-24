@@ -32,6 +32,27 @@ from flip_api.trusts_services.services.trust import get_trusts
 from flip_api.utils.logger import logger
 
 
+def has_pending_imaging_tasks(project_id: UUID, db: Session) -> bool:
+    """Check if any CREATE_IMAGING tasks for this project are still pending or in progress.
+
+    Used to distinguish the transient "tasks not yet executed" state from genuine failure
+    when no XNATProjectStatus records exist after project approval.
+
+    Args:
+        project_id: The project to check.
+        db: Database session.
+
+    Returns:
+        True if at least one CREATE_IMAGING task for this project is PENDING or IN_PROGRESS.
+    """
+    tasks = db.exec(
+        select(TrustTask)
+        .where(TrustTask.task_type == TaskType.CREATE_IMAGING)
+        .where(col(TrustTask.status).in_([TaskStatus.PENDING, TaskStatus.IN_PROGRESS]))
+    ).all()
+    return any(json.loads(t.payload).get("project_id") == str(project_id) for t in tasks)
+
+
 def to_utc_aware(dt: datetime | None) -> datetime:
     """Convert a datetime to a timezone-aware UTC datetime. If the input is None, returns the minimum datetime."""
     if dt is None:

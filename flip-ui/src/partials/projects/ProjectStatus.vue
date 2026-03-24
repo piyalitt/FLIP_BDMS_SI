@@ -142,8 +142,8 @@
                                             <AiAlert
                                                 v-if="!project.importStatus && project.projectCreationCompleted"
                                                 :data-test="`import-status-warning-${project.trustId}`"
-                                                variant="warning"
-                                                text="Something went wrong when retrieving the study import status."
+                                                variant="info"
+                                                text="Awaiting study import status from trust."
                                             />
                                         </div>
                                     </div>
@@ -151,8 +151,9 @@
                             </ul>
                             <template v-if="canLoad">
                                 <div v-if="sortedData?.length === 0" class="flex flex-row items-center h-full">
-                                    <p class="flex-1 text-center" data-test="no-project-status-message">
-                                        There are no trusts to display
+                                    <p class="flex items-center justify-center gap-2 flex-1 text-center" data-test="no-project-status-message">
+                                        <icon-heroicons-outline-clock class="w-5 h-5" />
+                                        Awaiting imaging project creation from trusts…
                                     </p>
                                 </div>
                             </template>
@@ -223,7 +224,7 @@
 </template>
 
 <script setup lang="ts">
-import { ExclamationCircleIcon,RefreshIcon } from "@heroicons/vue/solid";
+import { ExclamationCircleIcon, RefreshIcon } from "@heroicons/vue/solid";
 import useSWRV from "swrv";
 import { sortBy } from "underscore";
 import { computed, ref, watch } from "vue";
@@ -261,13 +262,18 @@ const { data, error } = useSWRV(
     },
     getImagingProjectsStatus,
     {
-        refreshInterval: 60_000,
+        refreshInterval: 10_000,
         dedupingInterval: 5_000,
         shouldRetryOnError: false
     }
 );
 
 useErrorHandler(error);
+
+watch(() => route.params.projectId, () => {
+    data.value = undefined;
+    sortedData.value = undefined;
+});
 
 watch([data, search], () => {
     sortedData.value = sortBy(

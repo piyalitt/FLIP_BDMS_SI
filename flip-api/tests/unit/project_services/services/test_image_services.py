@@ -35,6 +35,7 @@ from flip_api.project_services.services.image_service import (
     get_imaging_project_statuses,
     get_imaging_projects,
     get_xnat_project_status_info,
+    has_pending_imaging_tasks,
     reimport_failed_studies,
     update_xnat_user_profile,
 )
@@ -203,9 +204,7 @@ class TestGetImagingProjectStatuses:
 
         mock_get_xnat_status.side_effect = [
             XnatProjectStatusInfo(retrieve_image_status=XNATImageStatus.CREATED, reimport_count=0),
-            XnatProjectStatusInfo(
-                retrieve_image_status=XNATImageStatus.RETRIEVE_COMPLETED, reimport_count=1
-            ),
+            XnatProjectStatusInfo(retrieve_image_status=XNATImageStatus.RETRIEVE_COMPLETED, reimport_count=1),
         ]
 
         mock_get_latest_status.return_value = None
@@ -523,6 +522,51 @@ class TestGetLatestImagingStatus:
 
         assert result is not None
         assert result.successful_count == 5
+
+
+class TestHasPendingImagingTasks:
+    def test_returns_true_when_pending_task_exists(self, mock_db_session: MagicMock):
+        """Should return True when a PENDING CREATE_IMAGING task matches the project."""
+        project_id = uuid4()
+        mock_task = MagicMock()
+        mock_task.payload = json.dumps({"project_id": str(project_id), "trust_id": str(uuid4())})
+        mock_db_session.exec.return_value.all.return_value = [mock_task]
+
+        assert has_pending_imaging_tasks(project_id, mock_db_session) is True
+
+    def test_returns_true_when_in_progress_task_exists(self, mock_db_session: MagicMock):
+        """Should return True when an IN_PROGRESS CREATE_IMAGING task matches the project."""
+        project_id = uuid4()
+        mock_task = MagicMock()
+        mock_task.payload = json.dumps({"project_id": str(project_id)})
+        mock_db_session.exec.return_value.all.return_value = [mock_task]
+
+        assert has_pending_imaging_tasks(project_id, mock_db_session) is True
+
+    def test_returns_false_when_no_tasks(self, mock_db_session: MagicMock):
+        """Should return False when no pending/in-progress CREATE_IMAGING tasks exist."""
+        mock_db_session.exec.return_value.all.return_value = []
+
+        assert has_pending_imaging_tasks(uuid4(), mock_db_session) is False
+
+    def test_returns_false_when_tasks_for_different_project(self, mock_db_session: MagicMock):
+        """Should return False when tasks exist but for a different project."""
+        project_id = uuid4()
+        other_project_id = uuid4()
+        mock_task = MagicMock()
+        mock_task.payload = json.dumps({"project_id": str(other_project_id)})
+        mock_db_session.exec.return_value.all.return_value = [mock_task]
+
+        assert has_pending_imaging_tasks(project_id, mock_db_session) is False
+
+    def test_handles_malformed_payload(self, mock_db_session: MagicMock):
+        """Should return False when task payload is malformed JSON."""
+        mock_task = MagicMock()
+        mock_task.payload = "not valid json"
+        mock_db_session.exec.return_value.all.return_value = [mock_task]
+
+        with pytest.raises(json.JSONDecodeError):
+            has_pending_imaging_tasks(uuid4(), mock_db_session)
 
 
 class TestGetImagingProjectStatusesEdgeCases:
