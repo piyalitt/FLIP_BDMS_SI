@@ -521,6 +521,7 @@ class TestGetLatestImagingStatus:
     def test_returns_parsed_status(self, mock_db_session: MagicMock):
         """Should parse import status from completed task result."""
         trust_id = uuid4()
+        xnat_project_id = uuid4()
         mock_task = MagicMock()
         mock_task.result = json.dumps({
             "import_status": {
@@ -533,7 +534,7 @@ class TestGetLatestImagingStatus:
         })
         mock_db_session.exec.return_value.first.return_value = mock_task
 
-        result = _get_latest_imaging_status(trust_id, mock_db_session)
+        result = _get_latest_imaging_status(trust_id, xnat_project_id, mock_db_session)
 
         assert result is not None
         assert result.successful_count == 10
@@ -546,7 +547,7 @@ class TestGetLatestImagingStatus:
         """Should return None when no completed task exists."""
         mock_db_session.exec.return_value.first.return_value = None
 
-        result = _get_latest_imaging_status(uuid4(), mock_db_session)
+        result = _get_latest_imaging_status(uuid4(), uuid4(), mock_db_session)
 
         assert result is None
 
@@ -556,7 +557,7 @@ class TestGetLatestImagingStatus:
         mock_task.result = None
         mock_db_session.exec.return_value.first.return_value = mock_task
 
-        result = _get_latest_imaging_status(uuid4(), mock_db_session)
+        result = _get_latest_imaging_status(uuid4(), uuid4(), mock_db_session)
 
         assert result is None
 
@@ -566,7 +567,7 @@ class TestGetLatestImagingStatus:
         mock_task.result = "not valid json"
         mock_db_session.exec.return_value.first.return_value = mock_task
 
-        result = _get_latest_imaging_status(uuid4(), mock_db_session)
+        result = _get_latest_imaging_status(uuid4(), uuid4(), mock_db_session)
 
         assert result is None
 
@@ -582,7 +583,7 @@ class TestGetLatestImagingStatus:
         })
         mock_db_session.exec.return_value.first.return_value = mock_task
 
-        result = _get_latest_imaging_status(uuid4(), mock_db_session)
+        result = _get_latest_imaging_status(uuid4(), uuid4(), mock_db_session)
 
         assert result is not None
         assert result.successful_count == 5

@@ -199,21 +199,23 @@ def get_xnat_project_status_info(xnat_project_id: UUID, db: Session) -> XnatProj
         raise
 
 
-def _get_latest_imaging_status(trust_id: UUID, db: Session) -> IImagingImportStatus | None:
-    """Look up the most recent completed GET_IMAGING_STATUS task result for a trust.
+def _get_latest_imaging_status(trust_id: UUID, xnat_project_id: UUID, db: Session) -> IImagingImportStatus | None:
+    """Look up the most recent completed GET_IMAGING_STATUS task result for a trust and XNAT project.
 
     Args:
-        trust_id: The trust to look up.
-        db: Database session.
+        trust_id (UUID): The trust to look up.
+        xnat_project_id (UUID): The XNAT project ID to filter by (stored in task payload).
+        db (Session): Database session.
 
     Returns:
-        Parsed import status counts, or None if no completed result exists.
+        IImagingImportStatus | None: Parsed import status counts, or None if no completed result exists.
     """
     latest_task = db.exec(
         select(TrustTask)
         .where(TrustTask.trust_id == trust_id)
         .where(TrustTask.task_type == TaskType.GET_IMAGING_STATUS)
         .where(TrustTask.status == TaskStatus.COMPLETED)
+        .where(col(TrustTask.payload).contains(str(xnat_project_id)))
         .order_by(col(TrustTask.updated_at).desc())
         .limit(1)
     ).first()
@@ -272,8 +274,8 @@ def get_imaging_project_statuses(
                 project_creation_completed = xnat_status_info.retrieve_image_status == XNATImageStatus.CREATED
                 reimport_count_val = xnat_status_info.reimport_count
 
-            # Look up the latest completed status result for this trust
-            import_status = _get_latest_imaging_status(row_project.trust_id, db)
+            # Look up the latest completed status result for this trust and XNAT project
+            import_status = _get_latest_imaging_status(row_project.trust_id, row_project.xnat_project_id, db)
 
             # Queue a status refresh task only if one isn't already pending or in progress
             existing_task = db.exec(
