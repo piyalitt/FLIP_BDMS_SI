@@ -18,19 +18,19 @@
 [![trust-api](https://ghcr-badge.egpl.dev/londonaicentre/trust-api/latest_tag?trim=major&label=trust-api)](https://github.com/londonaicentre/FLIP/pkgs/container/trust-api)
 [![Coverage](https://codecov.io/gh/londonaicentre/FLIP/branch/main/graph/badge.svg?flag=trust-api)](https://codecov.io/gh/londonaicentre/FLIP)
 
-The **trust-api** is the gateway service deployed at each participating healthcare Trust site. It receives requests
-from the FLIP Central Hub and coordinates local operations — cohort queries, model training, and imaging project
+The **trust-api** is the gateway service deployed at each participating healthcare Trust site. It polls the FLIP
+Central Hub for tasks and coordinates local operations — cohort queries, model training, and imaging project
 management — without exposing patient data externally.
 
 ## Role in the FLIP Platform
 
 The trust-api acts as the local orchestrator at each Trust:
 
-1. **Cohort queries** — receives OMOP SQL queries from the Central Hub, delegates to [data-access-api](../data-access-api/), and returns aggregated statistics
+1. **Cohort queries** — polls for and executes OMOP SQL queries from the Central Hub, delegates to [data-access-api](../data-access-api/), and returns aggregated statistics
 2. **Imaging projects** — creates projects in XNAT via [imaging-api](../imaging-api/) in response to approved FL studies
 3. **Audit** — logs all operations locally for governance purposes
 
-The trust-api is only called by the [flip-api](../../flip-api/) (Central Hub). It does not expose an external user interface.
+The trust-api polls the [flip-api](../../flip-api/) (Central Hub) for tasks. It does not accept inbound requests from the hub or expose an external user interface.
 
 ## Deployment
 
@@ -62,8 +62,9 @@ Key environment variables (set in [`.env.development.example`](../../.env.develo
 | `TRUST_NAME` | Name of this Trust instance (must match `Trust.name` in hub DB, e.g. `Trust_1`) |
 | `DATA_ACCESS_API_URL` | Internal URL of the data-access-api |
 | `IMAGING_API_URL` | Internal URL of the imaging-api |
-| `FLIP_API_URL` | URL of the Central Hub API (for callbacks) |
-| `ENCRYPTION_KEY` | Shared key for decrypting project identifiers |
+| `FLIP_API_URL` | URL of the Central Hub API (for task polling) |
+| `AES_KEY_BASE64` | Base64-encoded AES-256 key for decrypting task payloads |
+| `PRIVATE_API_KEY` | Secret key for authenticating with the Central Hub |
 
 ## Scaling Assumptions
 

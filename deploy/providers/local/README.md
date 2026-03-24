@@ -20,22 +20,21 @@ This is the **local provider** counterpart to the [AWS provider](../AWS/README.m
 ## Architecture
 
 ```sh
-        Internet
-            │
-            ▼
-     ┌──────────┐
-     │ AWS CH    │
-     │ (Central  │
-     │  Hub)     │
-     └────▲──▲──┘
-          │  │
-   polls  │  │  polls
-  (HTTPS) │  │ (HTTPS)
-          │  │
-     ┌────┴──┘──┐       ┌──────────┐
-     │ Trust A   │       │ Trust B  │
-     │ (AWS EC2) │       │ (local)  │
-     └──────────┘       └─────────┘
+         Internet
+             │
+             ▼
+     ┌───────────────┐
+     │    AWS CH      │
+     │  (Central Hub) │
+     └───▲───────▲───┘
+         │       │
+  polls  │       │  polls
+ (HTTPS) │       │ (HTTPS)
+         │       │
+  ┌──────┴───┐ ┌─┴─────────┐
+  │ Trust A   │ │  Trust B   │
+  │ (AWS EC2) │ │  (local)   │
+  └──────────┘ └───────────┘
 
   Trusts poll the hub (outbound only)
 ```
@@ -80,7 +79,7 @@ cd deploy/providers/AWS
 make full-deploy-stag-hybrid LOCAL_TRUST_IP=<public-ip> [LOCAL_TRUST_SSH_KEY=~/.ssh/trust_key]
 ```
 
-This wrapper target runs the full AWS + local trust provisioning pipeline, updates `Trust_1-endpoint` in `FLIP_API`, and redeploys Central Hub so the new secret values are loaded.
+This wrapper target runs the full AWS + local trust provisioning pipeline, updates the trust configuration in AWS Secrets Manager (`PRIVATE_API_KEY`, `AES_KEY_BASE64`), and redeploys Central Hub so the new secret values are loaded.
 You still need to start the local trust stack on the trust host:
 
 ```bash
