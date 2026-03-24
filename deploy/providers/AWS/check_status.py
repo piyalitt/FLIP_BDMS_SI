@@ -812,9 +812,9 @@ def main(
         if trust_ip:
             print_status("INFO", "Checking Trust EC2 service endpoints...")
 
-            # Trust API is exposed directly (no nginx-tls — all hub communication is outbound polling)
+            # Trust API health via SSH tunnel (trust API port is not exposed to the internet;
+            # all hub communication is outbound polling from the trust)
             check_endpoint_over_ssh("flip-trust", f"http://localhost:{TRUST_API_PORT}/health", 200)
-            check_http_endpoint(f"http://{trust_ip}:{TRUST_API_PORT}/health", "Trust API Health", 200)
 
             # Check XNAT is reachable
             check_http_endpoint(f"http://{trust_ip}:{XNAT_PORT}", "XNAT Service", 200)

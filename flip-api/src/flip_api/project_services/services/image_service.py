@@ -49,8 +49,15 @@ def has_pending_imaging_tasks(project_id: UUID, db: Session) -> bool:
         select(TrustTask)
         .where(TrustTask.task_type == TaskType.CREATE_IMAGING)
         .where(col(TrustTask.status).in_([TaskStatus.PENDING, TaskStatus.IN_PROGRESS]))
+        .where(col(TrustTask.payload).contains(str(project_id)))
     ).all()
-    return any(json.loads(t.payload).get("project_id") == str(project_id) for t in tasks)
+    for t in tasks:
+        try:
+            if json.loads(t.payload).get("project_id") == str(project_id):
+                return True
+        except (json.JSONDecodeError, AttributeError):
+            continue
+    return False
 
 
 def to_utc_aware(dt: datetime | None) -> datetime:
@@ -215,6 +222,7 @@ def _get_latest_imaging_status(trust_id: UUID, xnat_project_id: UUID, db: Sessio
         .where(TrustTask.trust_id == trust_id)
         .where(TrustTask.task_type == TaskType.GET_IMAGING_STATUS)
         .where(TrustTask.status == TaskStatus.COMPLETED)
+        # Substring match on JSON payload; safe since UUID v4 strings are unique
         .where(col(TrustTask.payload).contains(str(xnat_project_id)))
         .order_by(col(TrustTask.updated_at).desc())
         .limit(1)
@@ -277,12 +285,13 @@ def get_imaging_project_statuses(
             # Look up the latest completed status result for this trust and XNAT project
             import_status = _get_latest_imaging_status(row_project.trust_id, row_project.xnat_project_id, db)
 
-            # Queue a status refresh task only if one isn't already pending or in progress
+            # Queue a status refresh task only if one isn't already pending or in progress for this XNAT project
             existing_task = db.exec(
                 select(TrustTask)
                 .where(TrustTask.trust_id == row_project.trust_id)
                 .where(TrustTask.task_type == TaskType.GET_IMAGING_STATUS)
                 .where(col(TrustTask.status).in_([TaskStatus.PENDING, TaskStatus.IN_PROGRESS]))
+                .where(col(TrustTask.payload).contains(str(row_project.xnat_project_id)))
             ).first()
             if not existing_task:
                 task = TrustTask(

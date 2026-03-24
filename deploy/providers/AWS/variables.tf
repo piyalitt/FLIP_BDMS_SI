@@ -148,11 +148,6 @@ variable "SES_VERIFIED_EMAIL" {
   type        = string
 }
 
-variable "TRUST_API_PORT" {
-  description = "Port for Trust API"
-  type        = number
-}
-
 variable "XNAT_PORT" {
   description = "Port for XNAT service"
   type        = number

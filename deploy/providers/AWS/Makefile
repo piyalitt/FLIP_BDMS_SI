@@ -54,7 +54,6 @@ export TF_VAR_UI_PORT=${UI_PORT}
 export TF_VAR_API_PORT=${API_PORT}
 export TF_VAR_FL_API_PORT=${FL_API_PORT}
 export TF_VAR_FL_SERVER_PORT=${FL_SERVER_PORT}
-export TF_VAR_TRUST_API_PORT=${TRUST_API_PORT}
 export TF_VAR_XNAT_PORT=${XNAT_PORT_TRUST_1}
 export TF_VAR_PACS_UI_PORT=${PACS_UI_PORT_TRUST_1}
 export TF_VAR_AWS_REGION=${AWS_REGION}
@@ -302,8 +301,7 @@ add-local-trust: ## Provision an on-prem Trust host via Ansible and register it 
 			--private-key "$(LOCAL_TRUST_SSH_KEY)" \
 			../../../deploy/providers/local/site_local_trust.yml \
 			-e trust_public_ip=$(LOCAL_TRUST_IP) \
-			-e ch_public_ip="$$CH_IP" \
-			-e trust_api_port=$(TRUST_API_PORT); \
+			-e ch_public_ip="$$CH_IP"; \
 	else \
 		echo "💻 Running locally (no SSH — operator machine is the trust host)..."; \
 		if [ -z "$$ANSIBLE_BECOME_PASS" ]; then \
@@ -329,8 +327,7 @@ add-local-trust: ## Provision an on-prem Trust host via Ansible and register it 
 			-e ansible_python_interpreter=/usr/bin/python3 \
 			../../../deploy/providers/local/site_local_trust.yml \
 			-e trust_public_ip=$(LOCAL_TRUST_IP) \
-			-e ch_public_ip="$$CH_IP" \
-			-e trust_api_port=$(TRUST_API_PORT); \
+			-e ch_public_ip="$$CH_IP"; \
 		PLAY_RC=$$?; \
 		exit $$PLAY_RC; \
 	fi

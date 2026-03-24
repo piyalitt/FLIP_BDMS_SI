@@ -29,7 +29,6 @@
   hosts: all
   become: true
   vars:
-    trust_api_port: 8443
     flip_dir: /opt/flip
 
   pre_tasks:

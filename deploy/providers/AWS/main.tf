@@ -607,9 +607,8 @@ module "trust_ec2" {
   # use the trust SG, not the central EC2 SG
   security_group_ids = [module.trust_security_group.security_group.id]
 
-  TRUST_API_PORT = var.TRUST_API_PORT
-  XNAT_PORT      = var.XNAT_PORT
-  PACS_UI_PORT   = var.PACS_UI_PORT
+  XNAT_PORT    = var.XNAT_PORT
+  PACS_UI_PORT = var.PACS_UI_PORT
 
   # pass the compose file content and env file content from the repo
   create_elastic_ip = true

@@ -250,7 +250,6 @@ const props = defineProps<IImagingProjectStatusProps>();
 const route = useRoute();
 
 const search = ref("");
-const sortedData = ref<IImagingProjectStatus[]>();
 
 const { data, error } = useSWRV(
     () => {
@@ -272,17 +271,16 @@ useErrorHandler(error);
 
 watch(() => route.params.projectId, () => {
     data.value = undefined;
-    sortedData.value = undefined;
 }, { flush: 'sync' });
 
-watch([data, search], () => {
-    sortedData.value = sortBy(
+const sortedData = computed(() =>
+    sortBy(
         data.value?.filter(
             t => t.trustName.toLowerCase().includes(search.value.toLowerCase())
         ) ?? [],
         "trustName"
-    );
-}, { immediate: true });
+    )
+);
 
 const overview = computed<IImagingProjectStatusLocal>(() => {
     return {

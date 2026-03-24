@@ -160,8 +160,7 @@ uv run ansible-playbook \
   --private-key ~/.ssh/trust_key \
   ../../../deploy/providers/local/site_local_trust.yml \
   -e trust_public_ip=<public-ip> \
-  -e ch_public_ip=<central-hub-ip> \
-  -e trust_api_port=8020
+  -e ch_public_ip=<central-hub-ip>
 ```
 
 ### `requirements.yml`

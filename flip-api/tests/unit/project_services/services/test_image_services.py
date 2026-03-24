@@ -630,8 +630,7 @@ class TestHasPendingImagingTasks:
         mock_task.payload = "not valid json"
         mock_db_session.exec.return_value.all.return_value = [mock_task]
 
-        with pytest.raises(json.JSONDecodeError):
-            has_pending_imaging_tasks(uuid4(), mock_db_session)
+        assert has_pending_imaging_tasks(uuid4(), mock_db_session) is False
 
 
 class TestGetImagingProjectStatusesEdgeCases:
