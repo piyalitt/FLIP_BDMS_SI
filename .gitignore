@@ -367,3 +367,6 @@ trust/certs/
 *.jar
 
 *.war
+*.tf.backup
+.deployment-structure-analysis.md
+deploy/providers/AWS/REFACTORING.md
