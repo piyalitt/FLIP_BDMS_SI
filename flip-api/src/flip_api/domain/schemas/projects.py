@@ -84,12 +84,12 @@ class PagedResponse(BaseModel, Generic[T]):
 
 
 class ImagingProject(BaseModel):
-    id: UUID
-    xnat_project_id: UUID
+    id: UUID | None = None
+    xnat_project_id: UUID | None = None
     trust_id: UUID
-    retrieve_image_status: XNATImageStatus
+    retrieve_image_status: XNATImageStatus | None = None
     name: str
-    reimport_count: int
+    reimport_count: int = 0
 
     def model_dump(
         self,
@@ -107,10 +107,10 @@ class ImagingProject(BaseModel):
         fallback=None,
         serialize_as_any=False,
     ):
-        self.id = str(self.id)
-        self.xnat_project_id = str(self.xnat_project_id)
+        self.id = str(self.id) if self.id else None
+        self.xnat_project_id = str(self.xnat_project_id) if self.xnat_project_id else None
         self.trust_id = str(self.trust_id)
-        self.retrieve_image_status = self.retrieve_image_status.value
+        self.retrieve_image_status = self.retrieve_image_status.value if self.retrieve_image_status else None
         return super().model_dump(
             mode=mode,
             include=include,

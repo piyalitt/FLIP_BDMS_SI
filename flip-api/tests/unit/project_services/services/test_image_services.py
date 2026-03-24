@@ -86,6 +86,24 @@ class TestGetImagingProjects:
 
         mock_db_session.exec.assert_called_once()
 
+    def test_includes_trusts_without_xnat_project(self, mock_db_session: MagicMock, sample_project_id: UUID):
+        """Approved trusts without an XNATProjectStatus row should appear with None fields."""
+        trust_id = uuid4()
+        db_row_data = [
+            (None, None, trust_id, None, "Trust Without XNAT", None),
+        ]
+        mock_db_session.exec.return_value.all.return_value = db_row_data
+
+        result = get_imaging_projects(sample_project_id, mock_db_session)
+
+        assert len(result) == 1
+        assert result[0].trust_id == trust_id
+        assert result[0].id is None
+        assert result[0].xnat_project_id is None
+        assert result[0].retrieve_image_status is None
+        assert result[0].name == "Trust Without XNAT"
+        assert result[0].reimport_count == 0
+
     @patch(MOCK_LOGGER_PATH)
     def test_db_error(self, mock_logger: MagicMock, mock_db_session: MagicMock, sample_project_id: UUID):
         db_error = Exception("DB Read Error")
@@ -268,6 +286,52 @@ class TestGetImagingProjectStatuses:
         assert results[0].import_status.processing_count == 3
         assert results[0].import_status.queued_count == 5
         assert results[0].import_status.queue_failed_count == 1
+
+    @patch(f"{MOCK_SERVICE_PATH}._get_latest_imaging_status")
+    @patch(f"{MOCK_SERVICE_PATH}.get_xnat_project_status_info")
+    @patch(MOCK_LOGGER_PATH)
+    def test_skips_xnat_lookup_for_trust_without_project(
+        self,
+        mock_logger: MagicMock,
+        mock_get_xnat_status: MagicMock,
+        mock_get_latest_status: MagicMock,
+        mock_db_session: MagicMock,
+    ):
+        """Trusts without an XNAT project should not trigger status lookups or task queuing."""
+        trust_with_xnat = uuid4()
+        trust_without_xnat = uuid4()
+        imaging_projects_list = [
+            ImagingProject(
+                id=uuid4(),
+                xnat_project_id=uuid4(),
+                trust_id=trust_with_xnat,
+                retrieve_image_status=XNATImageStatus.CREATED,
+                name="Trust With XNAT",
+                reimport_count=0,
+            ),
+            ImagingProject(
+                trust_id=trust_without_xnat,
+                name="Trust Without XNAT",
+            ),
+        ]
+
+        mock_get_xnat_status.return_value = XnatProjectStatusInfo(
+            retrieve_image_status=XNATImageStatus.CREATED, reimport_count=0
+        )
+        mock_get_latest_status.return_value = None
+        mock_db_session.exec.return_value.first.return_value = None
+
+        results = get_imaging_project_statuses(imaging_projects_list, "ZXF1ZXJ5", mock_db_session)
+
+        assert len(results) == 2
+        # Trust with XNAT project should have status looked up
+        assert results[0].project_creation_completed is True
+        assert mock_get_xnat_status.call_count == 1
+        assert mock_get_latest_status.call_count == 1
+        # Trust without XNAT project should show as not created
+        assert results[1].trust_id == trust_without_xnat
+        assert results[1].project_creation_completed is False
+        assert results[1].import_status is None
 
 
 # --- update_xnat_user_profile ---

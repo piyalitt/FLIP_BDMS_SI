@@ -68,9 +68,9 @@
                                                     class="w-5 h-5 text-green-500"
                                                     :data-test="`project-creation-complete-${project.trustId}`"
                                                 />
-                                                <icon-heroicons-solid-x
+                                                <icon-heroicons-outline-clock
                                                     v-else
-                                                    class="w-5 h-5 text-red-700"
+                                                    class="w-5 h-5 text-gray-400"
                                                     :data-test="`project-creation-incomplete-${project.trustId}`"
                                                 />
                                                 <span
@@ -78,7 +78,7 @@
                                                 >
                                                     {{ project.projectCreationCompleted
                                                         ? 'Created'
-                                                        : 'Not Created' }}
+                                                        : 'Awaiting creation…' }}
                                                 </span>
                                             </div>
                                             <div
@@ -264,7 +264,7 @@ const { data, error } = useSWRV(
     {
         refreshInterval: 10_000,
         dedupingInterval: 5_000,
-        shouldRetryOnError: false
+        shouldRetryOnError: false,
     }
 );
 
@@ -273,7 +273,7 @@ useErrorHandler(error);
 watch(() => route.params.projectId, () => {
     data.value = undefined;
     sortedData.value = undefined;
-});
+}, { flush: 'sync' });
 
 watch([data, search], () => {
     sortedData.value = sortBy(

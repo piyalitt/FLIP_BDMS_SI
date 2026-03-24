@@ -18,8 +18,8 @@ from uuid import UUID
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, col, select, update
 
+from flip_api.db.models.main_models import ProjectTrustIntersect, TrustTask, XNATProjectStatus
 from flip_api.db.models.main_models import Trust as DBTrust
-from flip_api.db.models.main_models import TrustTask, XNATProjectStatus
 from flip_api.domain.interfaces.project import (
     IImagingImportStatus,
     IImagingStatus,
@@ -82,18 +82,25 @@ def get_imaging_projects(project_id: UUID, db: Session) -> list[ImagingProject]:
         Exception: If there is an unexpected error during the retrieval process.
     """
     try:
-        # Columns must match the order expected by ImagingProject constructor or mapping logic
+        # LEFT JOIN so all approved trusts appear, even those without an XNATProjectStatus row yet
         statement = (
             select(  # type: ignore[call-overload]
                 XNATProjectStatus.id,
                 XNATProjectStatus.xnat_project_id,
-                XNATProjectStatus.trust_id,
+                ProjectTrustIntersect.trust_id,
                 XNATProjectStatus.retrieve_image_status,
                 DBTrust.name,
                 XNATProjectStatus.reimport_count,
             )
-            .join(DBTrust, col(XNATProjectStatus.trust_id) == DBTrust.id)
-            .where(col(XNATProjectStatus.project_id) == project_id)
+            .select_from(ProjectTrustIntersect)
+            .join(DBTrust, col(ProjectTrustIntersect.trust_id) == DBTrust.id)
+            .outerjoin(
+                XNATProjectStatus,
+                (col(XNATProjectStatus.trust_id) == col(ProjectTrustIntersect.trust_id))
+                & (col(XNATProjectStatus.project_id) == project_id),
+            )
+            .where(col(ProjectTrustIntersect.project_id) == project_id)
+            .where(ProjectTrustIntersect.approved == True)  # noqa: E712
         )
         results = db.exec(statement).all()
         logger.debug(f"Imaging projects fetched for project_id {project_id}: {results}")
@@ -103,9 +110,9 @@ def get_imaging_projects(project_id: UUID, db: Session) -> list[ImagingProject]:
                 id=row[0],
                 xnat_project_id=row[1],
                 trust_id=row[2],
-                retrieve_image_status=XNATImageStatus(row[3]),
+                retrieve_image_status=XNATImageStatus(row[3]) if row[3] else None,
                 name=row[4],
-                reimport_count=row[5],
+                reimport_count=row[5] or 0,
             )
             for row in results
         ]
@@ -252,17 +259,39 @@ def get_imaging_project_statuses(
     response_statuses: list[IImagingStatus] = []
 
     for row_project in imaging_projects:
-        xnat_status_info = get_xnat_project_status_info(row_project.xnat_project_id, db)
-        logger.debug(f"Retrieved XNAT status info for project {row_project.xnat_project_id}: {xnat_status_info}")
-
         project_creation_completed = False
         reimport_count_val = 0
-        if xnat_status_info:
-            project_creation_completed = xnat_status_info.retrieve_image_status == XNATImageStatus.CREATED
-            reimport_count_val = xnat_status_info.reimport_count
+        import_status = None
 
-        # Look up the latest completed status result for this trust
-        import_status = _get_latest_imaging_status(row_project.trust_id, db)
+        # Only look up XNAT status and queue refresh tasks for trusts that have an XNAT project
+        if row_project.xnat_project_id:
+            xnat_status_info = get_xnat_project_status_info(row_project.xnat_project_id, db)
+            logger.debug(f"Retrieved XNAT status info for project {row_project.xnat_project_id}: {xnat_status_info}")
+
+            if xnat_status_info:
+                project_creation_completed = xnat_status_info.retrieve_image_status == XNATImageStatus.CREATED
+                reimport_count_val = xnat_status_info.reimport_count
+
+            # Look up the latest completed status result for this trust
+            import_status = _get_latest_imaging_status(row_project.trust_id, db)
+
+            # Queue a status refresh task only if one isn't already pending or in progress
+            existing_task = db.exec(
+                select(TrustTask)
+                .where(TrustTask.trust_id == row_project.trust_id)
+                .where(TrustTask.task_type == TaskType.GET_IMAGING_STATUS)
+                .where(col(TrustTask.status).in_([TaskStatus.PENDING, TaskStatus.IN_PROGRESS]))
+            ).first()
+            if not existing_task:
+                task = TrustTask(
+                    trust_id=row_project.trust_id,
+                    task_type=TaskType.GET_IMAGING_STATUS,
+                    payload=json.dumps({
+                        "imaging_project_id": str(row_project.xnat_project_id),
+                        "encoded_query": encoded_query,
+                    }),
+                )
+                db.add(task)
 
         current_project_status = IImagingStatus(
             trust_id=row_project.trust_id,
@@ -271,24 +300,6 @@ def get_imaging_project_statuses(
             reimport_count=reimport_count_val,
             import_status=import_status,
         )  # type: ignore[call-arg]
-
-        # Queue a status refresh task only if one isn't already pending or in progress
-        existing_task = db.exec(
-            select(TrustTask)
-            .where(TrustTask.trust_id == row_project.trust_id)
-            .where(TrustTask.task_type == TaskType.GET_IMAGING_STATUS)
-            .where(col(TrustTask.status).in_([TaskStatus.PENDING, TaskStatus.IN_PROGRESS]))
-        ).first()
-        if not existing_task:
-            task = TrustTask(
-                trust_id=row_project.trust_id,
-                task_type=TaskType.GET_IMAGING_STATUS,
-                payload=json.dumps({
-                    "imaging_project_id": str(row_project.xnat_project_id),
-                    "encoded_query": encoded_query,
-                }),
-            )
-            db.add(task)
 
         response_statuses.append(current_project_status)
 
