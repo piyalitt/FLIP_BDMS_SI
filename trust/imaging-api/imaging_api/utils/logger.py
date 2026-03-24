@@ -10,9 +10,8 @@
 # limitations under the License.
 #
 
-from log_config import configure_logging, get_logger
-
 from imaging_api.config import get_settings
+from log_config import configure_logging, get_logger
 
 _settings = get_settings()
 

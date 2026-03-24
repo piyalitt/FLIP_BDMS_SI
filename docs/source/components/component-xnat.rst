@@ -127,11 +127,80 @@ Imaging data will be automatically imported from trust PACS systems on XNAT proj
 
 Information on how to download and upload imaging data the XNAT UI can be found `here <https://wiki.xnat.org/documentation/how-to-use-xnat#HowToUseXNAT-UploadingImageDatatoXNAT>`_.
 
+****************************
+DICOM Anonymization
+****************************
+
+XNAT includes a built-in anonymization engine that processes incoming DICOM data to remove Protected Health Information (PHI) from DICOM headers. The anonymization script is applied site-wide to all data received via the SCP receiver.
+
+Default Anonymization Script
+============================
+
+XNAT ships with a minimal default anonymization script that can be retrieved via the API:
+
+.. code-block:: bash
+
+    curl -X GET "http://<xnat-host>/xapi/anonymize/default" -H "accept: text/plain"
+
+The default script performs only basic label mapping:
+
+.. code-block:: text
+
+    //
+    // Default XNAT anonymization script
+    // XNAT http://www.xnat.org
+    // Copyright (c) 2005-2017, Washington University School of Medicine
+    // and Howard Hughes Medical Institute
+    // All Rights Reserved
+    //
+    // Released under the Simplified BSD.
+    //
+    version "6.1"
+    project != "Unassigned" ? (0008,1030) := project
+    (0010,0010) := subject
+    (0010,0020) := session
+
+FLIP Anonymization Script
+=========================
+
+FLIP replaces the default script with a comprehensive site-wide anonymization script (``anon_script.das``) that provides more thorough PHI removal, including:
+
+- **Patient identifiers**: birth date, address, telephone numbers, other patient IDs
+- **Institutional identifiers**: institution name, address, department
+- **Physician/operator identifiers**: referring, performing, and requesting physicians
+- **Other identifying tags**: accession number, medical record locator, ethnic group, occupation
+- **UID pseudonymization**: study and series instance UIDs are hashed for repeatable pseudonymization
+- **De-identification recording**: sets ``Patient Identity Removed`` and ``De-identification Method`` tags
+
+The script is configured automatically during XNAT initialization via ``configure-xnat.sh``. It is applied to all incoming DICOM data when the SCP receiver has ``anonymizationEnabled`` set to ``true``.
+
+Anonymize API Endpoints
+=======================
+
+The following XNAT anonymize-api endpoints are used by FLIP:
+
+.. list-table::
+    :widths: 10 30 30
+    :header-rows: 1
+
+    * - Method
+      - Endpoint
+      - Description
+    * - GET
+      - ``/xapi/anonymize/default``
+      - Gets the default anonymization script
+    * - PUT
+      - ``/xapi/anonymize/site``
+      - Sets the site-wide anonymization script
+    * - PUT
+      - ``/xapi/anonymize/site/enabled``
+      - Enables or disables the site-wide anonymization script
+
 *****************
 FLIP XNAT methods
 *****************
 
-The following methods are available to be used in training, located in `flip.py`:
+The following methods are available to be used in training, located in the `flip-utils package <https://flip-fl-base.readthedocs.io/en/latest/index.html>`_:
 
 - ``get_dataframe(self, project_id: str, query: str) -> DataFrame``
     This retrieves data in the form of a Dataframe containing, at the minimum, accession IDs. The method takes in the project ID and the project query as parameters. These values are already passed in as parameters to the trainer to be used.

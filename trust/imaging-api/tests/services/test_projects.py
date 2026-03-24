@@ -236,7 +236,7 @@ def test_set_project_command_enabled_success(mock_get, mock_put, headers):
     )
     mock_put.return_value = MagicMock(status_code=200)
 
-    set_project_command_enabled("TEST", "xnat/dcm2niix:latest", headers, enabled=True)
+    set_project_command_enabled("TEST", "xnat/dcm2niix:latest", True, headers)
 
     mock_put.assert_called_once()
     assert "/commands/1/wrappers/dcm2niix/enabled" in mock_put.call_args[0][0]
@@ -251,7 +251,7 @@ def test_set_project_command_disabled_success(mock_get, mock_put, headers):
     )
     mock_put.return_value = MagicMock(status_code=200)
 
-    set_project_command_enabled("TEST", "xnat/dcm2niix:latest", headers, enabled=False)
+    set_project_command_enabled("TEST", "xnat/dcm2niix:latest", False, headers)
 
     mock_put.assert_called_once()
     assert "/commands/1/wrappers/dcm2niix/disabled" in mock_put.call_args[0][0]
@@ -262,7 +262,7 @@ def test_set_project_command_enabled_fetch_failure(mock_get, headers):
     mock_get.return_value = MagicMock(status_code=500, text="Internal Server Error")
 
     with pytest.raises(Exception, match="XNAT command fetch failed"):
-        set_project_command_enabled("TEST", "xnat/dcm2niix:latest", headers, enabled=True)
+        set_project_command_enabled("TEST", "xnat/dcm2niix:latest", True, headers)
 
 
 @patch("imaging_api.services.projects.requests.put")
@@ -275,7 +275,7 @@ def test_set_project_command_enabled_put_failure(mock_get, mock_put, headers):
     mock_put.return_value = MagicMock(status_code=500, text="Internal Server Error")
 
     with pytest.raises(Exception, match="Enabled XNAT command"):
-        set_project_command_enabled("TEST", "xnat/dcm2niix:latest", headers, enabled=True)
+        set_project_command_enabled("TEST", "xnat/dcm2niix:latest", True, headers)
 
 
 # ===========================================================================

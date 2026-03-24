@@ -241,15 +241,15 @@ def set_project_prearchive_settings(project_id: str, headers: dict[str, str]) ->
         )
 
 
-def set_project_command_enabled(project_id: str, container: str, headers: dict[str, str], *, enabled: bool) -> None:
+def set_project_command_enabled(project_id: str, container: str, enabled: bool, headers: dict[str, str]) -> None:
     """
     Enables or disables a command for a specific project in XNAT.
 
     Args:
         project_id (str): Unique identifier for the project
         container (str): Name of the command container. For example, for dcm2niix command, "xnat/dcm2niix:latest".
-        headers (dict[str, str]): XNAT authentication headers
         enabled (bool): If True, enable the command; if False, disable it
+        headers (dict[str, str]): XNAT authentication headers
 
     Returns:
         None

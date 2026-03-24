@@ -147,7 +147,7 @@ async def create_project_from_central_hub_project(
     set_project_prearchive_settings(project.ID, headers)
 
     # Enable or disable dcm2niix command at the project level
-    set_project_command_enabled(project.ID, "xnat/dcm2niix:latest", headers, enabled=central_hub_project.dicom_to_nifti)
+    set_project_command_enabled(project.ID, "xnat/dcm2niix:latest", central_hub_project.dicom_to_nifti, headers)
 
     # TODO We may want to enable/disable more commands here in the future, e.g. quality control (QC)
     # ...

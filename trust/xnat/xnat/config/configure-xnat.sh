@@ -116,6 +116,20 @@ curl -s -X POST "$XNAT_URL/xapi/dqr/settings" \
     "dqrMaxPacsRequestAttempts": "100"
   }'
 
+# Configure site-wide anonymization script
+echo "Configuring site-wide anonymization script..."
+curl -s -X PUT "$XNAT_URL/xapi/anonymize/site" \
+  -u "${XNAT_ADMIN_USER}:${XNAT_ADMIN_PASSWORD}" \
+  -H "Content-Type: text/plain" \
+  --data-binary @anon_script.das
+
+# Enable site-wide anonymization
+echo "Enabling site-wide anonymization..."
+curl -s -X PUT "$XNAT_URL/xapi/anonymize/site/enabled" \
+  -u "${XNAT_ADMIN_USER}:${XNAT_ADMIN_PASSWORD}" \
+  -H "Content-Type: application/json" \
+  -d 'true'
+
 # Get SCP receivers
 response=$(curl -s -u "$XNAT_ADMIN_USER:$XNAT_ADMIN_PASSWORD" "$XNAT_URL/xapi/dicomscp")
 
@@ -170,20 +184,6 @@ curl -s -X POST "$XNAT_URL/xapi/dicomscp" \
     \"subjectRoutingExpression\": \"\",
     \"sessionRoutingExpression\": \"\"
   }"
-
-# Configure site-wide anonymization script
-echo "Configuring site-wide anonymization script..."
-curl -s -X PUT "$XNAT_URL/data/config/anon/script?inbody=true&status=enabled" \
-  -u "${XNAT_ADMIN_USER}:${XNAT_ADMIN_PASSWORD}" \
-  -H "Content-Type: text/plain" \
-  --data-binary @anon_script.das
-
-# Enable site-wide anonymization
-echo "Enabling site-wide anonymization..."
-curl -s -X PUT "$XNAT_URL/xapi/siteConfig" \
-  -u "${XNAT_ADMIN_USER}:${XNAT_ADMIN_PASSWORD}" \
-  -H "Content-Type: application/json" \
-  -d '{"enableSitewideAnonymizationScript": true}'
 
 # Configure OHIF viewer
 echo "Configuring OHIF viewer..."

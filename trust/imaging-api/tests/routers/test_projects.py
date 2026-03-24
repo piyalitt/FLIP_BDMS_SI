@@ -93,7 +93,7 @@ async def test_create_project_nifti_enabled_calls_enable_command(
     background_tasks = MagicMock()
     await create_project_from_central_hub_project(central_hub_project_nifti_enabled, mock_headers, background_tasks)
 
-    mock_set_cmd.assert_called_once_with(TEST_XNAT_PROJECT_ID, "xnat/dcm2niix:latest", mock_headers, enabled=True)
+    mock_set_cmd.assert_called_once_with(TEST_XNAT_PROJECT_ID, "xnat/dcm2niix:latest", True, mock_headers)
 
 
 @pytest.mark.asyncio
@@ -126,4 +126,4 @@ async def test_create_project_nifti_disabled_calls_disable_command(
     background_tasks = MagicMock()
     await create_project_from_central_hub_project(central_hub_project_nifti_disabled, mock_headers, background_tasks)
 
-    mock_set_cmd.assert_called_once_with(TEST_XNAT_PROJECT_ID, "xnat/dcm2niix:latest", mock_headers, enabled=False)
+    mock_set_cmd.assert_called_once_with(TEST_XNAT_PROJECT_ID, "xnat/dcm2niix:latest", False, mock_headers)
