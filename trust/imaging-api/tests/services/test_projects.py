@@ -285,6 +285,16 @@ def test_create_project_event_subscription_inactive(mock_cmd_info, mock_put, moc
     assert call_payload["active"] is False
 
 
+@patch("imaging_api.services.projects.requests.put")
+@patch("imaging_api.services.projects.get_command_info")
+def test_create_project_event_subscription_enable_command_failure(mock_cmd_info, mock_put, headers):
+    mock_cmd_info.return_value = (1, "dcm2niix-scan")
+    mock_put.return_value = MagicMock(status_code=500, text="Internal Server Error")
+
+    with pytest.raises(Exception, match="Enabling command"):
+        create_project_event_subscription("TEST", "xnat/dcm2niix:latest", True, headers)
+
+
 @patch("imaging_api.services.projects.requests.post")
 @patch("imaging_api.services.projects.requests.put")
 @patch("imaging_api.services.projects.get_command_info")
