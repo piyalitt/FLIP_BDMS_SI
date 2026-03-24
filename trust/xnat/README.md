@@ -103,6 +103,12 @@ This can also be done manually from XNAT:
 * Select **Orthanc** as your **Source PACS** (the selected SCP Receiver should default to **XNAT:8104**).
 * [Query PACS](https://wiki.xnat.org/xnat-tools/using-dqr-searching-the-pacs-and-importing-data#UsingDQR:SearchingthePACSandImportingData-Querying/SearchingforImageSessions).
 
+## DICOM Anonymization
+
+XNAT includes a built-in anonymization engine that processes incoming DICOM data to remove Protected Health Information (PHI) from DICOM headers. FLIP replaces the default XNAT anonymization script with a comprehensive site-wide script (`anon_script.das`) that removes patient identifiers, institutional identifiers, physician/operator identifiers, and pseudonymizes UIDs.
+
+The anonymization script is configured automatically during XNAT initialization via `configure-xnat.sh`. It is applied to all incoming DICOM data when the SCP receiver has `anonymizationEnabled` set to `true`.
+
 ## DICOM to NIfTI Conversion
 
 XNAT uses two mechanisms for dcm2niix conversion:
