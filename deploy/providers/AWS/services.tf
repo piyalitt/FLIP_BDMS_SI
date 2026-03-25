@@ -129,8 +129,6 @@ resource "aws_cognito_user_pool" "flip_user_pool" {
     email_subject_by_link = "Password Reset – FLIP"
     # {##...##} placeholder: Dynamically generated password reset link token
     email_message_by_link = file("${path.module}/templates/cognito/password_reset_link.html")
-    # SMS fallback for link-based reset
-    sms_message_by_link = "Reset your FLIP password: https://${var.flip_alb_subdomain}/reset?token={##...##}"
   }
 
   deletion_protection = "ACTIVE"
