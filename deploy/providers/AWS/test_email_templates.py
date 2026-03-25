@@ -42,6 +42,7 @@ class TestUser:
     verification_code: str = "789456"
     subdomain: str = "flip-staging.example.com"
     reset_link: str = "https://flip-staging.example.com/reset?token=abc123xyz789"
+    reset_link_text: str = "Reset Password"
 
 
 @dataclass
@@ -94,6 +95,8 @@ class EmailTemplateTester:
             "{####}": self.test_user.verification_code,
             "{flip_alb_subdomain}": self.test_user.subdomain,
             "{reset_link}": self.test_user.reset_link,
+            # Cognito link-based placeholder: {## Link Text ##} becomes <a href="reset-url">Link Text</a>
+            "{## Reset Password ##}": f'<a href="{self.test_user.reset_link}" style="display: inline-block; padding: 12px 32px; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px;">{self.test_user.reset_link_text}</a>',
             # SES placeholders
             "{{name}}": self.test_ses.name,
             "{{email}}": self.test_ses.email,
