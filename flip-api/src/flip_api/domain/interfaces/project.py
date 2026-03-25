@@ -17,6 +17,7 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, validator
 
 from flip_api.domain.schemas.status import ModelStatus, ProjectStatus
+from flip_api.domain.schemas.users import CognitoUser
 
 
 class IProjectQuery(BaseModel):
@@ -73,7 +74,7 @@ class IReturnedProject(IProject):  # Extends IProject
     owner_email: EmailStr = Field(..., alias="ownerEmail")
     approved_trusts: list[IApprovedTrust] | None = Field(default=None, alias="approvedTrusts")
     query: IProjectQuery | None = Field(default=None)
-    users: list[EmailStr]
+    users: list[CognitoUser]
     model_config = ConfigDict(populate_by_name=True)
 
 

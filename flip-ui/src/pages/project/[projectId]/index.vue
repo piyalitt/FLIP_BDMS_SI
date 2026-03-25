@@ -83,10 +83,11 @@
                                 />
                             </template>
                         </AiGuard>
-                        <AiGuard :permissions="editProjectPermissions" :bypass="isOwnerOrHasAccess()">
+                        <AiGuard :permissions="editProjectPermissions" :bypass="isOwnerOrHasAccess() || isObserver">
                             <AiButton light data-test="edit-project-btn" @click.capture="openEditProjectDrawer">
-                                <icon-mdi-pencil-outline class="mr-2" />
-                                Edit Project
+                                <icon-mdi-pencil-outline v-if="!isObserver" class="mr-2" />
+                                <icon-mdi-eye-outline v-else class="mr-2" />
+                                {{ isObserver ? "View Project" : "Edit Project" }}
                             </AiButton>
                         </AiGuard>
                     </div>
@@ -148,7 +149,7 @@
             :show="editDrawerOpen"
             :name="project.name"
             :users="project.users"
-            :project-unstaged="isProjectUnstaged()"
+            :project-unstaged="isProjectUnstaged() && !isObserver"
             :description="project.description"
             :updating="projectUpdating"
             :owner-id="project.ownerId"
