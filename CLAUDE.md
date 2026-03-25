@@ -228,6 +228,7 @@ GitHub Actions workflows in `.github/workflows/`:
 
 - **Test**: `test_flip_api.yml`, `test_flip_ui.yml`, `test_trust_*.yml`
 - **Build**: `docker_build_*.yml` for each service
+- **Infrastructure**: `validate_terraform.yml` (fmt + validate, no AWS creds needed)
 - **Security**: `secret-scanning.yml` (TruffleHog + detect-secrets)
 - **Docs**: `docs.yml` (Sphinx → ReadTheDocs)
 - **PR checks**: `pr_acceptance_criteria.yml`
