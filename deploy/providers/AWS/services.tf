@@ -113,24 +113,22 @@ resource "aws_cognito_user_pool" "flip_user_pool" {
       email_subject = "Welcome to FLIP – Federated Learning and Interoperability Platform"
       email_message = file("${path.module}/templates/cognito/invite.html")
       # SMS fallback message for users without email or additional verification
-      sms_message   = "You've been invited to FLIP. Username: {username}, Temporary password: {####}. Sign in at https://${var.flip_alb_subdomain}"
+      sms_message = "You've been invited to FLIP. Username: {username}, Temporary password: {####}. Sign in at https://${var.flip_alb_subdomain}"
     }
   }
 
   # Cognito email templates for password reset and account verification flows
-    verification_message_template {
-    default_email_option  = "CONFIRM_WITH_CODE"
-    email_subject         = "Password Reset Request – FLIP"
+  verification_message_template {
+    default_email_option = "CONFIRM_WITH_CODE"
+    email_subject        = "Password Reset Request – FLIP"
     # {####} placeholder: 6-character verification code for password reset
-    email_message         = file("${path.module}/templates/cognito/password_reset_code.html")
+    email_message = file("${path.module}/templates/cognito/password_reset_code.html")
     # SMS fallback message for verification code delivery
-    sms_message           = "Your FLIP password reset code is: {####}. Valid for 24 hours."
+    sms_message = "Your FLIP password reset code is: {####}. Valid for 24 hours."
 
     email_subject_by_link = "Password Reset – FLIP"
     # {##...##} placeholder: Dynamically generated password reset link token
     email_message_by_link = file("${path.module}/templates/cognito/password_reset_link.html")
-    # SMS fallback for link-based reset
-    sms_message_by_link   = "Reset your FLIP password: https://${var.flip_alb_subdomain}/reset?token={##...##}"
   }
 
   deletion_protection = "ACTIVE"

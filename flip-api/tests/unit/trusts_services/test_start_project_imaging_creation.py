@@ -74,6 +74,7 @@ def mock_get_project():
             name="Test Project",
             query=query,
             owner_id=user_id,
+            dicom_to_nifti=True,
         )
         yield mock_get_project
 
@@ -197,3 +198,35 @@ async def test_db_error_during_task_creation(
 
     assert exc_info.value.status_code == 500
     mock_get_session.rollback.assert_called_once()
+    assert "Internal server error" in exc_info.value.detail
+
+
+# Test case for dicom_to_nifti=False being included in the queued task payload
+@pytest.mark.asyncio
+async def test_dicom_to_nifti_false_forwarded_to_trust(
+    mock_request,
+    mock_get_session,
+    mock_has_permissions,
+    mock_get_project,
+    mock_get_user_pool_id,
+    mock_get_users_with_access,
+    mock_get_cognito_users,
+):
+    import json
+
+    # Override fixture to set dicom_to_nifti=False
+    mock_get_project.return_value.dicom_to_nifti = False
+
+    await start_project_imaging_creation(
+        request=mock_request,
+        project_id=project_id,
+        trust=trust_example,
+        db=mock_get_session,
+        user_id=user_id,
+    )
+
+    # Verify the task payload includes dicom_to_nifti=False
+    mock_get_session.add.assert_called_once()
+    task = mock_get_session.add.call_args[0][0]
+    payload = json.loads(task.payload)
+    assert payload["dicom_to_nifti"] is False
