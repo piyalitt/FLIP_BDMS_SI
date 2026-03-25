@@ -30,7 +30,6 @@ import os
 from dataclasses import dataclass
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from typing import Dict, Optional
 
 
 @dataclass
@@ -62,7 +61,7 @@ class TestSesData:
 class EmailTemplateTester:
     """Tests and renders FLIP email templates loaded from files."""
 
-    def __init__(self, test_user: Optional[TestUser] = None, test_ses: Optional[TestSesData] = None):
+    def __init__(self, test_user: TestUser | None = None, test_ses: TestSesData | None = None):
         """Initialize the tester with test data and load templates from files.
 
         Templates are loaded from templates/cognito/ and templates/ses/ directories.
@@ -82,7 +81,7 @@ class EmailTemplateTester:
         self.ACCESS_REQUEST_TEMPLATE_HTML = (ses_dir / "flip-access-request.html").read_text()
         self.XNAT_CREDENTIALS_TEMPLATE_HTML = (ses_dir / "flip-xnat-credentials.html").read_text()
 
-    def substitute_placeholders(self, template: str) -> tuple[str, Dict[str, str]]:
+    def substitute_placeholders(self, template: str) -> tuple[str, dict[str, str]]:
         """
         Substitute Cognito and SES placeholders in email template.
 
@@ -114,7 +113,7 @@ class EmailTemplateTester:
 
         return rendered, substitutions
 
-    def validate_template(self, template: str, template_name: str) -> Dict[str, any]:
+    def validate_template(self, template: str, template_name: str) -> dict[str, any]:
         """
         Validate email template for common issues.
 
@@ -237,7 +236,7 @@ class EmailTemplateTester:
             output_file.write_text(preview)
             print(f"✓ Saved: {output_file}")
 
-    def test_all(self) -> list[Dict]:
+    def test_all(self) -> list[dict]:
         """Run all validation tests.
 
         Returns:
