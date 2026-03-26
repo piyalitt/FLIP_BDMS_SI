@@ -1055,7 +1055,8 @@ def main(
         if local_trust_ip:
             print_section("Local Trust Checks")
 
-            _local_trust_ca = str(Path(__file__).parent.parents[2] / "trust" / "certs" / "local-trust-ca.crt")
+            # Resolve path to repo root (path goes: file -> AWS -> providers -> deploy -> FLIP)
+            _local_trust_ca = str(Path(__file__).parent.parents[3] / "trust" / "certs" / "local-trust-ca.crt")
 
             # 1. Verify local trust health endpoint is reachable from this machine
             check_http_endpoint(
