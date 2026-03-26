@@ -266,7 +266,8 @@ resource "aws_instance" "ec2_instance" {
 # Elastic IP for Central Hub EC2 instance
 # Provides a static IP address that persists across instance restarts and redeployments
 resource "aws_eip" "central_hub_eip" {
-  # Always allocate EIP - never destroy it
+  count = var.create_central_hub_elastic_ip ? 1 : 0
+  # Allocate EIP only if enabled
   domain = "vpc"
 
   tags = {
@@ -275,14 +276,14 @@ resource "aws_eip" "central_hub_eip" {
 
   # Prevent accidental destruction - this EIP is precious infrastructure
   lifecycle {
-    prevent_destroy = false
+    prevent_destroy = true
   }
 }
 
 resource "aws_eip_association" "central_hub_eip_assoc" {
   count         = var.create_central_hub_elastic_ip ? 1 : 0
   instance_id   = aws_instance.ec2_instance.id
-  allocation_id = aws_eip.central_hub_eip.id
+  allocation_id = aws_eip.central_hub_eip[0].id
   depends_on    = [aws_instance.ec2_instance]
 }
 
@@ -544,8 +545,8 @@ output "Ec2PublicIp" {
 }
 
 output "Ec2ElasticIp" {
-  description = "EC2 Instance Elastic IP (static IP address, always allocated)"
-  value       = aws_eip.central_hub_eip.public_ip
+  description = "EC2 Instance Elastic IP (static IP address, allocated when create_central_hub_elastic_ip is true)"
+  value       = try(aws_eip.central_hub_eip[0].public_ip, null)
 }
 
 output "SshCommand" {
