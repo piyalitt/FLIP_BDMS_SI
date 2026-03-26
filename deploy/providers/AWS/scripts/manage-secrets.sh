@@ -21,8 +21,10 @@ case "$action" in
         secret_value=$(aws_cmd secretsmanager get-secret-value --secret-id "$secret_id" --query 'SecretString' --output text)
         
         # Update endpoint using python (more portable than jq)
+        # Uses: json to parse/serialize the secret object, sys to read command-line arguments
         updated_secret=$(python3 - <<EOF "$secret_value" "$local_trust_ip" "$TRUST_API_PORT"
 import json, sys
+# Parse JSON secret, update the Trust_1-endpoint field with new local trust IP, then serialize back
 s = json.loads(sys.argv[1])
 s['Trust_1-endpoint'] = f"https://{sys.argv[2]}:{sys.argv[3]}"
 print(json.dumps(s))
