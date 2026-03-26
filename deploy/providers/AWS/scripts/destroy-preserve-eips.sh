@@ -6,16 +6,7 @@ source "$(dirname "$0")/utils.sh"
 
 log_warn "🔓 Temporarily disabling prevent_destroy on EIP resources..."
 
-# Disable prevent_destroy on EIPs
-terraform apply -auto-approve -replace='aws_eip.central_hub_eip[0]' 2>&1 | while read -r line; do
-  if echo "$line" | grep -q "prevent_destroy"; then
-    # Skip the prevent_destroy warnings during this operation
-    continue
-  fi
-  # Use -target to update just the lifecycle without a full apply
-done || true
-
-# Actually, a better approach: use sed to temporarily modify the tf files
+# Using sed to temporarily modify the tf files
 log_info "📋 Backing up Terraform configuration..."
 cp main.tf main.tf.backup
 cp modules/trust_ec2/main.tf modules/trust_ec2/main.tf.backup
@@ -27,26 +18,20 @@ log_info "💥 Proceeding with infrastructure destruction..."
 
 # Step 1: Delete RDS database instance directly using AWS CLI
 log_info "Step 1: Deleting RDS database instance via AWS CLI..."
-DB_INSTANCE_ID=$(aws rds describe-db-instances \
-  --region eu-west-2 \
-  --profile FlipDeveloperAccess-080369786334 \
+DB_INSTANCE_ID=$(aws_cmd rds describe-db-instances \
   --query 'DBInstances[?DBInstanceIdentifier==`flip-database`].[DBInstanceIdentifier]' \
   --output text 2>/dev/null || echo "")
 
 if [ -n "$DB_INSTANCE_ID" ]; then
   log_info "  Found database instance: $DB_INSTANCE_ID - Deleting..."
-  aws rds delete-db-instance \
+  aws_cmd rds delete-db-instance \
     --db-instance-identifier "$DB_INSTANCE_ID" \
     --skip-final-snapshot \
-    --region eu-west-2 \
-    --profile FlipDeveloperAccess-080369786334 \
     2>&1 | grep -E "DBInstance|Status|Error" || true
   
   log_info "  Waiting for database deletion (this may take a few minutes)..."
-  aws rds wait db-instance-deleted \
+  aws_cmd rds wait db-instance-deleted \
     --db-instance-identifier "$DB_INSTANCE_ID" \
-    --region eu-west-2 \
-    --profile FlipDeveloperAccess-080369786334 \
     2>&1 || log_warn "  Timeout waiting for DB deletion - proceeding anyway"
   
   sleep 5  # Give AWS a moment to fully cleanup
