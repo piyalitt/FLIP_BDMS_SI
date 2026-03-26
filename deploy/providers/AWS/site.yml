@@ -188,6 +188,7 @@
         - /opt/flip/xnat/xnat-data/archive
         - /opt/flip/xnat/xnat-data/build
         - /opt/flip/xnat/xnat-data/cache
+        - /opt/flip/xnat/xnat-db-data
 
 - name: download participant kit services to Trust EC2
   hosts: trust_ec2
