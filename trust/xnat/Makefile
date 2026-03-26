@@ -91,9 +91,6 @@ build:
 
 up: xnat-reset up-xnat-1 up-xnat-2
 
-# Complete deployment workflow: reset directories, create networks, and deploy all XNAT instances
-deploy: xnat-reset up-xnat-1 up-xnat-2
-
 up-xnat-1: create-network-trust-1
 	XNAT_PATH=${XNAT_PATH} \
 	XNAT_PORT=${XNAT_PORT_TRUST_1} \
