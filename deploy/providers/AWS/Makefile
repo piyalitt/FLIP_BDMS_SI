@@ -23,11 +23,7 @@ include $(MAIN_ENV_FILE)
 export $(shell sed 's/=.*//' $(MAIN_ENV_FILE))
 endif
 
-ifeq ($(LOCK),)
-LOCK=true
-else
-LOCK=false
-endif
+LOCK ?= true
 
 # Export PROD so child processes (e.g. check_status.py) can determine the environment
 export PROD
@@ -69,7 +65,11 @@ export TF_VAR_ADMIN_USER_PASSWORD=${ADMIN_USER_PASSWORD}
 export TF_VAR_SES_VERIFIED_EMAIL=${SES_VERIFIED_EMAIL}
 export TF_VAR_flip_alb_subdomain=${ALB_SUBDOMAIN}
 export TF_VAR_flip_nlb_subdomain=${NLB_SUBDOMAIN}
+ifeq ($(strip $(CREATE_CENTRAL_HUB_ELASTIC_IP)),)
+export TF_VAR_create_central_hub_elastic_ip=true
+else
 export TF_VAR_create_central_hub_elastic_ip=${CREATE_CENTRAL_HUB_ELASTIC_IP}
+endif
 
 CENTRALHUB_IMAGES = \
 	$(DOCKER_REGISTRY)flip-ui:$(DOCKER_TAG) \
@@ -523,7 +523,7 @@ destroy: backup-eips ## Destroy ephemeral infrastructure (EC2, RDS, VPC) - prese
 	@echo "   • IAM roles and policies"
 	@echo "   • CloudWatch logs"
 	@echo ""
-	@read -p "Type 'yes' to confirm destruction: " confirm && [ "$$confirm" = "yes" ] || (echo "Aborted."; exit 1)
+	@bash -c 'read -p "Type '\''yes'\'' to confirm destruction: " confirm && [ "$$confirm" = "yes" ] || { echo "Aborted."; exit 1; }'
 	@echo ""
 	@bash scripts/destroy-preserve-eips.sh
 	@echo ""
