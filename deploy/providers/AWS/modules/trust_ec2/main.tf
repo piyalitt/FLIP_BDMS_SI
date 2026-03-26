@@ -98,19 +98,20 @@ resource "aws_instance" "trust_host" {
 }
 
 resource "aws_eip" "trust_eip" {
-  # Always allocate EIP - never destroy it
+  count = var.create_elastic_ip ? 1 : 0
+  # Allocate EIP only if enabled
   domain = "vpc"
 
   # Prevent accidental destruction - preserve Trust EC2 EIP across redeployments
   lifecycle {
-    prevent_destroy = false
+    prevent_destroy = true
   }
 }
 
 resource "aws_eip_association" "trust_eip_assoc" {
   count         = var.create_elastic_ip ? 1 : 0
   instance_id   = aws_instance.trust_host.id
-  allocation_id = aws_eip.trust_eip.id
+  allocation_id = aws_eip.trust_eip[0].id
   depends_on    = [aws_instance.trust_host]
 }
 
@@ -123,6 +124,6 @@ output "public_ip" {
 }
 
 output "elastic_ip" {
-  description = "Trust EC2 Elastic IP (static IP address, always allocated)"
-  value       = aws_eip.trust_eip.public_ip
+  description = "Trust EC2 Elastic IP (static IP address, allocated when create_elastic_ip is true)"
+  value       = try(aws_eip.trust_eip[0].public_ip, null)
 }
