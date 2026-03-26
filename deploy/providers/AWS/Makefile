@@ -29,9 +29,15 @@ LOCK ?= true
 export PROD
 
 # If PROD=true, check that the AWS_PROFILE=FlipDeveloperAccess-046651569599
+# else we're in staging, check AWS_PROFILE=FlipDeveloperAccess-080369786334
+# TODO remove AWS account numbers from Makefile and use a more robust method of ensuring correct AWS account is used
 ifeq ($(PROD),true)
 ifneq ($(AWS_PROFILE),FlipDeveloperAccess-046651569599)
 $(error "For production deployments, AWS_PROFILE must be set to 'FlipDeveloperAccess-046651569599'")
+endif
+else
+ifneq ($(AWS_PROFILE),FlipDeveloperAccess-080369786334)
+$(error "For staging deployments, AWS_PROFILE must be set to 'FlipDeveloperAccess-080369786334'")
 endif
 endif
 
