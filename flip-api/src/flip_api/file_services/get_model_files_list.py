@@ -41,7 +41,7 @@ def get_model_files_list(
         user_id (UUID): ID of the user (obtained from auth token).
 
     Returns:
-        List[Dict[str, Any]]: A list of dictionaries containing file information.
+        list[dict[str, Any]]: A list of dictionaries containing file information.
 
     Raises:
         HTTPException: If the user does not have access to the model or if there is an error during the operation.

@@ -28,10 +28,10 @@ def get_trusts(session: Session, ids: list[UUID] | None = None) -> list[ITrust]:
 
     Args:
         session (Session): The SQLModel session to use for the query.
-        ids (Optional[List[UUID]]): A list of Trust IDs to filter by. If None, all Trusts are returned.
+        ids (list[UUID] | None): A list of Trust IDs to filter by. If None, all Trusts are returned.
 
     Returns:
-        List[ITrust]: A list of Trust objects.
+        list[ITrust]: A list of Trust objects.
 
     Raises:
         ValueError: If no Trusts are found or if the database response is empty.

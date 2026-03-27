@@ -57,7 +57,7 @@ def approve_project_endpoint(
         db (Session): The database session.
 
     Returns:
-        List[ITrust]: A list of trusts that the project has been approved for.
+        list[ITrust]: A list of trusts that the project has been approved for.
 
     Raises:
         HTTPException: If the user does not have permission to approve projects, if the project does not exist,

@@ -44,7 +44,7 @@ def update_model_status_endpoint(
         model_id (UUID): The ID of the model to update.
         model_status (ModelStatus): The new status to set for the model.
         db (Session): Database session.
-        user_id (Optional[UUID]): User ID from authentication, if available.
+        user_id (UUID | None): User ID from authentication, if available.
 
     Returns:
         dict[str, str]: A success message indicating the status has been updated.

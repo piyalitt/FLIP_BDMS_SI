@@ -31,7 +31,7 @@ def get_job_types_endpoint() -> dict[str, list[str]]:
     which files are required for training based on the config.json job_type.
 
     Returns:
-        Dict[str, List[str]]: A dictionary where keys are job type names
+        dict[str, list[str]]: A dictionary where keys are job type names
             (e.g., 'standard', 'evaluation') and values are lists of required
             file names (e.g., ['trainer.py', 'validator.py', 'config.json']).
 

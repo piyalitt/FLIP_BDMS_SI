@@ -75,10 +75,10 @@ def get_cognito_users(params: dict[str, Any] | None = None) -> list[CognitoUser]
     Get users from Cognito user pool.
 
     Args:
-        params (Optional[Dict[str, Any]]): Additional parameters to pass to the ListUsers API call.
+        params (dict[str, Any] | None): Additional parameters to pass to the ListUsers API call.
 
     Returns:
-        List[CognitoUser]: List of CognitoUser objects.
+        list[CognitoUser]: List of CognitoUser objects.
 
     Raises:
         HTTPException: If there is an error fetching users from Cognito or if the user pool ID is not found.
@@ -127,8 +127,8 @@ def get_user_by_email_or_id(
 
     Args:
         user_pool_id (str): Cognito user pool ID
-        email (Optional[str]): User email (optional)
-        user_id (Optional[UUID]): User ID (optional)
+        email (str | None): User email (optional)
+        user_id (UUID | None): User ID (optional)
 
     Returns:
         CognitoUser: The user matching the email or ID.
@@ -175,7 +175,7 @@ def get_username(user_id: str, user_pool_id: str) -> str | None:
         user_pool_id (str): Cognito user pool ID
 
     Returns:
-        Optional[str]: The username (email) associated with the user ID, or None if not found.
+        str | None: The username (email) associated with the user ID, or None if not found.
 
     Raises:
         HTTPException: If the request cannot be processed.
@@ -298,11 +298,11 @@ def get_user_role_data(
 
     Args:
         paging_info (PagingInfo): Pagination and filtering information.
-        users (List[CognitoUser]): List of Cognito users.
+        users (list[CognitoUser]): List of Cognito users.
         session (Session): Database session.
 
     Returns:
-        List[IUser]: List of IUser objects with roles.
+        list[IUser]: List of IUser objects with roles.
     """
     # Fetch roles for users
     user_ids = [str(user.id) for user in users]
@@ -352,7 +352,7 @@ def get_all_roles(db: Session) -> list[UUID]:
         db (Session): Database session
 
     Returns:
-        List[UUID]: List of role IDs
+        list[UUID]: List of role IDs
     """
     logger.debug("Attempting to get the list of roles from the database...")
 
@@ -370,8 +370,8 @@ def validate_roles(user_roles: list[UUID], roles_from_db: list[UUID]) -> None:
     Validate that all user roles exist in the database.
 
     Args:
-        user_roles (List[UUID]): List of role IDs to validate
-        roles_from_db (List[UUID]): List of valid role IDs from the database
+        user_roles (list[UUID]): List of role IDs to validate
+        roles_from_db (list[UUID]): List of valid role IDs from the database
 
     Returns:
         None
@@ -446,10 +446,10 @@ def filter_enabled_users(user_pool_id: str, users: list[UUID]) -> list[UUID]:
 
     Args:
         user_pool_id (str): Cognito user pool ID
-        users (List[UUID]): List of user IDs to filter
+        users (list[UUID]): List of user IDs to filter
 
     Returns:
-        List[UUID]: List of enabled user IDs
+        list[UUID]: List of enabled user IDs
     """
     if not users:
         return []

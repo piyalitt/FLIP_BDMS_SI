@@ -74,7 +74,7 @@ def insert_status(
         project_id (str): ID of the project
         status (XNATImageStatus): Status to set
         db (Session): Database session
-        query_id (Optional[str]): Optional query ID
+        query_id (str | None): Optional query ID
 
     Returns:
         int: Number of rows inserted

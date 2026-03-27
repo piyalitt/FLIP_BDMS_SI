@@ -94,7 +94,7 @@ def query_by_accession_number(accession_number: str, headers: dict[str, str]) ->
         headers (dict[str, str]): XNAT authentication headers.
 
     Returns:
-        List[Study]: A list of Study objects that match the accession number.
+        list[Study]: A list of Study objects that match the accession number.
 
     Raises:
         Exception: If there is an error during the query request.
@@ -142,7 +142,7 @@ def queue_image_import_request(
         headers (dict[str, str]): XNAT authentication headers.
 
     Returns:
-        List[ImportStudyResponse]: A list of ImportStudyResponse objects representing the queued import requests.
+        list[ImportStudyResponse]: A list of ImportStudyResponse objects representing the queued import requests.
 
     Raises:
         imaging_api.utils.exceptions.NotFoundError: If the project with the given ID is not found or if no studies are
