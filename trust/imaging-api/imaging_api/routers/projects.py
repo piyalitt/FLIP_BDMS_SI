@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-from typing import Annotated, List
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -25,8 +25,8 @@ from imaging_api.routers.schemas import (
 from imaging_api.services.projects import (
     add_central_hub_users_to_project,
     create_project,
+    create_project_event_subscription,
     delete_project,
-    enable_project_command,
     get_all_projects,
     get_experiment,
     get_experiments,
@@ -146,9 +146,11 @@ async def create_project_from_central_hub_project(
     # Set the project pre-archive settings
     set_project_prearchive_settings(project.ID, headers)
 
-    # Enable dcm2niix command at the project level
-    # TODO We may want to add more here in the future, e.g. QC
-    enable_project_command(project.ID, "xnat/dcm2niix:latest", headers)
+    # Create a project-scoped event subscription for automatic DICOM-to-NIfTI conversion
+    # Active when dicom_to_nifti=True, deactivated when False (can be toggled later via XNAT API)
+    create_project_event_subscription(
+        project.ID, "xnat/dcm2niix:latest", central_hub_project.dicom_to_nifti, headers
+    )
 
     # Add central hub users to imaging project
     # Will create XNAT users if they do not exist, and add them to the XNAT project
@@ -253,7 +255,7 @@ def get_project_endpoint(project_id: str, headers: XNATAuthHeaders) -> Project:
 
 
 @router.get("/{project_id}/subjects", summary="Get XNAT Project Subjects")
-def get_project_subjects_endpoint(project_id: str, headers: XNATAuthHeaders) -> List[Subject]:
+def get_project_subjects_endpoint(project_id: str, headers: XNATAuthHeaders) -> list[Subject]:
     """
     Retrieves a list of subjects in a specific project in XNAT.
 
@@ -262,7 +264,7 @@ def get_project_subjects_endpoint(project_id: str, headers: XNATAuthHeaders) -> 
         headers (XNATAuthHeaders): XNAT authentication headers.
 
     Returns:
-        List[Subject]: List of subjects in the project.
+        list[Subject]: List of subjects in the project.
 
     Raises:
         HTTPException: If there is an error during the retrieval of subjects for the project.
@@ -277,7 +279,7 @@ def get_project_subjects_endpoint(project_id: str, headers: XNATAuthHeaders) -> 
 
 
 @router.get("/{project_id}/experiments", summary="Get XNAT Project Experiments")
-def get_project_experiments_endpoint(project_id: str, headers: XNATAuthHeaders) -> List[Experiment]:
+def get_project_experiments_endpoint(project_id: str, headers: XNATAuthHeaders) -> list[Experiment]:
     """
     Retrieves a list of experiments in a specific project in XNAT.
 
@@ -286,7 +288,7 @@ def get_project_experiments_endpoint(project_id: str, headers: XNATAuthHeaders) 
         headers (XNATAuthHeaders): XNAT authentication headers.
 
     Returns:
-        List[Experiment]: List of experiments in the project.
+        list[Experiment]: List of experiments in the project.
 
     Raises:
         HTTPException: If there is an error during the retrieval of experiments for the project.

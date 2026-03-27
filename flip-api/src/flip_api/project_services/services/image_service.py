@@ -13,7 +13,6 @@
 import base64
 import json  # For serializing request data if needed by http client
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
 from uuid import UUID
 
 import httpx
@@ -48,7 +47,7 @@ def base64_url_encode(data: str) -> str:
     return base64.urlsafe_b64encode(data.encode("utf-8")).decode("utf-8").rstrip("=")
 
 
-def get_imaging_projects(project_id: UUID, db: Session) -> List[ImagingProject]:
+def get_imaging_projects(project_id: UUID, db: Session) -> list[ImagingProject]:
     """
     Retrieve imaging projects associated with a given project ID.
 
@@ -57,7 +56,7 @@ def get_imaging_projects(project_id: UUID, db: Session) -> List[ImagingProject]:
         db (Session): The database session for executing queries.
 
     Returns:
-        List[ImagingProject]: A list of ImagingProject objects associated with the given project ID.
+        list[ImagingProject]: A list of ImagingProject objects associated with the given project ID.
 
     Raises:
         SQLAlchemyError: If there is an error executing the database query.
@@ -138,7 +137,7 @@ def delete_imaging_project(imaging_project: ImagingProject, db: Session) -> bool
         return False
 
 
-def get_xnat_project_status_info(xnat_project_id: UUID, db: Session) -> Optional[XnatProjectStatusInfo]:
+def get_xnat_project_status_info(xnat_project_id: UUID, db: Session) -> XnatProjectStatusInfo | None:
     """
     Retrieve the XNAT project status information for a given XNAT project ID.
 
@@ -147,8 +146,8 @@ def get_xnat_project_status_info(xnat_project_id: UUID, db: Session) -> Optional
         db (Session): The database session for executing queries.
 
     Returns:
-        Optional[XnatProjectStatusInfo]: An object containing the XNAT project status information, or None if the
-                                         project status could not be found.
+        XnatProjectStatusInfo | None: An object containing the XNAT project status information, or None if the
+                                    project status could not be found.
 
     Raises:
         SQLAlchemyError: If there is an error executing the database query.
@@ -175,23 +174,23 @@ def get_xnat_project_status_info(xnat_project_id: UUID, db: Session) -> Optional
 
 
 def get_imaging_project_statuses(
-    imaging_projects: List[ImagingProject], encoded_query: str, db: Session
-) -> List[IImagingStatus]:
+    imaging_projects: list[ImagingProject], encoded_query: str, db: Session
+) -> list[IImagingStatus]:
     """
     Retrieve the imaging project statuses for a list of imaging projects.
 
     Args:
-        imaging_projects (List[ImagingProject]): The list of imaging projects to retrieve statuses for.
+        imaging_projects (list[ImagingProject]): The list of imaging projects to retrieve statuses for.
         encoded_query (str): The Base64 URL encoded query to send to the imaging project endpoints.
         db (Session): The database session for executing queries.
 
     Returns:
-        List[IImagingStatus]: A list of IImagingStatus containing the status information for each imaging project.
+        list[IImagingStatus]: A list of IImagingStatus containing the status information for each imaging project.
     """
     logger.debug(
         f"Attempting to retrieve the imaging project status. Trusts requested: {[ip.name for ip in imaging_projects]}"
     )
-    response_statuses: List[IImagingStatus] = []
+    response_statuses: list[IImagingStatus] = []
 
     for row_project in imaging_projects:
         xnat_status_info = get_xnat_project_status_info(row_project.xnat_project_id, db)
@@ -258,7 +257,7 @@ def update_xnat_user_profile(
     logger.debug(f"Attempting to update XNAT user profile: {request_data.email} at all trusts")
 
     trusts = get_trusts(db)
-    trusts_responses: List[dict] = []
+    trusts_responses: list[dict] = []
 
     for trust in trusts:
         try:
@@ -284,7 +283,7 @@ def update_xnat_user_profile(
 
 
 def reimport_failed_studies(
-    reimport_queries: List[IReimportQuery],
+    reimport_queries: list[IReimportQuery],
     db: Session,
     project_reimport_rate_minutes: int,
 ) -> bool:
@@ -293,7 +292,7 @@ def reimport_failed_studies(
     specified time interval has passed since the last reimport.
 
     Args:
-        reimport_queries (List[IReimportQuery]): A list of queries containing information about which projects and
+        reimport_queries (list[IReimportQuery]): A list of queries containing information about which projects and
             trusts to reimport studies for, along with the last reimport time.
         db (Session): The database session for updating reimport status.
         project_reimport_rate_minutes (int): The minimum number of minutes that must have passed since the last

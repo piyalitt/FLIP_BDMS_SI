@@ -64,10 +64,10 @@ The flip-api is configured via environment variables. In development these are s
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `AWS_REGION` | AWS region for Cognito and S3 |
-| `COGNITO_USER_POOL_ID` | AWS Cognito User Pool ID |
-| `COGNITO_CLIENT_ID` | AWS Cognito App Client ID |
-| `ENCRYPTION_KEY` | Key used for encrypting project IDs sent to Trusts |
-| `S3_BUCKET_NAME` | S3 bucket for storing models and artefacts |
+| `AWS_COGNITO_USER_POOL_ID` | AWS Cognito User Pool ID |
+| `AWS_COGNITO_APP_CLIENT_ID` | AWS Cognito App Client ID |
+| `AES_KEY_BASE64` | Base64-encoded 32-byte AES key for encrypting project IDs sent to Trusts |
+| `UPLOADED_FEDERATED_DATA_BUCKET` | S3 bucket for storing models and artefacts |
 
 See [`.env.development.example`](../.env.development.example) for the full list of required variables.
 

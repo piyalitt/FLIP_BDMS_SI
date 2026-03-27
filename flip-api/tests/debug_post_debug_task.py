@@ -12,7 +12,6 @@
 
 import json
 import os
-from typing import Dict, List
 
 from sqlmodel import Session, col, delete, select
 
@@ -21,7 +20,6 @@ from flip_api.db.models.main_models import (
     FLJob,
     FLLogs,
     FLMetrics,
-    Image,
     Model,
     ModelsAudit,
     ModelTrustIntersect,
@@ -37,7 +35,7 @@ from flip_api.db.models.main_models import (
 )
 
 
-def delete_projects_models(session: Session, project_ids: List[str]) -> bool:
+def delete_projects_models(session: Session, project_ids: list[str]) -> bool:
     """Delete models associated with the projects"""
     print(f"  🔍 Deleting models for {len(project_ids)} projects...")
     models = session.exec(select(Model).where(col(Model.project_id).in_(project_ids)))
@@ -87,14 +85,6 @@ def delete_projects_models(session: Session, project_ids: List[str]) -> bool:
         print(f"  ❌ Error deleting models audit records: {e}")
         return False
     try:
-        # Now delete images and uploaded files
-        result = session.execute(delete(Image).where(col(Image.model_id).in_(model_ids)))
-        deleted_count = result.rowcount if hasattr(result, "rowcount") else 0
-        print(f"  ✅ Deleted {deleted_count} image records")
-    except Exception as e:
-        print(f"  ❌ Error deleting image records: {e}")
-        return False
-    try:
         # delete model trust intersects
         result = session.execute(delete(ModelTrustIntersect).where(col(ModelTrustIntersect.model_id).in_(model_ids)))
         deleted_count = result.rowcount if hasattr(result, "rowcount") else 0
@@ -114,7 +104,7 @@ def delete_projects_models(session: Session, project_ids: List[str]) -> bool:
     return True
 
 
-def delete_xnat_project_status(session: Session, project_ids: List[str]) -> bool:
+def delete_xnat_project_status(session: Session, project_ids: list[str]) -> bool:
     """Delete XNAT project status for the projects"""
     try:
         result = session.execute(delete(XNATProjectStatus).where(col(XNATProjectStatus.project_id).in_(project_ids)))
@@ -126,7 +116,7 @@ def delete_xnat_project_status(session: Session, project_ids: List[str]) -> bool
         return False
 
 
-def load_project_ids() -> Dict[str, str]:
+def load_project_ids() -> dict[str, str]:
     """Load project IDs from the JSON file created by debug_prelaunch_task.py"""
     json_file_path = "tests/debug_prelaunch_task_projects.json"
 
@@ -148,7 +138,7 @@ def load_project_ids() -> Dict[str, str]:
         return {}
 
 
-def delete_query_results(session: Session, project_ids: List[str]) -> bool:
+def delete_query_results(session: Session, project_ids: list[str]) -> bool:
     """Delete query results for queries belonging to the projects"""
     try:
         # First get all query IDs for the projects
@@ -169,7 +159,7 @@ def delete_query_results(session: Session, project_ids: List[str]) -> bool:
         return False
 
 
-def delete_query_stats(session: Session, project_ids: List[str]) -> bool:
+def delete_query_stats(session: Session, project_ids: list[str]) -> bool:
     """Delete query stats for queries belonging to the projects"""
     try:
         # First get all query IDs for the projects
@@ -190,7 +180,7 @@ def delete_query_stats(session: Session, project_ids: List[str]) -> bool:
         return False
 
 
-def delete_project_user_access(session: Session, project_ids: List[str]) -> bool:
+def delete_project_user_access(session: Session, project_ids: list[str]) -> bool:
     """Delete project user access for the projects"""
     try:
         result = session.execute(delete(ProjectUserAccess).where(col(ProjectUserAccess.project_id).in_(project_ids)))
@@ -202,7 +192,7 @@ def delete_project_user_access(session: Session, project_ids: List[str]) -> bool
         return False
 
 
-def delete_project_trust_intersect(session: Session, project_ids: List[str]) -> bool:
+def delete_project_trust_intersect(session: Session, project_ids: list[str]) -> bool:
     """Delete project trust intersect for the projects"""
     try:
         result = session.execute(
@@ -216,7 +206,7 @@ def delete_project_trust_intersect(session: Session, project_ids: List[str]) -> 
         return False
 
 
-def delete_queries(session: Session, project_ids: List[str]) -> bool:
+def delete_queries(session: Session, project_ids: list[str]) -> bool:
     """Delete queries for the projects"""
     try:
         result = session.execute(delete(Queries).where(col(Queries.project_id).in_(project_ids)))
@@ -228,7 +218,7 @@ def delete_queries(session: Session, project_ids: List[str]) -> bool:
         return False
 
 
-def delete_projects(session: Session, project_ids: List[str]) -> bool:
+def delete_projects(session: Session, project_ids: list[str]) -> bool:
     """Delete the projects themselves"""
     try:
         result = session.execute(delete(Projects).where(col(Projects.id).in_(project_ids)))
@@ -240,7 +230,7 @@ def delete_projects(session: Session, project_ids: List[str]) -> bool:
         return False
 
 
-def delete_projects_audit(session: Session, project_ids: List[str]) -> bool:
+def delete_projects_audit(session: Session, project_ids: list[str]) -> bool:
     """Delete project audit records for the projects"""
     try:
         result = session.execute(delete(ProjectsAudit).where(col(ProjectsAudit.project_id).in_(project_ids)))
@@ -252,7 +242,7 @@ def delete_projects_audit(session: Session, project_ids: List[str]) -> bool:
         return False
 
 
-def delete_project_data_in_order(session: Session, project_ids: List[str]) -> bool:
+def delete_project_data_in_order(session: Session, project_ids: list[str]) -> bool:
     """Delete all project-related data in the correct order to avoid dependency issues"""
     print(f"🗑️ Deleting data for {len(project_ids)} projects in dependency order...")
 

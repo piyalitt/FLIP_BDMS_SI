@@ -10,7 +10,6 @@
 # limitations under the License.
 #
 
-from typing import List
 from uuid import UUID
 
 import psycopg2
@@ -52,7 +51,7 @@ def seed_role_permissions(session: Session) -> None:
 
     if researcher_role:
         # Define default permissions for the Researcher role
-        default_permissions: List[str] = [
+        default_permissions: list[str] = [
             PermissionRef.CAN_MANAGE_PROJECTS.value,
         ]
         for permission_id in default_permissions:
@@ -68,6 +67,9 @@ def seed_role_permissions(session: Session) -> None:
                     )
             else:
                 logger.debug(f"Permission {permission_id} not found. Cannot assign to Researcher role.")
+
+    # Note: Observer role intentionally has no permissions (read-only access to assigned projects)
+
     logger.info("Role permissions seeded successfully.")
 
 

@@ -11,7 +11,6 @@
 #
 
 import re
-from typing import List
 from uuid import UUID
 
 import httpx
@@ -22,6 +21,7 @@ import sqlparse  # type: ignore[import]
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlmodel import Session, select
 
+from flip_api.auth.access_manager import can_modify_project
 from flip_api.auth.dependencies import verify_token
 from flip_api.db.database import get_session
 from flip_api.db.models.main_models import Trust
@@ -115,10 +115,14 @@ def submit_cohort_query(
 
     Raises:
         HTTPException: If the query contains forbidden commands, if the SQL syntax is invalid, if no trusts are found,
-        or if there is an
+        or if there is an error communicating with the trusts.
     """
     try:
-        # Validation of inputs is handled by Pydantic
+        if not can_modify_project(user_id, cohort_query.project_id, db):
+            raise HTTPException(
+                status_code=403,
+                detail=f"User with ID: {user_id} is not allowed to modify this project",
+            )
 
         # Additional validation
         if contains_forbidden_commands(cohort_query.query):
@@ -140,7 +144,7 @@ def submit_cohort_query(
 
         logger.info(f"Trusts found: {len(trusts)}")
 
-        result: List[TrustDetails] = []
+        result: list[TrustDetails] = []
 
         # Encrypt project_id before sending to trusts
         encrypted_project_id = encrypt(str(cohort_query.project_id))

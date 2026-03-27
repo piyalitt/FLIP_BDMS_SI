@@ -77,6 +77,12 @@
         - "{{ flip_dir }}"
         - "{{ flip_dir }}/data/trust-1"
         - "{{ cert_dir }}"
+        # XNAT bind-mount directories (Docker Swarm does not auto-create them)
+        - "{{ flip_dir }}/xnat"
+        - "{{ flip_dir }}/xnat/xnat-data/tomcat_logs"
+        - "{{ flip_dir }}/xnat/xnat-data/archive"
+        - "{{ flip_dir }}/xnat/xnat-data/build"
+        - "{{ flip_dir }}/xnat/xnat-data/cache"
 
     - name: Create FL client kit directories
       file:
@@ -167,13 +173,6 @@
     # Add all allow rules BEFORE enabling UFW with default-deny to avoid
     # locking out the operator on a remote host mid-playbook.
 
-    - name: Allow SSH (prevent operator lockout)
-      community.general.ufw:
-        rule: allow
-        port: "22"
-        proto: tcp
-        comment: SSH access
-
     - name: Allow Trust API HTTPS from Central Hub IP only
       community.general.ufw:
         rule: allow
@@ -197,6 +196,14 @@
         port: "8003"
         proto: tcp
         comment: "FL Admin port from AWS CH"
+
+    - name: Allow SSH from Central Hub IP
+      community.general.ufw:
+        rule: allow
+        src: "{{ ch_public_ip }}"
+        port: "22"
+        proto: tcp
+        comment: "SSH from AWS CH for remote provisioning"
 
     - name: Set UFW default policy — deny incoming
       community.general.ufw:

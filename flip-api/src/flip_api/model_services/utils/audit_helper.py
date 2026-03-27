@@ -10,7 +10,6 @@
 # limitations under the License.
 #
 
-from typing import List
 from uuid import UUID
 
 from sqlmodel import Session
@@ -48,16 +47,16 @@ def audit_model_action(model_id: UUID, action: ModelAuditAction, user_id: UUID, 
     return audit
 
 
-def audit_model_actions(actions: List[IModelAuditAction], session: Session) -> List[ModelsAudit]:
+def audit_model_actions(actions: list[IModelAuditAction], session: Session) -> list[ModelsAudit]:
     """
     Bulk insert multiple audit logs into the ModelsAudit table.
 
     Args:
-        actions (List[IModelAuditAction]): List of actions to audit.
+        actions (list[IModelAuditAction]): List of actions to audit.
         session (Session): SQLModel session.
 
     Returns:
-        List[ModelsAudit]: List of created ModelsAudit entries.
+        list[ModelsAudit]: List of created ModelsAudit entries.
     """
     logger.debug("Attempting to audit multiple actions...")
 
