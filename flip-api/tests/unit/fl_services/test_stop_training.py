@@ -82,7 +82,7 @@ def test_stop_training_forbidden(fake_request, model_id, mock_db, mock_can_modif
         stop_training(model_id, fake_request, mock_db, user_id)
 
     assert exc_info.value.status_code == 403
-    assert "denied access" in exc_info.value.detail
+    assert "is not allowed" in exc_info.value.detail
 
 
 def test_stop_training_failure(

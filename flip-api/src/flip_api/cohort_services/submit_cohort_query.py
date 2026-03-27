@@ -120,10 +120,9 @@ def submit_cohort_query(
     try:
         if not can_modify_project(user_id, cohort_query.project_id, db):
             raise HTTPException(
-                status_code=403, detail="Insufficient permissions to modify this project"
+                status_code=403,
+                detail=f"User with ID: {user_id} is not allowed to modify this project",
             )
-
-        # Validation of inputs is handled by Pydantic
 
         # Additional validation
         if contains_forbidden_commands(cohort_query.query):

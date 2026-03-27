@@ -47,7 +47,7 @@ def delete_model_endpoint(
         None
 
     Raises:
-        HTTPException: If the user does not have access to the model, if the model does not exist, if the model is
+        HTTPException: If the user is not allowed, if the model does not exist, if the model is
                        already deleted, or if there is a database error.
     """
     logger.info(f"User {user_id} requested deletion of model {model_id}")
@@ -55,7 +55,7 @@ def delete_model_endpoint(
     # Check if user has access to the model
     if not can_modify_model(user_id, model_id, db):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=f"User with ID: {user_id} is denied access to this model"
+            status_code=status.HTTP_403_FORBIDDEN, detail=f"User with ID: {user_id} is not allowed to modify this model"
         )
 
     # Check model status

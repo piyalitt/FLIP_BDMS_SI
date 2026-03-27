@@ -121,7 +121,7 @@ def test_download_file_access_denied(
 
     # Verify the status code is 403 (Forbidden)
     assert excinfo.value.status_code == status.HTTP_403_FORBIDDEN
-    assert "denied access" in str(excinfo.value.detail)
+    assert "is not allowed" in str(excinfo.value.detail)
 
 
 def test_download_file_not_found(

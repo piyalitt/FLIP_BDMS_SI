@@ -46,7 +46,7 @@ def retrieve_federated_results(
         List[str]: A list of presigned URLs for the files associated with the model.
 
     Raises:
-        HTTPException: If the user does not have access to the model, if the model ID does not exist, if S3 command
+        HTTPException: If the user is not allowed, if the model ID does not exist, if S3 command
                        gives an error while listing objects, or if there are any errors retrieving objects from S3.
     """
     try:
@@ -55,7 +55,7 @@ def retrieve_federated_results(
             logger.error(f"User ID: {user_id} does not have access to Model ID: {model_id}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"User with ID: {user_id} is denied access to this model",
+                detail=f"User with ID: {user_id} is not allowed to retrieve federated results for this model",
             )
 
         # Check if model exists

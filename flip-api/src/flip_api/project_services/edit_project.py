@@ -57,8 +57,7 @@ def edit_project_endpoint(
         Projects: The updated project details.
 
     Raises:
-        HTTPException: If the user does not have permission to edit projects, if the project does not exist, or if
-                       there are validation errors.
+        HTTPException: If the user is not allowed, if the project does not exist, or if there are validation errors.
     """
     logger.debug(f"Attempting to edit project by user: {user_id}")
 

@@ -47,13 +47,13 @@ def edit_model_endpoint(
         None
 
     Raises:
-        HTTPException: If the user does not have access to the model, if the model does not exist, if the model is
+        HTTPException: If the user is not allowed, if the model does not exist, if the model is
                        already deleted, if the model status does not allow editing, or if there is a database error.
     """
     # Access control
     if not can_modify_model(user_id, model_id, db):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=f"User with ID: {user_id} is denied access to this model"
+            status_code=status.HTTP_403_FORBIDDEN, detail=f"User with ID: {user_id} is not allowed to modify this model"
         )
 
     # Model status validation

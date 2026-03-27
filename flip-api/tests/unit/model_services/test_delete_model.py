@@ -103,7 +103,7 @@ def test_delete_model_forbidden(
 ):
     response = client.delete(f"/api/model/{test_model_id}")
     assert response.status_code == status.HTTP_403_FORBIDDEN
-    assert "denied access" in response.json()["detail"]
+    assert "is not allowed" in response.json()["detail"]
 
 
 def test_delete_model_not_found(

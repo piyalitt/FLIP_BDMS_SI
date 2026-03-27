@@ -113,7 +113,7 @@ def test_save_model_success(
 def test_save_model_forbidden(mock_can_modify_project_false):
     response = client.post("/api/model", json=test_payload)
     assert response.status_code == status.HTTP_403_FORBIDDEN
-    assert "denied access" in response.json()["detail"]
+    assert "is not allowed" in response.json()["detail"]
 
 
 def test_save_model_project_not_found(mock_can_modify_project_true, mock_get_project_not_found):

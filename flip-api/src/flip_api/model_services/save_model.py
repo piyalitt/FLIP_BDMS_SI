@@ -51,7 +51,7 @@ def save_model(
         IId: An object containing the ID of the created model.
 
     Raises:
-        HTTPException: If the user does not have access to the project, if the project does not exist, if the project
+        HTTPException: If the user is not allowed to modify the project, if the project does not exist, if the project
                        is not approved, if there are no approved trusts for the project, or there is a database error.
     """
     logger.info(f"User {user_id} requested model creation for project {payload.project_id}")
@@ -59,7 +59,8 @@ def save_model(
     # Access control
     if not can_modify_project(user_id, payload.project_id, db):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=f"User with ID: {user_id} is denied access to this project"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"User with ID: {user_id} is not allowed to modify this project",
         )
 
     # Validate project

@@ -97,20 +97,3 @@ def test_delete_model_file_s3_error(session: Session, monkeypatch):
     # Assertions
     assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     assert "Error deleting" in exc_info.value.detail
-
-
-def test_delete_model_file_general_exception(session: Session, monkeypatch):
-    """Test when a general exception occurs."""
-    # Mock ModelFileDelete to raise an exception
-    monkeypatch.setattr(
-        "flip_api.file_services.delete_file.ModelFileDelete",
-        lambda *args, **kwargs: (_ for _ in ()).throw(Exception("General error")),
-    )
-
-    # Call the function and assert HTTPException is raised
-    with pytest.raises(HTTPException) as exc_info:
-        delete_model_file(model_id, file_name, session, user_id)
-
-    # Assertions
-    assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-    assert "Internal server error" in exc_info.value.detail

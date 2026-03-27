@@ -28,12 +28,12 @@ def can_access_project(user_id: UUID, project_id: UUID, db: Session) -> bool:
     Check if a user has access to a specific project.
 
     Args:
-        user_id: ID of the user
-        project_id: ID of the project
-        db: Database session
+        user_id (UUID): ID of the user
+        project_id (UUID): ID of the project
+        db (Session): Database session
 
     Returns:
-        True if the user has access to the project, False otherwise
+        bool: True if the user has access to the project, False otherwise
     """
     logger.debug(f"Checking if user: {user_id} can access project: {project_id}")
 
@@ -81,12 +81,12 @@ def can_modify_project(user_id: UUID, project_id: UUID, db: Session) -> bool:
     or for the project owner. Returns False for Observers.
 
     Args:
-        user_id: ID of the user
-        project_id: ID of the project
-        db: Database session
+        user_id (UUID): ID of the user
+        project_id (UUID): ID of the project
+        db (Session): Database session
 
     Returns:
-        True if the user can modify the project, False otherwise
+        bool: True if the user can modify the project, False otherwise
     """
     logger.debug(f"Checking if user: {user_id} can modify project: {project_id}")
 
@@ -110,12 +110,12 @@ def can_modify_model(user_id: UUID, model_id: UUID, db: Session) -> bool:
     Looks up the model's project_id, then delegates to can_modify_project.
 
     Args:
-        user_id: ID of the user
-        model_id: ID of the model
-        db: Database session
+        user_id (UUID): ID of the user
+        model_id (UUID): ID of the model
+        db (Session): Database session
 
     Returns:
-        True if the user can modify the model, False otherwise
+        bool: True if the user can modify the model, False otherwise
     """
     logger.debug(f"Checking if user: {user_id} can modify model: {model_id}")
 
@@ -263,7 +263,7 @@ def check_authorization_token(api_key: str = Security(api_key_header_scheme)) ->
     It mirrors the logic of the TypeScript privateKeyAuthorizer.
 
     Args:
-        api_key: The API key extracted from the request header.
+        api_key (str): The API key extracted from the request header.
                  FastAPI's Security utility injects this. If auto_error=False on
                  APIKeyHeader and the header is missing, api_key will be None.
 

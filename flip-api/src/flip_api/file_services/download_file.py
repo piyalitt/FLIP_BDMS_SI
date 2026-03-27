@@ -49,16 +49,16 @@ def download_file(
         StreamingResponse: A streaming response containing the file content.
 
     Raises:
-        HTTPException: If the user does not have access to the model, if the file does not exist, or there is an error
+        HTTPException: If the user is not allowed, if the file does not exist, or there is an error
                        during the download process.
     """
     try:
         # Check user access
         if not can_modify_model(user_id, model_id, db):
-            logger.error(f"User ID: {user_id} does not have access to Model ID: {model_id}")
+            logger.error(f"User ID: {user_id} is not allowed to modify model {model_id}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"User with ID: {user_id} is denied access to this model",
+                detail=f"User with ID: {user_id} is not allowed to download files from this model",
             )
 
         # Check if file exists in database

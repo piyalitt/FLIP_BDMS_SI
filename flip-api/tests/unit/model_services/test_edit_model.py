@@ -112,7 +112,7 @@ def test_edit_model_forbidden(
 ):
     response = client.put(f"/api/model/{test_model_id}", json=test_model_details)
     assert response.status_code == HTTPStatus.FORBIDDEN
-    assert "denied access" in response.json()["detail"]
+    assert "is not allowed" in response.json()["detail"]
 
 
 def test_edit_model_not_found(

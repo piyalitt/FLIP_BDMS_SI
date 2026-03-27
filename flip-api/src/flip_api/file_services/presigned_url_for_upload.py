@@ -30,7 +30,7 @@ router = APIRouter(prefix="/files", tags=["file_services"])
 # [#114] ✅
 @router.post("/preSignedUrl/model/{model_id}", response_model=str)
 def get_presigned_url_for_upload(
-    model_id: str,
+    model_id: UUID,
     body: UploadFileBody,
     db: Session = Depends(get_session),
     user_id: UUID = Depends(verify_token),
@@ -39,7 +39,7 @@ def get_presigned_url_for_upload(
     Generate a pre-signed URL for uploading model files to S3.
 
     Args:
-        model_id (str): The ID of the model to which the file will be uploaded.
+        model_id (UUID): The ID of the model to which the file will be uploaded.
         body (UploadFileBody): The request body containing the file name.
         db (Session): Database session dependency.
         user_id (UUID): ID of the authenticated user.
@@ -48,14 +48,14 @@ def get_presigned_url_for_upload(
         str: A pre-signed URL for uploading the file to S3.
 
     Raises:
-        HTTPException: If the model does not exist or is marked as deleted,
+        HTTPException: If the user is not allowed, if the model does not exist or is marked as deleted,
                        or if there is an error generating the pre-signed URL.
     """
     try:
         # TODO: Implement user authentication if needed
         # Check if user can access the model via your access logic
 
-        if not can_modify_model(user_id, UUID(model_id), db):
+        if not can_modify_model(user_id, model_id, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"User with ID: {user_id} is not allowed to upload files to this model",

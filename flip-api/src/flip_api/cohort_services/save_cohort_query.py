@@ -46,25 +46,24 @@ def save_cohort_query(
     Save a new cohort query to the database.
 
     Args:
-        request: HTTP request object
-        cohort_query: CohortQueryInput object containing the query details
-        db: Database session
-        user_id: ID of the user making the request, obtained from authentication
+        request (Request): HTTP request object
+        cohort_query (CohortQueryInput): CohortQueryInput object containing the query details
+        db (Session): Database session
+        user_id (UUID): ID of the user making the request, obtained from authentication
 
     Returns:
         SubmitCohortQueryInput: The saved cohort query details including the query ID
 
     Raises:
-        HTTPException: If the project is not in UNSTAGED status, if the query could not be created, or if there is an
-        internal server error
+        HTTPException: If the user is not allowed, if the project is not in UNSTAGED status, if the query could not be
+        created, or if there is an internal server error
     """
     try:
         if not can_modify_project(user_id, cohort_query.project_id, db):
             raise HTTPException(
-                status_code=403, detail="Insufficient permissions to modify this project"
+                status_code=403,
+                detail=f"User with ID: {user_id} is not allowed to modify this project",
             )
-
-        # Validation is handled automatically by Pydantic
 
         # Validate whether project has UNSTAGED status
         if not has_project_status(cohort_query.project_id, ProjectStatus.UNSTAGED, db):

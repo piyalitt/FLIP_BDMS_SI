@@ -52,8 +52,7 @@ def delete_project_endpoint(
         None
 
     Raises:
-        HTTPException: If the user does not have permission to delete projects, if the project does not exist, or if
-                       there are validation errors.
+        HTTPException: If the user is not allowed, if the project does not exist, or if there are validation errors.
     """
     logger.debug(f"Attempting to delete project by user: {user_id}")
 
