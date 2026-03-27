@@ -192,7 +192,7 @@ class TestRetrieveFederatedResults:
                 retrieve_federated_results(model_id=sample_model_id, db=mock_db_session, user_id=user_id)
 
             assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-            assert "denied access to this model" in exc_info.value.detail
+            assert "is denied access" in exc_info.value.detail
 
     def test_model_not_found(self, empty_db_session, mocked_settings, sample_model_id, user_id):
         """Test handling of non-existent model."""

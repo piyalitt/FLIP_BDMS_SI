@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import status
@@ -85,7 +85,8 @@ def test_get_details_not_found(client, mock_db):
     assert "Error fetching site details" in response.json()["detail"]
 
 
-def test_put_details_success(client, mock_db):
+@patch("flip_api.site_services.details.has_permissions", return_value=True)
+def test_put_details_success(mock_perms, client, mock_db):
     # Input payload to update
     payload = {
         "banner": {"message": "Updated!", "link": "https://example.com/", "enabled": True},
@@ -121,7 +122,8 @@ def test_put_details_success(client, mock_db):
     assert response.json() == payload  # expecting updated result
 
 
-def test_put_details_failure(client, mock_db):
+@patch("flip_api.site_services.details.has_permissions", return_value=True)
+def test_put_details_failure(mock_perms, client, mock_db):
     # Simulate an exception during the first DB exec (e.g., fetching banner)
     mock_db.exec.side_effect = Exception("DB failure")
 
@@ -135,3 +137,16 @@ def test_put_details_failure(client, mock_db):
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     assert "Error updating site details" in response.json()["detail"]
     assert "DB failure" in response.json()["detail"]
+
+
+@patch("flip_api.site_services.details.has_permissions", return_value=False)
+def test_put_details_permission_denied(mock_perms, client, mock_db):
+    payload = {
+        "banner": {"message": "Blocked", "link": "https://example.com", "enabled": True},
+        "deploymentMode": False,
+    }
+
+    response = client.put("/api/site/details", json=payload)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert "Insufficient permissions" in response.json()["detail"]

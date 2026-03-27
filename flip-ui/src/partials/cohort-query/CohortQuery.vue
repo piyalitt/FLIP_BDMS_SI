@@ -33,12 +33,12 @@
                             <div class="space-y-4">
                                 <AiCodeTextArea
                                     :initial-value="project?.query?.query"
-                                    :input-props="{readonly: queryLocked}"
+                                    :input-props="{readonly: queryLocked || isObserver}"
                                     name="query"
                                     label=""
                                     data-test="cohort-query"
                                 />
-                                <div v-if="!queryLocked">
+                                <div v-if="!queryLocked && !isObserver">
                                     <AiButton
                                         primary
                                         :loading="formSubmitting"
@@ -78,6 +78,7 @@ import AiCodeTextArea from "@/components/AiTextArea/AiCodeTextArea.vue";
 import router from "@/router";
 import { ICohortQueryCreate, sendQuery } from "@/services/cohort-query-service";
 import { IProject } from "@/services/project-service";
+import { useAuthStore } from "@/store/auth";
 import { useProjectStore } from "@/store/project";
 import { containsForbiddenCommands } from "@/utils/cohort/query";
 import { Snackbar } from "@/utils/snackbar";
@@ -85,7 +86,9 @@ import { Snackbar } from "@/utils/snackbar";
 import QueryResultCharts from "./QueryResultCharts.vue";
 
 const route = useRoute();
+const authStore = useAuthStore();
 const projectStore = useProjectStore();
+const isObserver = computed(() => !authStore.hasPermissions(["CanManageProjects"]));
 
 const queryId = ref<string>("");
 const project = ref<IProject>();

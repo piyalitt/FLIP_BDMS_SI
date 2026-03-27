@@ -14,3 +14,5 @@ User Roles
      - Allows a user the rights to perform Administrative duties for FLIP including; project approval, unstaging a project, site management and user management.
    * - ``researcher``
      - Allows a user the rights to create and manage FLIP projects including; Creating projects in FLIP, Managing projects for which they have access to in FLIP, Creating a Cohort Query to identify data, Stage projects for approval on specified trusts, Creation of Models, Upload of files required for a model and initiating the training of a model.
+   * - ``observer``
+     - Provides read-only access to assigned projects. Observers can view project details, cohort query results, model metrics and training results, and download model results. Observers cannot create or edit projects, run or save cohort queries, create or edit models, upload model files, or initiate training.

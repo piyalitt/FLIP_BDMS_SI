@@ -33,6 +33,7 @@ from flip_api.domain.interfaces.project import (
     IUpdateXnatProfile,
 )
 from flip_api.domain.schemas.status import ModelStatus, ProjectStatus
+from flip_api.domain.schemas.users import CognitoUser
 from flip_api.utils.paging_utils import IPagedData, IPagedResponse
 
 # Common timestamp used for testing
@@ -139,8 +140,8 @@ class TestIProjectResponseSchema:
 
 class TestIReturnedProjectSchema:
     def test_valid_ireturned_project(self):
-        user1_email = "user@gmail.com"
-        user2_email = "user@test.com"
+        user1 = CognitoUser(id=uuid4(), email="user@gmail.com", is_disabled=False)
+        user2 = CognitoUser(id=uuid4(), email="user@test.com", is_disabled=False)
         returned_project = IReturnedProject(
             id=uuid4(),
             name="Ret P",
@@ -152,10 +153,7 @@ class TestIReturnedProjectSchema:
             owner_email="owner@example.com",
             approved_trusts=[IApprovedTrust(id=uuid4(), name="T1", approved=True)],
             query=IProjectQuery(id=str(uuid4()), name="Q", query="QT"),
-            users=[
-                user1_email,
-                user2_email,
-            ],
+            users=[user1, user2],
         )
         assert returned_project.owner_email == "owner@example.com"
         assert len(returned_project.approved_trusts) == 1
