@@ -43,7 +43,7 @@ def retrieve_federated_results(
         user_id (UUID): User ID from authentication.
 
     Returns:
-        List[str]: A list of presigned URLs for the files associated with the model.
+        list[str]: A list of presigned URLs for the files associated with the model.
 
     Raises:
         HTTPException: If the user is not allowed, if the model ID does not exist, if S3 command

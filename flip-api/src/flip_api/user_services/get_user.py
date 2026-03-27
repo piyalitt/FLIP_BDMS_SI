@@ -39,7 +39,7 @@ def get_user(
         token_id (UUID): User ID from authentication token.
 
     Returns:
-        dict[str, Any]: User details if found
+        CognitoUser: User details if found
 
     Raises:
         HTTPException: If the user ID format is invalid, if the user is not found, or if there is an error getting the
