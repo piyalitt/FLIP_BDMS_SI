@@ -24,6 +24,7 @@ from flip_api.domain.schemas.status import TaskType
 # Mocking the project ID for the test
 project_id = uuid.uuid4()
 query_id = uuid.uuid4()
+user_id = uuid.uuid4()
 
 
 @pytest.fixture
@@ -51,14 +52,21 @@ def mock_encrypt():
         yield
 
 
-def test_submit_cohort_query_queues_task(mock_request, sample_query, mock_encrypt):
+@pytest.fixture
+def mock_can_modify():
+    """Mock can_modify_project to return True (user has permission)."""
+    with patch("flip_api.cohort_services.submit_cohort_query.can_modify_project", return_value=True):
+        yield
+
+
+def test_submit_cohort_query_queues_task(mock_request, sample_query, mock_encrypt, mock_can_modify):
     """Submitting a cohort query should create a TrustTask for each trust."""
     mock_db = MagicMock()
     mock_trust = MagicMock(id="trust_1", name="Trust A", endpoint="http://trust-a.com")
     mock_trust.name = "Trust A"
     mock_db.exec.return_value.all.return_value = [mock_trust]
 
-    response = submit_cohort_query(mock_request, sample_query, mock_db)
+    response = submit_cohort_query(mock_request, sample_query, mock_db, user_id)
 
     # Verify a TrustTask was added to the DB
     assert mock_db.add.called
@@ -78,7 +86,7 @@ def test_submit_cohort_query_queues_task(mock_request, sample_query, mock_encryp
     assert response.trust[0].message == "Task queued"
 
 
-def test_submit_cohort_query_multiple_trusts(mock_request, sample_query, mock_encrypt):
+def test_submit_cohort_query_multiple_trusts(mock_request, sample_query, mock_encrypt, mock_can_modify):
     """Should create one task per trust."""
     mock_db = MagicMock()
     mock_trust_a = MagicMock(id="trust_1", name="Trust A", endpoint="http://trust-a.com")
@@ -87,7 +95,7 @@ def test_submit_cohort_query_multiple_trusts(mock_request, sample_query, mock_en
     mock_trust_b.name = "Trust B"
     mock_db.exec.return_value.all.return_value = [mock_trust_a, mock_trust_b]
 
-    response = submit_cohort_query(mock_request, sample_query, mock_db)
+    response = submit_cohort_query(mock_request, sample_query, mock_db, user_id)
 
     # Two tasks should be added
     assert mock_db.add.call_count == 2
@@ -95,7 +103,8 @@ def test_submit_cohort_query_multiple_trusts(mock_request, sample_query, mock_en
     assert all(t.statusCode == 202 for t in response.trust)
 
 
-def test_submit_cohort_query_forbidden_sql(mock_auth_request):
+@patch("flip_api.cohort_services.submit_cohort_query.can_modify_project", return_value=True)
+def test_submit_cohort_query_forbidden_sql(mock_can_modify, mock_auth_request):
     """Queries with forbidden SQL commands should be rejected."""
     query = SubmitCohortQuery(
         name="Hack",
@@ -106,13 +115,14 @@ def test_submit_cohort_query_forbidden_sql(mock_auth_request):
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        submit_cohort_query(mock_auth_request, query, MagicMock())
+        submit_cohort_query(mock_auth_request, query, MagicMock(), user_id)
 
     assert exc_info.value.status_code == 400
     assert "forbidden SQL commands" in str(exc_info.value.detail)
 
 
-def test_submit_cohort_query_invalid_sql(monkeypatch, mock_request, sample_query):
+@patch("flip_api.cohort_services.submit_cohort_query.can_modify_project", return_value=True)
+def test_submit_cohort_query_invalid_sql(mock_can_modify, monkeypatch, mock_request, sample_query):
     """Invalid SQL should be rejected."""
     monkeypatch.setattr(
         "flip_api.cohort_services.submit_cohort_query.validate_query",
@@ -120,32 +130,33 @@ def test_submit_cohort_query_invalid_sql(monkeypatch, mock_request, sample_query
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        submit_cohort_query(mock_request, sample_query, MagicMock())
+        submit_cohort_query(mock_request, sample_query, MagicMock(), user_id)
 
     assert exc_info.value.status_code == 400
     assert "Invalid SQL" in str(exc_info.value.detail)
 
 
-def test_submit_cohort_query_no_trusts(mock_request, sample_query):
+@patch("flip_api.cohort_services.submit_cohort_query.can_modify_project", return_value=True)
+def test_submit_cohort_query_no_trusts(mock_can_modify, mock_request, sample_query):
     """No trusts in the database should return 404."""
     mock_db = MagicMock()
     mock_db.exec.return_value.all.return_value = []
 
     with pytest.raises(HTTPException) as exc_info:
-        submit_cohort_query(mock_request, sample_query, mock_db)
+        submit_cohort_query(mock_request, sample_query, mock_db, user_id)
 
     assert exc_info.value.status_code == 404
     assert "No trusts found" in str(exc_info.value.detail)
 
 
-def test_submit_cohort_query_task_payload_contains_query(mock_request, sample_query, mock_encrypt):
+def test_submit_cohort_query_task_payload_contains_query(mock_request, sample_query, mock_encrypt, mock_can_modify):
     """The task payload should contain the query details."""
     mock_db = MagicMock()
     mock_trust = MagicMock(id="trust_1", name="Trust A", endpoint="http://trust-a.com")
     mock_trust.name = "Trust A"
     mock_db.exec.return_value.all.return_value = [mock_trust]
 
-    submit_cohort_query(mock_request, sample_query, mock_db)
+    submit_cohort_query(mock_request, sample_query, mock_db, user_id)
 
     added_task = mock_db.add.call_args[0][0]
     assert isinstance(added_task, TrustTask)
