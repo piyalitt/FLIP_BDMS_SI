@@ -59,12 +59,6 @@ class UploadFileBody(BaseModel):
     fileName: str = Field(..., description="Name of the file to upload")
 
 
-class ModelFileDelete(BaseModel):
-    model_id: UUID
-    fileName: str
-    user_id: UUID
-
-
 class ModelFile(BaseModel):
     id: str | None = None
     name: str

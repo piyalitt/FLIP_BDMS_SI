@@ -40,14 +40,14 @@ def override_dependencies():
 
 
 @pytest.fixture
-def mock_can_access_true():
-    with patch("flip_api.model_services.delete_model.can_access_model", return_value=True):
+def mock_can_modify_true():
+    with patch("flip_api.model_services.delete_model.can_modify_model", return_value=True):
         yield
 
 
 @pytest.fixture
-def mock_can_access_false():
-    with patch("flip_api.model_services.delete_model.can_access_model", return_value=False):
+def mock_can_modify_false():
+    with patch("flip_api.model_services.delete_model.can_modify_model", return_value=False):
         yield
 
 
@@ -87,7 +87,7 @@ def mock_abort_training():
 
 
 def test_delete_model_success(
-    mock_can_access_true,
+    mock_can_modify_true,
     mock_model_status_not_deleted,
     mock_delete_model,
     mock_abort_training,
@@ -99,15 +99,15 @@ def test_delete_model_success(
 
 
 def test_delete_model_forbidden(
-    mock_can_access_false,
+    mock_can_modify_false,
 ):
     response = client.delete(f"/api/model/{test_model_id}")
     assert response.status_code == status.HTTP_403_FORBIDDEN
-    assert "denied access" in response.json()["detail"]
+    assert "is not allowed" in response.json()["detail"]
 
 
 def test_delete_model_not_found(
-    mock_can_access_true,
+    mock_can_modify_true,
     mock_model_status_none,
 ):
     response = client.delete(f"/api/model/{test_model_id}")
@@ -116,7 +116,7 @@ def test_delete_model_not_found(
 
 
 def test_delete_model_already_deleted(
-    mock_can_access_true,
+    mock_can_modify_true,
     mock_model_status_deleted,
 ):
     response = client.delete(f"/api/model/{test_model_id}")
@@ -125,7 +125,7 @@ def test_delete_model_already_deleted(
 
 
 def test_delete_model_database_error(
-    mock_can_access_true,
+    mock_can_modify_true,
     mock_model_status_not_deleted,
     mock_abort_training,
 ):
@@ -136,7 +136,7 @@ def test_delete_model_database_error(
 
 
 def test_delete_model_unexpected_error(
-    mock_can_access_true,
+    mock_can_modify_true,
     mock_model_status_not_deleted,
     mock_abort_training,
 ):

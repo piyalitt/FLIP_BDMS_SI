@@ -89,6 +89,13 @@ uv run ruff check . --fix  # Lint with auto-fix
 uv run mypy .              # Static type checking
 ```
 
+### Documentation
+
+```bash
+cd docs && make clean          # Clean built docs
+cd docs && make docs           # Build Sphinx HTML documentation
+```
+
 ### Debugging
 
 ```bash
