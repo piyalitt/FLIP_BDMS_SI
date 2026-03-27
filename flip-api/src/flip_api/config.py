@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     FL_BACKEND: Literal["nvflare", "flower"] = "nvflare"
 
     # Trust task queue settings
+    HEARTBEAT_TIMEOUT_SECONDS: int = 30  # How long since last heartbeat before a trust is considered offline
     TASK_STALE_TIMEOUT_MINUTES: int = 30  # Tasks older than this in IN_PROGRESS are considered stale
     TASK_MAX_RETRIES: int = 3  # Max times a stale task can be retried before being marked FAILED
     SCHEDULER_STALE_TASK_RECOVERY_RATE: int = 10  # How often to check for stale tasks (in minutes)

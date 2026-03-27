@@ -15,15 +15,13 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
+from flip_api.config import get_settings
 from flip_api.db.database import get_session
 from flip_api.db.models.main_models import Trust
 from flip_api.domain.interfaces.trust import ITrustHealth
 from flip_api.utils.logger import logger
 
 router = APIRouter(prefix="/trust", tags=["trusts_services"])
-
-# A trust is considered online if its last heartbeat was within this many seconds
-HEARTBEAT_TIMEOUT_SECONDS = 30
 
 
 # [#114] ✅
@@ -59,7 +57,7 @@ async def check_trusts_health(
             raise HTTPException(status_code=404, detail="No trusts found")
 
         now = datetime.now(timezone.utc)
-        cutoff = now - timedelta(seconds=HEARTBEAT_TIMEOUT_SECONDS)
+        cutoff = now - timedelta(seconds=get_settings().HEARTBEAT_TIMEOUT_SECONDS)
 
         response: list[ITrustHealth] = []
         for trust in result:
