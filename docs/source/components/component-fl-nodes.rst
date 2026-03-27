@@ -73,7 +73,7 @@ This package, installed by default in client and server nodes, will make a serie
 
 For data access:
 - `flip.get_dataframe(project_id, query)`: retrieves the dataframe linked to the project ID and query that have been used on the project.
-- `flip.get_by_accession_number(project_id, accession_id)`: downloads scans associated with an accession ID and returns the path to where they are stored.
+- `flip.get_by_accession_number(project_id, accession_id, resource_type)`: retrieves data of a certain type (e.g. NIFTI) associated with an accession ID. ``resource_type`` defaults to ``ResourceType.NIFTI`` and can be a single type or a list.
 
 These calls - among others - communicate with the Imaging API and retrieve the data from the project's XNAT.
 
