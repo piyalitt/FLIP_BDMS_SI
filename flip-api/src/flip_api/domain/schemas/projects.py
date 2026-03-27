@@ -91,41 +91,6 @@ class ImagingProject(BaseModel):
     name: str
     reimport_count: int = 0
 
-    def model_dump(
-        self,
-        *,
-        mode="python",
-        include=None,
-        exclude=None,
-        context=None,
-        by_alias=None,
-        exclude_unset=False,
-        exclude_defaults=False,
-        exclude_none=False,
-        round_trip=False,
-        warnings=True,
-        fallback=None,
-        serialize_as_any=False,
-    ):
-        self.id = str(self.id) if self.id else None
-        self.xnat_project_id = str(self.xnat_project_id) if self.xnat_project_id else None
-        self.trust_id = str(self.trust_id)
-        self.retrieve_image_status = self.retrieve_image_status.value if self.retrieve_image_status else None
-        return super().model_dump(
-            mode=mode,
-            include=include,
-            exclude=exclude,
-            context=context,
-            by_alias=by_alias,
-            exclude_unset=exclude_unset,
-            exclude_defaults=exclude_defaults,
-            exclude_none=exclude_none,
-            round_trip=round_trip,
-            warnings=warnings,
-            fallback=fallback,
-            serialize_as_any=serialize_as_any,
-        )
-
 
 class XnatProjectStatusInfo(BaseModel):
     retrieve_image_status: XNATImageStatus

@@ -66,7 +66,7 @@ async def get_imaging_project_status(
         user_id (UUID): The ID of the user.
 
     Returns:
-        ImagingProject: The status of the imaging project.
+        list[IImagingStatus]: A list of imaging project statuses associated with the project (one status per trust).
 
     Raises:
         HTTPException: If the user does not have permission to access the project, if the project is not found, or if
