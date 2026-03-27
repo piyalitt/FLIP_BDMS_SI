@@ -354,5 +354,12 @@ scripts/remove-env-from-history.sh
 
 SECURITY_INCIDENT.md
 
+*.jar
+
+*.war
+*.tf.backup
+.deployment-structure-analysis.md
+deploy/providers/AWS/REFACTORING.md
+
 # Email template preview files (generated locally for testing)
 deploy/providers/AWS/email_previews/

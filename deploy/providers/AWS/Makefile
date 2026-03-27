@@ -23,13 +23,21 @@ include $(MAIN_ENV_FILE)
 export $(shell sed 's/=.*//' $(MAIN_ENV_FILE))
 endif
 
+LOCK ?= true
+
 # Export PROD so child processes (e.g. check_status.py) can determine the environment
 export PROD
 
 # If PROD=true, check that the AWS_PROFILE=FlipDeveloperAccess-046651569599
+# else we're in staging, check AWS_PROFILE=FlipDeveloperAccess-080369786334
+# TODO remove AWS account numbers from Makefile and use a more robust method of ensuring correct AWS account is used
 ifeq ($(PROD),true)
 ifneq ($(AWS_PROFILE),FlipDeveloperAccess-046651569599)
 $(error "For production deployments, AWS_PROFILE must be set to 'FlipDeveloperAccess-046651569599'")
+endif
+else
+ifneq ($(AWS_PROFILE),FlipDeveloperAccess-080369786334)
+$(error "For staging deployments, AWS_PROFILE must be set to 'FlipDeveloperAccess-080369786334'")
 endif
 endif
 
@@ -62,6 +70,31 @@ export TF_VAR_ADMIN_USER_PASSWORD=${ADMIN_USER_PASSWORD}
 export TF_VAR_SES_VERIFIED_EMAIL=${SES_VERIFIED_EMAIL}
 export TF_VAR_flip_alb_subdomain=${ALB_SUBDOMAIN}
 export TF_VAR_flip_nlb_subdomain=${NLB_SUBDOMAIN}
+ifeq ($(strip $(CREATE_CENTRAL_HUB_ELASTIC_IP)),)
+export TF_VAR_create_central_hub_elastic_ip=true
+else
+export TF_VAR_create_central_hub_elastic_ip=${CREATE_CENTRAL_HUB_ELASTIC_IP}
+endif
+
+CENTRALHUB_IMAGES = \
+	$(DOCKER_REGISTRY)flip-ui:$(DOCKER_TAG) \
+	$(DOCKER_REGISTRY)flip-api:$(DOCKER_TAG)
+
+TRUST_IMAGES = \
+	$(DOCKER_REGISTRY)trust-api:$(DOCKER_TAG) \
+	$(DOCKER_REGISTRY)imaging-api:$(DOCKER_TAG) \
+	$(DOCKER_REGISTRY)data-access-api:$(DOCKER_TAG)
+
+.PHONY: trigger-builds
+trigger-builds: ## Trigger all GitHub Actions "Build and Push" workflows for the current branch
+	@echo "🔨 Triggering GitHub Actions build workflows..."
+	@branch=$$(git rev-parse --abbrev-ref HEAD) && \
+	gh workflow list --json name,id \
+	  --jq '.[] | select(.name | startswith("Build and Push")) | .id' | \
+	while read -r id; do \
+	  gh workflow run "$$id" --ref "$$branch"; \
+	done
+	@echo "✅ Build workflows triggered!"
 
 prettier:
 	terraform fmt -recursive
@@ -97,114 +130,33 @@ init: ## Initialize Terraform configuration
 
 .PHONY: import-persistent
 import-persistent: ## Import persistent resources (S3, Secrets, Cognito) to prevent replacement
-	@echo "🔄 Importing persistent resources..."
-	@echo "1️⃣  FLIP S3 Bucket..."
-	@BUCKET_NAME=$(TF_VAR_FLIP_BUCKET_NAME); \
-	if [ -n "$$BUCKET_NAME" ]; then \
-		if aws s3api head-bucket --bucket "$$BUCKET_NAME" --profile $(AWS_PROFILE) 2>/dev/null; then \
-			echo "   Found bucket: $$BUCKET_NAME"; \
-			if terraform state show aws_s3_bucket.flip_bucket >/dev/null 2>&1; then \
-				echo "   ✓ FLIP S3 bucket (already in state)"; \
-			else \
-				echo "   Importing bucket into state..."; \
-				terraform import aws_s3_bucket.flip_bucket "$$BUCKET_NAME" 2>&1 | grep -v "Resource already managed" || echo "   ✓ FLIP S3 bucket imported"; \
-			fi; \
-			terraform import aws_s3_bucket_cors_configuration.flip_bucket_cors "$$BUCKET_NAME" 2>/dev/null || echo "   ✓ FLIP S3 CORS"; \
-			terraform import aws_s3_object.app_destination_bucket "$$BUCKET_NAME/app_destination_bucket/" 2>/dev/null || echo "   ✓ app_destination_bucket folder"; \
-			terraform import aws_s3_object.model_files "$$BUCKET_NAME/model_files/" 2>/dev/null || echo "   ✓ model_files folder"; \
-			terraform import aws_s3_object.uploaded_federated_data "$$BUCKET_NAME/uploaded_federated_data/" 2>/dev/null || echo "   ✓ uploaded_federated_data folder"; \
-		else \
-			echo "   ⚠️  Bucket $$BUCKET_NAME does not exist in AWS"; \
-		fi; \
+	@bash scripts/import-resources.sh
+
+
+.PHONY: force-unlock
+force-unlock: ## Force unlock Terraform state - provide LOCK_ID=<id> as argument
+	@if [ -z "$(LOCK_ID)" ]; then \
+		echo "❌ LOCK_ID not provided. Usage: make force-unlock LOCK_ID=<lock-id>"; \
+		exit 1; \
 	fi
-	@echo ""
-	@echo "2️⃣  AI Centre S3 Bucket..."
-	@AICENTRE_BUCKET_NAME=$(TF_VAR_AICENTRE_BUCKET_NAME); \
-	if [ -n "$$AICENTRE_BUCKET_NAME" ]; then \
-		if aws s3api head-bucket --bucket "$$AICENTRE_BUCKET_NAME" --profile $(AWS_PROFILE) 2>/dev/null; then \
-			echo "   Found bucket: $$AICENTRE_BUCKET_NAME"; \
-			if terraform state show aws_s3_bucket.aicentre_bucket >/dev/null 2>&1; then \
-				echo "   ✓ AI Centre S3 bucket (already in state)"; \
-			else \
-				echo "   Importing bucket into state..."; \
-				terraform import aws_s3_bucket.aicentre_bucket "$$AICENTRE_BUCKET_NAME" 2>&1 | grep -v "Resource already managed" || echo "   ✓ AI Centre S3 bucket imported"; \
-			fi; \
-			terraform import aws_s3_bucket_cors_configuration.aicentre_bucket_cors "$$AICENTRE_BUCKET_NAME" 2>/dev/null || echo "   ✓ AI Centre S3 CORS"; \
-		else \
-			echo "   ⚠️  Bucket $$AICENTRE_BUCKET_NAME does not exist in AWS - will be created"; \
-		fi; \
-	else \
-		echo "   ⚠️  AICENTRE_BUCKET_NAME not set in environment"; \
-	fi
-	@echo ""
-	@echo "3️⃣  Secrets Manager..."
-	@SECRET_ARN=$$(aws secretsmanager list-secrets --include-planned-deletion --profile $(AWS_PROFILE) --query 'SecretList[?Name==`FLIP_API`].ARN' --output text 2>/dev/null); \
-	if [ -n "$$SECRET_ARN" ]; then \
-		DELETION_DATE=$$(aws secretsmanager describe-secret --secret-id FLIP_API --profile $(AWS_PROFILE) --query 'DeletedDate' --output text 2>/dev/null); \
-		if [ -n "$$DELETION_DATE" ] && [ "$$DELETION_DATE" != "None" ]; then \
-			echo "   Restoring scheduled-for-deletion secret..."; \
-			aws secretsmanager restore-secret --secret-id FLIP_API --profile $(AWS_PROFILE) 2>/dev/null && echo "   ✅ Restored!"; \
-		fi; \
-		terraform import 'module.flip_api_secret.aws_secretsmanager_secret.this[0]' "$$SECRET_ARN" 2>/dev/null || echo "   ✓ Secret"; \
-		VERSION_ID=$$(aws secretsmanager describe-secret --secret-id FLIP_API --profile $(AWS_PROFILE) --query 'VersionIdsToStages | keys(@) | [0]' --output text 2>/dev/null); \
-		if [ -n "$$VERSION_ID" ]; then \
-			terraform import 'module.flip_api_secret.aws_secretsmanager_secret_version.this[0]' "$$SECRET_ARN|$$VERSION_ID" 2>/dev/null || echo "   ✓ Secret version"; \
-		fi; \
-	fi
-	@echo ""
-	@echo "4️⃣  Cognito..."
-	@POOL_ID=$$(aws cognito-idp list-user-pools --max-results 20 --profile $(AWS_PROFILE) --query 'UserPools[?Name==`flip-user-pool`].Id' --output text 2>/dev/null); \
-	if [ -n "$$POOL_ID" ]; then \
-		terraform import aws_cognito_user_pool.flip_user_pool "$$POOL_ID" 2>/dev/null || echo "   ✓ User pool"; \
-		DOMAIN=$$(aws cognito-idp describe-user-pool --user-pool-id "$$POOL_ID" --profile $(AWS_PROFILE) --query 'UserPool.Domain' --output text 2>/dev/null); \
-		if [ -n "$$DOMAIN" ] && [ "$$DOMAIN" != "None" ]; then \
-			terraform import aws_cognito_user_pool_domain.main "$$DOMAIN" 2>/dev/null || echo "   ✓ Domain"; \
-		fi; \
-		terraform import random_string.cognito_domain "$$DOMAIN" 2>/dev/null || echo "   ✓ Random string"; \
-		CLIENT_ID=$$(aws cognito-idp list-user-pool-clients --user-pool-id "$$POOL_ID" --profile $(AWS_PROFILE) --query 'UserPoolClients[0].ClientId' --output text 2>/dev/null); \
-		if [ -n "$$CLIENT_ID" ]; then \
-			terraform import aws_cognito_user_pool_client.client "$$POOL_ID/$$CLIENT_ID" 2>/dev/null || echo "   ✓ Client"; \
-		fi; \
-		terraform import aws_cognito_user.admin_user "$$POOL_ID/aicentreflip@gmail.com" 2>/dev/null || echo "   ✓ Admin user"; \
-		terraform import aws_cognito_user.researcher_user "$$POOL_ID/rafaelagd@gmail.com" 2>/dev/null || echo "   ✓ Researcher user"; \
-	fi
-	@echo ""
-	@echo "5️⃣  SES Email Identity..."
-	@EXISTING_SES_EMAIL=$$(aws ses list-identities --profile $(AWS_PROFILE) --query 'Identities[0]' --output text 2>/dev/null); \
-	if [ -n "$$EXISTING_SES_EMAIL" ] && [ "$$EXISTING_SES_EMAIL" != "None" ]; then \
-		if [ "$$EXISTING_SES_EMAIL" = "$(TF_VAR_SES_VERIFIED_EMAIL)" ]; then \
-			echo "   ✓ Existing SES identity matches configuration: $$EXISTING_SES_EMAIL"; \
-			terraform import aws_ses_email_identity.flip_sender "$$EXISTING_SES_EMAIL" 2>/dev/null || echo "   ✓ SES Email Identity (already imported)"; \
-		else \
-			echo "   ⚠️  Existing SES identity ($$EXISTING_SES_EMAIL) does NOT match configuration ($(TF_VAR_SES_VERIFIED_EMAIL))"; \
-			echo "   ℹ️  Skipping import - Terraform will destroy and recreate with correct email"; \
-		fi; \
-	else \
-		echo "   ℹ️  No existing SES identity found - Terraform will create $(TF_VAR_SES_VERIFIED_EMAIL)"; \
-	fi
-	@echo ""
-	@echo "6️⃣  ACM Certificate..."
-	@CERT_ARN=$$(aws acm list-certificates --profile $(AWS_PROFILE) --region $(TF_VAR_AWS_REGION) --query "CertificateSummaryList[?DomainName=='$(TF_VAR_flip_alb_subdomain)'].CertificateArn" --output text 2>/dev/null); \
-	if [ -n "$$CERT_ARN" ]; then \
-		terraform import aws_acm_certificate.flip "$$CERT_ARN" 2>/dev/null || echo "   ✓ ACM certificate"; \
-		terraform import aws_acm_certificate_validation.flip "$$CERT_ARN" 2>/dev/null || echo "   ✓ Certificate validation"; \
-		VALIDATION_RECORDS=$$(aws acm describe-certificate --certificate-arn "$$CERT_ARN" --profile $(AWS_PROFILE) --region $(TF_VAR_AWS_REGION) --query 'Certificate.DomainValidationOptions[0].ResourceRecord.Name' --output text 2>/dev/null); \
-		if [ -n "$$VALIDATION_RECORDS" ]; then \
-			HOSTED_ZONE_ID=$$(aws route53 list-hosted-zones --profile $(AWS_PROFILE) --query "HostedZones[?Name=='$(TF_VAR_flip_alb_subdomain).'].Id" --output text 2>/dev/null | cut -d'/' -f3); \
-			if [ -n "$$HOSTED_ZONE_ID" ]; then \
-				RECORD_NAME=$$(aws acm describe-certificate --certificate-arn "$$CERT_ARN" --profile $(AWS_PROFILE) --region $(TF_VAR_AWS_REGION) --query 'Certificate.DomainValidationOptions[0].ResourceRecord.Name' --output text 2>/dev/null); \
-				terraform import "aws_route53_record.cert_validation[\"$(TF_VAR_flip_alb_subdomain)\"]" "$${HOSTED_ZONE_ID}_$${RECORD_NAME}_CNAME" 2>/dev/null || echo "   ✓ Route53 validation record"; \
-			fi; \
-		fi; \
-	fi
-	@echo ""
-	@echo "ℹ️  Note: Terraform state bucket ($(FLIP_TFSTATE_BUCKET_NAME)) is managed externally via create_backend.sh"
-	@echo "✅ Persistent resources imported!"
+	@bash scripts/manage-aws.sh force-unlock $(LOCK_ID)
+
+.PHONY: delete-flip-keypair
+delete-flip-keypair: ## Delete the flip-keypair from AWS (run before apply if it exists)
+	@bash scripts/manage-aws.sh delete-keypair flip-keypair
+
+.PHONY: list-eips
+list-eips: ## List all Elastic IPs in the region
+	@bash scripts/manage-aws.sh list-eips
+
+.PHONY: release-unused-eips
+release-unused-eips: ## Release unassociated Elastic IPs to free up quota
+	@bash scripts/manage-aws.sh release-unused-eips
 
 .PHONY: plan
-plan:
+plan: ## Plan Terraform changes (with environment file loaded)
 	@echo "📋 Planning Terraform changes..."
-	@terraform plan -out=plan.tfplan
+	@terraform plan -out=plan.tfplan -lock=${LOCK}
 
 .PHONY: plan-cert
 plan-cert: ## Plan only the ACM certificate (step 1 of 2 for HTTPS)
@@ -223,8 +175,15 @@ destroy-cert: ## Destroy only the ACM certificate (use with caution - will break
 	@terraform destroy -target=aws_acm_certificate.flip -target=aws_acm_certificate_validation.flip -target=aws_route53_record.cert_validation
 	@echo "✅ Certificate destroyed! Now run 'make plan' and 'make apply' to remove DNS validation."
 
+.PHONY: refresh
+refresh: ## Refresh Terraform state to sync with actual AWS resources
+	@echo "🔄 Refreshing Terraform state..."
+	@terraform refresh
+	@echo "✅ State refreshed!"
+
+
 .PHONY: apply
-apply: ## Apply Terraform configuration to update AWS infrastructure
+apply: ## Apply Terraform configuration to update AWS infrastructure (with environment file loaded)
 	@echo "🛠️ Applying Terraform configuration..."
 	@terraform apply plan.tfplan
 
@@ -251,12 +210,33 @@ ansible-init: ## Initialize Ansible configuration on EC2 instances (if failed tr
 
 .PHONY: deploy-centralhub
 deploy-centralhub: ## Deploy FLIP containers to flip context with environment from Terraform
+	@echo "🔍 Checking central hub images (tag: $(DOCKER_TAG))..."
+	@missing=false; \
+	for image in $(CENTRALHUB_IMAGES); do \
+	  if ! docker manifest inspect "$$image" >/dev/null 2>&1; then \
+	    echo "   ⚠️  Missing: $$image"; \
+	    missing=true; \
+	  fi; \
+	done; \
+	if [ "$$missing" = "true" ]; then \
+	  echo "🔨 Images missing — triggering builds and waiting 2 minutes..."; \
+	  $(MAKE) trigger-builds; \
+	  sleep 120; \
+	else \
+	  echo "   ✅ All central hub images found."; \
+	fi
 	@echo "📋 Loading environment variables from Terraform outputs..."
+	@echo "🔑 Refreshing SSH host key for CH EC2 (ensures Docker context SSH works after re-provisioning)..."
+	@CH_IP=$$(terraform output -raw Ec2PublicIp) && \
+	  ssh-keygen -R "$$CH_IP" 2>/dev/null || true && \
+	  ssh-keyscan -H "$$CH_IP" >> ~/.ssh/known_hosts
 	@echo "👷 Create docker context if not exists, pointing to flip to ssh://flip"
 	@docker context create flip --docker "host=ssh://flip" || echo "   Context 'flip' already exists"
 	@# Switch to flip context
 	@echo "🔄 Switching to flip Docker context..."
 	@docker context use flip
+	@echo "🐳 Initialising Docker Swarm on CH EC2 (required for overlay networks)..."
+	@docker swarm init || echo "   Swarm already initialized"
 	@echo "🐳 Deploying containers..."
 	@$(MAKE) -C ../../../ up-centralhub-ec2 PROD=${PROD}
 	@echo "✅ Deployment complete!"
@@ -269,25 +249,47 @@ LOCAL_TRUST_NUMBER ?= 2
 
 .PHONY: deploy-trust
 deploy-trust: update-env ## Deploy trust relationships after central hub is deployed
+	@echo "🔍 Checking trust images (tag: $(DOCKER_TAG))..."
+	@missing=false; \
+	for image in $(TRUST_IMAGES); do \
+	  if ! docker manifest inspect "$$image" >/dev/null 2>&1; then \
+	    echo "   ⚠️  Missing: $$image"; \
+	    missing=true; \
+	  fi; \
+	done; \
+	if [ "$$missing" = "true" ]; then \
+	  echo "🔨 Images missing — triggering builds and waiting 2 minutes..."; \
+	  $(MAKE) trigger-builds; \
+	  sleep 120; \
+	else \
+	  echo "   ✅ All trust images found."; \
+	fi
 	@echo "⚙️  Configure .ssh/config for flip context..."
 	@set -x AWS_PROFILE ${AWS_PROFILE}
 	@terraform output
 	@python3 update_ssh_config.py --aws-profile ${AWS_PROFILE} || true
 	@echo "✅ .ssh/config updated!"
+	@echo "🔑 Refreshing SSH host key for Trust EC2 (ensures Docker context SSH works after re-provisioning)..."
+	@TRUST_IP=$$(terraform output -raw TrustEc2PublicIp) && \
+	  ssh-keygen -R "$$TRUST_IP" 2>/dev/null || true && \
+	  ssh-keyscan -H "$$TRUST_IP" >> ~/.ssh/known_hosts
 	@echo "👷 Create docker context if not exists, pointing to flip-trust to ssh://flip-trust"
 	@docker context create flip-trust --docker "host=ssh://flip-trust" || echo "   Context 'flip-trust' already exists"
 	@echo "🔄 Switching to flip-trust Docker context..."
 	@docker context use flip-trust
 	@echo "🐳 Deploying containers to Trust EC2 ..."
 	docker swarm init || echo "   Swarm already initialized"
+	@echo "🔧 Creating Docker networks on Trust EC2..."
+	$(MAKE) -C ../../../ create-networks
 	@echo "🚀 Deploying Trust services..."
 	$(MAKE) -C ../../../ up-trust-ec2 PROD=${PROD}
 	@echo "✅ Trust deployment complete!"
 
 .PHONY: add-local-trust
-add-local-trust: ## Provision an on-prem Trust host via Ansible and register it with the Central Hub
-	## LOCAL_TRUST_SSH_KEY is optional. When omitted, Ansible runs locally (no SSH) — use this
+add-local-trust: ## Provision an on-prem Trust host and register it with the Central Hub
+	## LOCAL_TRUST_SSH_KEY is optional. When omitted, runs locally (no SSH) — use this
 	## when the trust host IS the operator workstation or is not reachable via its public IP.
+	## Local mode generates TLS certs and prints the sudo commands to run (UFW, cert install, kit deploy).
 	@[ -n "$(LOCAL_TRUST_IP)" ] || (echo ""; echo "❌  ERROR: LOCAL_TRUST_IP is required."; echo "   Usage: make add-local-trust LOCAL_TRUST_IP=<public-ip> [LOCAL_TRUST_SSH_KEY=<path>]"; echo "   Omit LOCAL_TRUST_SSH_KEY to provision the local machine (no SSH)."; echo ""; exit 1)
 	@echo "🔧 Provisioning on-premises Trust host at $(LOCAL_TRUST_IP)..."
 	@uv sync
@@ -345,9 +347,11 @@ add-local-trust: ## Provision an on-prem Trust host via Ansible and register it 
 	    rsync -av --delete -e "ssh -i $(LOCAL_TRUST_SSH_KEY)" \
 	      $$LOCAL_TRUST_KIT_DIR/local/ $(LOCAL_TRUST_SSH_USER)@$(LOCAL_TRUST_IP):/opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/local/; \
 	  else \
-	    sudo mkdir -p /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/startup /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/local /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/transfer && \
-	    sudo rsync -av --delete $$LOCAL_TRUST_KIT_DIR/startup/ /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/startup/ && \
-	    sudo rsync -av --delete $$LOCAL_TRUST_KIT_DIR/local/ /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/local/; \
+	    echo ""; \
+	    echo "  # 3. Deploy the Trust_$(LOCAL_TRUST_NUMBER) FL participant kit (kit staged at $$LOCAL_TRUST_KIT_DIR):"; \
+	    echo "  sudo mkdir -p /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/startup /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/local /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/transfer"; \
+	    echo "  sudo rsync -av --delete $$LOCAL_TRUST_KIT_DIR/startup/ /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/startup/"; \
+	    echo "  sudo rsync -av --delete $$LOCAL_TRUST_KIT_DIR/local/ /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/local/"; \
 	  fi && \
 	  rm -rf $$LOCAL_TRUST_KIT_DIR && \
 	  echo "✅ Trust_$(LOCAL_TRUST_NUMBER) FL kit deployed"
@@ -387,29 +391,35 @@ check:
 	@python3 check_status.py || true
 
 
+.PHONY: backup-eips
+backup-eips: ## Backup current Elastic IPs before destruction (preserves allocation IDs for reassociation)
+	@bash scripts/backup-eips.sh
+
 .PHONY: destroy
-destroy: ## Destroy infrastructure while preserving Cognito and Secrets Manager resources
-	@echo "💥 Destroying ephemeral infrastructure..."
-	@terraform destroy -auto-approve \
-		-target=module.flip_vpc \
-		-target=module.ec2_security_group \
-		-target=module.rds_security_group \
-		-target=aws_db_subnet_group.flip_db_subnet_group \
-		-target=module.flip_db \
-		-target=module.alb \
-		-target=module.alb_security_group \
-		-target=module.ec2_role \
-		-target=aws_iam_instance_profile.ec2_profile \
-		-target=aws_key_pair.flip_keypair \
-		-target=aws_instance.ec2_instance \
-		-target=aws_cloudwatch_log_group.flip_log_group \
-		-target=aws_iam_role_policy.ec2_secret \
-		-target=aws_ses_template.flip_access_request \
-		-target=aws_ses_template.flip_xnat_credentials \
-		-target=module.trust_ec2 \
-		-target=aws_key_pair.host_key \
-		-target=local_file.env
-	@echo "✅ Targeted destroy complete!"
+destroy: backup-eips ## Destroy ephemeral infrastructure (EC2, RDS, VPC) - preserves Cognito, Secrets, S3, EIPs
+	@echo ""
+	@echo "⚠️  SELECTIVE DESTRUCTION - PRESERVING:"
+	@echo "   ✓ Cognito user pool and identities"
+	@echo "   ✓ AWS Secrets Manager (FLIP_API secret)"
+	@echo "   ✓ S3 buckets (FLIP + AI Centre data)"
+	@echo "   ✓ ACM certificates and Route53 records"
+	@echo "   ✓ Elastic IPs (for Central Hub and Trust EC2)"
+	@echo ""
+	@echo "🗑️  DESTROYING:"
+	@echo "   • EC2 instances (flip, trust) - instances only, EIPs preserved"
+	@echo "   • RDS database (PostgreSQL)"
+	@echo "   • VPC and security groups"
+	@echo "   • ALB/NLB load balancers"
+	@echo "   • IAM roles and policies"
+	@echo "   • CloudWatch logs"
+	@echo ""
+	@bash -c 'read -p "Type '\''yes'\'' to confirm destruction: " confirm && [ "$$confirm" = "yes" ] || { echo "Aborted."; exit 1; }'
+	@echo ""
+	@bash scripts/destroy-preserve-eips.sh
+	@echo ""
+	@echo "⚠️  IMPORTANT: Review EIP state before re-applying:"
+	@echo "   make list-eips   # Check that your EIPs are still allocated"
+
 
 .PHONY: help
 help: ## Show this help message
@@ -447,10 +457,17 @@ full-deploy-stag: github-login aws-login init import-persistent plan apply updat
 full-deploy-stag-hybrid: ## Full staging hybrid deployment including local trust provisioning
 	## This wraps full-deploy-stag and then redeploys the Central Hub.
 	## You still need to start the local trust stack on the trust host.
-	@[ -n "$(LOCAL_TRUST_IP)" ] || (echo ""; echo "❌  ERROR: LOCAL_TRUST_IP is required."; echo "   Usage: make full-deploy-stag-hybrid LOCAL_TRUST_IP=<public-ip>"; echo ""; exit 1)
-	@$(MAKE) full-deploy-stag LOCAL_TRUST_IP=$(LOCAL_TRUST_IP) LOCAL_TRUST_SSH_KEY="$(LOCAL_TRUST_SSH_KEY)" LOCAL_TRUST_SSH_USER="$(LOCAL_TRUST_SSH_USER)" LOCAL_TRUST_NUMBER="$(LOCAL_TRUST_NUMBER)"
-	@$(MAKE) deploy-centralhub PROD=stag
-	@echo ""
-	@echo "✅ Hybrid staging deployment complete."
-	@echo "➡️  Final manual step: start the local trust stack on the trust host:"
-	@echo "   cd ../../../trust && env PROD=stag make up-local-trust-stag"
+	## If LOCAL_TRUST_IP is not provided, it will be auto-detected using curl.
+	@if [ -z "$(LOCAL_TRUST_IP)" ]; then \
+		echo "🔍 Detecting public IP for LOCAL_TRUST_IP..."; \
+		LOCAL_TRUST_IP=$$(curl -s https://api.ipify.org) && \
+		echo "✅ Detected LOCAL_TRUST_IP: $$LOCAL_TRUST_IP" || (echo "❌  Failed to detect IP. Provide LOCAL_TRUST_IP manually."; echo "   Usage: make full-deploy-stag-hybrid LOCAL_TRUST_IP=<public-ip>"; exit 1); \
+	else \
+		LOCAL_TRUST_IP="$(LOCAL_TRUST_IP)"; \
+	fi && \
+	$(MAKE) full-deploy-stag LOCAL_TRUST_IP=$$LOCAL_TRUST_IP LOCAL_TRUST_SSH_KEY="$(LOCAL_TRUST_SSH_KEY)" LOCAL_TRUST_SSH_USER="$(LOCAL_TRUST_SSH_USER)" LOCAL_TRUST_NUMBER="$(LOCAL_TRUST_NUMBER)" && \
+	$(MAKE) deploy-centralhub PROD=stag && \
+	echo "" && \
+	echo "✅ Hybrid staging deployment complete." && \
+	echo "➡️  Final manual step: start the local trust stack on the trust host:" && \
+	echo "   cd ../../../trust && env PROD=stag make up-local-trust-stag"
