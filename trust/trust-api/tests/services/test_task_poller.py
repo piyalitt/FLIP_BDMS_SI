@@ -139,6 +139,20 @@ async def test_report_task_result_error():
 
 
 @pytest.mark.asyncio
+async def test_report_task_result_non_200_retries_then_gives_up():
+    """Should retry on non-200 status and give up after max retries."""
+    mock_response = AsyncMock()
+    mock_response.status_code = 500
+    mock_client = AsyncMock()
+    mock_client.post.return_value = mock_response
+
+    with patch("trust_api.services.task_poller.asyncio.sleep", new_callable=AsyncMock):
+        await _report_task_result(mock_client, "task-123", {"success": True})
+
+    assert mock_client.post.call_count == 3
+
+
+@pytest.mark.asyncio
 async def test_report_task_result_includes_error_in_result():
     """Should include error details in result field for failed tasks."""
     mock_response = AsyncMock()

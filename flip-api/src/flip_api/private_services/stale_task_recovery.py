@@ -50,9 +50,7 @@ def recover_stale_tasks(db: Session) -> int:
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
 
     statement = (
-        select(TrustTask)
-        .where(TrustTask.status == TaskStatus.IN_PROGRESS)
-        .where(col(TrustTask.updated_at) < cutoff)
+        select(TrustTask).where(TrustTask.status == TaskStatus.IN_PROGRESS).where(col(TrustTask.updated_at) < cutoff)
     )
     stale_tasks = db.exec(statement).all()
 
