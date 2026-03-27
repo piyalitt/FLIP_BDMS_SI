@@ -96,7 +96,7 @@ def get_dataframe(query_input: DataframeQuery) -> dict[str, list[Any]]:
         query_input (DataframeQuery): The input data for the DataFrame query.
 
     Returns:
-        Dict[str, List[Any]]: The query results in a DataFrame-like structure.
+        dict[str, list[Any]]: The query results in a DataFrame-like structure.
 
     Raises:
         HTTPException: If there is an error during the execution of the query or if the query returns too few records.

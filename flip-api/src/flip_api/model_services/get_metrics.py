@@ -42,7 +42,7 @@ def get_metrics_endpoint(
         user_id (UUID): User ID from authentication.
 
     Returns:
-        List[IModelMetrics]: A list of metrics associated with the specified model.
+        list[IModelMetrics]: A list of metrics associated with the specified model.
 
     Raises:
         HTTPException: If the user does not have access to the model, if the model does not exist, or if there is a

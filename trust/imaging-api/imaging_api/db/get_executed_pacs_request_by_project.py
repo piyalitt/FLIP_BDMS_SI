@@ -28,7 +28,7 @@ async def get_executed_pacs_request_by_project(project_id: str, session: AsyncSe
         session (AsyncSession): The database session.
 
     Returns:
-        List[ExecutedPacsRequest]: A list of executed PACS requests.
+        list[ExecutedPacsRequest]: A list of executed PACS requests.
 
     Raises:
         HTTPException: If project_id is empty.

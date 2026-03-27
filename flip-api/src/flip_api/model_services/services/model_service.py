@@ -69,7 +69,7 @@ def update_model_status(model_id: UUID, status: ModelStatus | None, session: Ses
         session (Session): The database session
 
     Returns:
-        Optional[flip.domain.schemas.status.ModelStatus]: The updated status of the model
+        flip.domain.schemas.status.ModelStatus | None: The updated status of the model
     """
     logger.info(f"Attempting to set the model's status... ID: {model_id}, Status: {status}")
 
@@ -102,7 +102,7 @@ def add_log(
         model_id (UUID): The ID of the model.
         log (str): The log message to be added.
         session (Session): The database session.
-        transaction (Optional[Any]): Optional transaction to control commit behavior.
+        transaction (Any | None): Optional transaction to control commit behavior.
         success (bool): Indicates if the log entry is a success or failure.
 
     Returns:
@@ -208,7 +208,7 @@ def get_model_status(model_id: UUID, session: Session) -> IDetailedModelStatus |
         session (Session): The database session.
 
     Returns:
-        Optional[dict]: A dictionary containing the model's status and deleted status.
+        dict | None: A dictionary containing the model's status and deleted status.
     """
     logger.debug("Attempting to get the model's status...")
 
@@ -225,7 +225,7 @@ def validate_trusts(model_id: UUID, trusts: list[str], session: Session) -> bool
 
     Args:
         model_id (UUID): The ID of the model.
-        trusts (List[str]): A list of trust names to validate.
+        trusts (list[str]): A list of trust names to validate.
         session (Session): The database session.
 
     Returns:
@@ -264,7 +264,7 @@ def get_metrics(model_id: UUID, session: Session) -> list[IModelMetrics]:
         session (Session): The database session.
 
     Returns:
-        List[IModelMetrics]: A list of metrics associated with the model.
+        list[IModelMetrics]: A list of metrics associated with the model.
     """
     logger.debug("Attempting to retrieve the metrics results for the model...")
 

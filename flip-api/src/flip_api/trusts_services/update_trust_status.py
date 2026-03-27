@@ -76,7 +76,7 @@ def update_trust_status(
         trust_id (str): ID of the trust.
         model_id (UUID): ID of the model.
         trust_status (str): New status to set.
-        data (Optional[UpdateTrustStatusSchema]): Request body containing additional data.
+        data (UpdateTrustStatusSchema | None): Request body containing additional data.
         db (Session): Database session.
         user_id (UUID): ID of the authenticated user.
 

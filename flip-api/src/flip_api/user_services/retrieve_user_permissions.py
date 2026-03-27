@@ -50,7 +50,7 @@ def get_user_permissions(user_id: UUID, db: Session) -> list[Permission]:
         db (Session): The database session.
 
     Returns:
-        List[Permission]: A list of Permission objects associated with the user's roles.
+        list[Permission]: A list of Permission objects associated with the user's roles.
     """
     # Get user roles
     user_roles = db.exec(select(UserRole).where(col(UserRole.user_id) == user_id)).all()
