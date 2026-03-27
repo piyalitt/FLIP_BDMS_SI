@@ -119,9 +119,4 @@ def get_dataframe(query_input: DataframeQuery) -> dict[str, list[Any]]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # TODO Potentially store to cache - and at the beginning of the function, check if the query is already in the cache
-    # Set cache expiration time e.g. 60 days (if the OMOP database is not updated frequently)
-    # This avoids re-running the query if the same one is requested multiple times
-
-    # df.to_csv("data.csv", index=False) # debugging
     return df.to_dict(orient="list")
