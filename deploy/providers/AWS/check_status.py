@@ -1267,11 +1267,12 @@ def main(
                     except ValueError:
                         print_status("WARN", "Could not parse Trust memory usage")
 
-                # Check for any exited containers on Trust EC2
+                # Check for any exited containers on Trust EC2 (exclude Docker Swarm task history)
                 success, trust_exited = run_ssh_command(
                     ssh_key_path,
                     f"ubuntu@{trust_ip}",
-                    "docker ps -a --filter 'status=exited' --format '{{.Names}}' 2>/dev/null",
+                    "docker ps -a --filter 'status=exited' --format '{{.Names}}' 2>/dev/null"
+                    " | grep -vE '\\.[0-9]+\\.[a-z0-9]{25}' || true",
                 )
                 if success and trust_exited:
                     print_status("WARN", f"Trust EC2 exited containers found: {trust_exited}")
