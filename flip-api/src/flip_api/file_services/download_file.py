@@ -37,7 +37,12 @@ def download_file(
     user_id: UUID = Depends(verify_token),
 ) -> StreamingResponse:
     """
-    Download a model file from S3.
+    Download a 'model file' (file uploaded by a user to train/evaluate a model).
+
+    Important: Do not confuse with the 'retrieve_federated_results' endpoint which is for downloading 'model results'
+    generated as a result of a training/evaluation job and are stored in a different S3 bucket. While 'observer' users
+    can download 'model results' using the 'retrieve_federated_results' endpoint, only users with 'modify' access to a
+    model can download 'model files' using this 'download_file' endpoint.
 
     Args:
         model_id (UUID): The ID of the model to retrieve the file for.

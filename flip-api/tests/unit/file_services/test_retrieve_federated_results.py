@@ -159,7 +159,7 @@ def test_retrieve_federated_results_endpoint_calls_function(override_dependencie
     override_dependencies.exec.return_value.first.return_value = mock_model
 
     with (
-        patch("flip_api.file_services.retrieve_federated_results.can_modify_model", return_value=True),
+        patch("flip_api.file_services.retrieve_federated_results.can_access_model", return_value=True),
         patch("flip_api.file_services.retrieve_federated_results.S3Client") as mock_s3_client,
     ):
         # Mock S3 list_objects and get_presigned_url
@@ -179,7 +179,7 @@ class TestRetrieveFederatedResults:
 
     def test_retrieve_success(self, mock_db_session, s3_mock_success, mocked_settings, sample_model_id, user_id):
         """Test successful retrieval of federated results."""
-        with patch("flip_api.file_services.retrieve_federated_results.can_modify_model", return_value=True):
+        with patch("flip_api.file_services.retrieve_federated_results.can_access_model", return_value=True):
             result = retrieve_federated_results(model_id=sample_model_id, db=mock_db_session, user_id=user_id)
             assert len(result) == 2
             assert result[0] == "https://test-bucket.s3.amazonaws.com/model-id/file1.csv"
@@ -187,16 +187,16 @@ class TestRetrieveFederatedResults:
 
     def test_access_denied(self, mock_db_session, mocked_settings, sample_model_id, user_id):
         """Test handling of unauthorized access to model."""
-        with patch("flip_api.file_services.retrieve_federated_results.can_modify_model", return_value=False):
+        with patch("flip_api.file_services.retrieve_federated_results.can_access_model", return_value=False):
             with pytest.raises(HTTPException) as exc_info:
                 retrieve_federated_results(model_id=sample_model_id, db=mock_db_session, user_id=user_id)
 
             assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-            assert "is not allowed" in exc_info.value.detail
+            assert "is denied access" in exc_info.value.detail
 
     def test_model_not_found(self, empty_db_session, mocked_settings, sample_model_id, user_id):
         """Test handling of non-existent model."""
-        with patch("flip_api.file_services.retrieve_federated_results.can_modify_model", return_value=True):
+        with patch("flip_api.file_services.retrieve_federated_results.can_access_model", return_value=True):
             with pytest.raises(HTTPException) as exc_info:
                 retrieve_federated_results(model_id=sample_model_id, db=empty_db_session, user_id=user_id)
 
@@ -205,7 +205,7 @@ class TestRetrieveFederatedResults:
 
     def test_s3_listing_error(self, mock_db_session, s3_mock_error, mocked_settings, sample_model_id, user_id):
         """Test handling of S3 listing error."""
-        with patch("flip_api.file_services.retrieve_federated_results.can_modify_model", return_value=True):
+        with patch("flip_api.file_services.retrieve_federated_results.can_access_model", return_value=True):
             with pytest.raises(HTTPException) as exc_info:
                 retrieve_federated_results(model_id=sample_model_id, db=mock_db_session, user_id=user_id)
 
@@ -214,7 +214,7 @@ class TestRetrieveFederatedResults:
 
     def test_no_files_found(self, mock_db_session, s3_mock_empty, mocked_settings, sample_model_id, user_id):
         """Test handling of no files found in S3."""
-        with patch("flip_api.file_services.retrieve_federated_results.can_modify_model", return_value=True):
+        with patch("flip_api.file_services.retrieve_federated_results.can_access_model", return_value=True):
             result = retrieve_federated_results(model_id=sample_model_id, db=mock_db_session, user_id=user_id)
             assert result == []
 
@@ -222,7 +222,7 @@ class TestRetrieveFederatedResults:
         self, mock_db_session, s3_mock_presigned_error, mocked_settings, sample_model_id, user_id
     ):
         """Test handling of error when generating presigned URLs."""
-        with patch("flip_api.file_services.retrieve_federated_results.can_modify_model", return_value=True):
+        with patch("flip_api.file_services.retrieve_federated_results.can_access_model", return_value=True):
             with pytest.raises(HTTPException) as exc_info:
                 retrieve_federated_results(model_id=sample_model_id, db=mock_db_session, user_id=user_id)
 
@@ -232,7 +232,7 @@ class TestRetrieveFederatedResults:
     def test_unexpected_error(self, mock_db_session, mocked_settings, sample_model_id, user_id):
         """Test handling of unexpected general errors."""
         with patch(
-            "flip_api.file_services.retrieve_federated_results.can_modify_model",
+            "flip_api.file_services.retrieve_federated_results.can_access_model",
             side_effect=Exception("Unexpected error"),
         ):
             with pytest.raises(HTTPException) as exc_info:

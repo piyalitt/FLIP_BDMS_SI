@@ -16,7 +16,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, col, select
 
-from flip_api.auth.access_manager import can_modify_model
+from flip_api.auth.access_manager import can_access_model
 from flip_api.auth.dependencies import verify_token
 from flip_api.config import get_settings
 from flip_api.db.database import get_session
@@ -51,11 +51,11 @@ def retrieve_federated_results(
     """
     try:
         # Check user access
-        if not can_modify_model(user_id, model_id, db):
-            logger.error(f"User ID: {user_id} does not have access to Model ID: {model_id}")
+        if not can_access_model(user_id, model_id, db):
+            logger.error(f"User ID: {user_id} does not have access to model {model_id}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"User with ID: {user_id} is not allowed to retrieve federated results for this model",
+                detail=f"User with ID: {user_id} is denied access to this model",
             )
 
         # Check if model exists
