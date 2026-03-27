@@ -18,7 +18,11 @@ import pytest
 
 from flip_api.db.models.main_models import TrustTask
 from flip_api.domain.schemas.status import TaskStatus, TaskType
-from flip_api.private_services.stale_task_recovery import recover_stale_tasks, retry_failed_post_processing
+from flip_api.private_services.stale_task_recovery import (
+    recover_stale_tasks,
+    recover_stale_tasks_scheduled_task,
+    retry_failed_post_processing,
+)
 
 
 @pytest.fixture
@@ -165,3 +169,31 @@ def test_retry_failed_post_processing_none_pending(mock_db):
     count = retry_failed_post_processing(mock_db)
 
     assert count == 0
+
+
+# ---- recover_stale_tasks_scheduled_task ----
+
+
+@patch("flip_api.private_services.stale_task_recovery.retry_failed_post_processing")
+@patch("flip_api.private_services.stale_task_recovery.recover_stale_tasks")
+@patch("flip_api.private_services.stale_task_recovery.Session")
+def test_recover_stale_tasks_scheduled_task_calls_both_functions(mock_session_cls, mock_recover, mock_retry):
+    """Should open a session and call both recovery functions."""
+    mock_db = MagicMock()
+    mock_session_cls.return_value.__enter__ = MagicMock(return_value=mock_db)
+    mock_session_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+    recover_stale_tasks_scheduled_task()
+
+    mock_recover.assert_called_once_with(mock_db)
+    mock_retry.assert_called_once_with(mock_db)
+
+
+@patch("flip_api.private_services.stale_task_recovery.Session")
+def test_recover_stale_tasks_scheduled_task_handles_exception(mock_session_cls):
+    """Should catch and log exceptions without raising."""
+    mock_session_cls.return_value.__enter__ = MagicMock(side_effect=Exception("DB down"))
+    mock_session_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+    # Should not raise
+    recover_stale_tasks_scheduled_task()
