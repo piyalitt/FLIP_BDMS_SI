@@ -11,6 +11,7 @@
 #
 
 import os
+import shutil
 import tempfile
 import zipfile
 from unittest.mock import MagicMock, patch
@@ -27,11 +28,6 @@ from imaging_api.services.download import (
 from imaging_api.utils.exceptions import NotFoundError
 
 XNAT_URL = get_settings().XNAT_URL
-
-
-@pytest.fixture
-def headers():
-    return {"Cookie": "JSESSIONID=fake"}
 
 
 # ── format_download_url ──
@@ -106,9 +102,6 @@ class TestUnzipFile:
 
             with zipfile.ZipFile(zip_path, "w") as zf:
                 zf.write(os.path.join(inner_dir, "scan.nii"), f"{zip_name}/scan.nii")
-
-            # Clean the extracted dir so unzip can recreate it
-            import shutil
 
             shutil.rmtree(inner_dir)
 

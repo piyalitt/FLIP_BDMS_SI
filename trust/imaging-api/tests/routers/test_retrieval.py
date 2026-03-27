@@ -13,26 +13,9 @@
 import base64
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-from fastapi.testclient import TestClient
-
-from imaging_api.main import app
 from imaging_api.routers.retrieval import base64_url_decode
 from imaging_api.routers.schemas import ImportStatus
-from imaging_api.utils.auth import get_xnat_auth_headers
 from imaging_api.utils.exceptions import NotFoundError
-
-client = TestClient(app)
-
-
-@pytest.fixture(autouse=True)
-def override_auth_headers():
-    app.dependency_overrides[get_xnat_auth_headers] = lambda: {"Cookie": "JSESSIONID=fake"}
-    yield
-    app.dependency_overrides.clear()
-
-
-# ── base64_url_decode ──
 
 
 def test_base64_url_decode():
@@ -47,14 +30,11 @@ def test_base64_url_decode_with_padding():
     assert base64_url_decode(encoded) == original
 
 
-# ── GET /retrieval/import_status_count/{project_id} ──
-
-
 def _encode_query(query: str) -> str:
     return base64.urlsafe_b64encode(query.encode()).decode()
 
 
-def test_get_import_status_count_success():
+def test_get_import_status_count_success(client):
     mock_status = ImportStatus(
         successful=["ACC001", "ACC002"],
         failed=["ACC003"],
@@ -87,7 +67,7 @@ def test_get_import_status_count_success():
     assert status["queue_failed_count"] == 0
 
 
-def test_get_import_status_count_project_not_found():
+def test_get_import_status_count_project_not_found(client):
     with patch(
         "imaging_api.routers.retrieval.get_project",
         side_effect=NotFoundError("Project not found"),
@@ -100,7 +80,7 @@ def test_get_import_status_count_project_not_found():
     assert response.status_code == 404
 
 
-def test_get_import_status_count_project_error():
+def test_get_import_status_count_project_error(client):
     with patch(
         "imaging_api.routers.retrieval.get_project",
         side_effect=Exception("connection refused"),
@@ -113,10 +93,7 @@ def test_get_import_status_count_project_error():
     assert response.status_code == 500
 
 
-# ── PUT /retrieval/reimport_imaging_project_studies/{project_id} ──
-
-
-def test_reimport_success():
+def test_reimport_success(client):
     with (
         patch("imaging_api.routers.retrieval.get_settings") as mock_settings,
         patch("imaging_api.routers.retrieval.retry_retrieve_images_for_project", new_callable=AsyncMock),
@@ -133,7 +110,7 @@ def test_reimport_success():
     assert response.json()["projectId"] == "PROJ1"
 
 
-def test_reimport_disabled():
+def test_reimport_disabled(client):
     with patch("imaging_api.routers.retrieval.get_settings") as mock_settings:
         mock_settings.return_value = MagicMock(REIMPORT_STUDIES_ENABLED=False)
 

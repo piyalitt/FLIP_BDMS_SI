@@ -12,22 +12,7 @@
 
 from unittest.mock import AsyncMock, patch
 
-import pytest
-from fastapi.testclient import TestClient
-
-from imaging_api.main import app
-from imaging_api.utils.auth import get_xnat_auth_headers
 from imaging_api.utils.exceptions import NotFoundError
-
-client = TestClient(app)
-
-
-@pytest.fixture(autouse=True)
-def override_auth_headers():
-    app.dependency_overrides[get_xnat_auth_headers] = lambda: {"Cookie": "JSESSIONID=fake"}
-    yield
-    app.dependency_overrides.clear()
-
 
 _REQUEST_BODY = {
     "encrypted_central_hub_project_id": "encrypted-id",
@@ -39,7 +24,7 @@ _REQUEST_BODY = {
 }
 
 
-def test_upload_data_success():
+def test_upload_data_success(client):
     with (
         patch("imaging_api.routers.upload.decrypt", return_value="decrypted-project-id"),
         patch(
@@ -54,7 +39,7 @@ def test_upload_data_success():
     assert response.json() == ["http://xnat/file1.nii"]
 
 
-def test_upload_data_decrypt_failure():
+def test_upload_data_decrypt_failure(client):
     with patch("imaging_api.routers.upload.decrypt", side_effect=Exception("bad key")):
         response = client.put("/upload/images/net1", json=_REQUEST_BODY)
 
@@ -62,7 +47,7 @@ def test_upload_data_decrypt_failure():
     assert "Failed to decrypt" in response.json()["detail"]
 
 
-def test_upload_data_not_found():
+def test_upload_data_not_found(client):
     with (
         patch("imaging_api.routers.upload.decrypt", return_value="decrypted-project-id"),
         patch(
@@ -77,7 +62,7 @@ def test_upload_data_not_found():
     assert "Resource not found" in response.json()["detail"]
 
 
-def test_upload_data_server_error():
+def test_upload_data_server_error(client):
     with (
         patch("imaging_api.routers.upload.decrypt", return_value="decrypted-project-id"),
         patch(

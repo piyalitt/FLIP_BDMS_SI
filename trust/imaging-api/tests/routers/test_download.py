@@ -12,22 +12,7 @@
 
 from unittest.mock import AsyncMock, patch
 
-import pytest
-from fastapi.testclient import TestClient
-
-from imaging_api.main import app
-from imaging_api.utils.auth import get_xnat_auth_headers
 from imaging_api.utils.exceptions import NotFoundError
-
-client = TestClient(app)
-
-
-@pytest.fixture(autouse=True)
-def override_auth_headers():
-    app.dependency_overrides[get_xnat_auth_headers] = lambda: {"Cookie": "JSESSIONID=fake"}
-    yield
-    app.dependency_overrides.clear()
-
 
 _REQUEST_BODY = {
     "encrypted_central_hub_project_id": "encrypted-id",
@@ -35,7 +20,7 @@ _REQUEST_BODY = {
 }
 
 
-def test_download_images_success():
+def test_download_images_success(client):
     with (
         patch("imaging_api.routers.download.decrypt", return_value="decrypted-project-id"),
         patch(
@@ -50,7 +35,7 @@ def test_download_images_success():
     assert response.json()["path"] == "/tmp/images/net1/ACC123"
 
 
-def test_download_images_not_found():
+def test_download_images_not_found(client):
     with (
         patch("imaging_api.routers.download.decrypt", return_value="decrypted-project-id"),
         patch(
@@ -65,7 +50,7 @@ def test_download_images_not_found():
     assert "Resource not found" in response.json()["detail"]
 
 
-def test_download_images_decrypt_failure():
+def test_download_images_decrypt_failure(client):
     with patch("imaging_api.routers.download.decrypt", side_effect=Exception("bad key")):
         response = client.post("/download/images/net1", json=_REQUEST_BODY)
 
@@ -73,7 +58,7 @@ def test_download_images_decrypt_failure():
     assert "Failed to decrypt" in response.json()["detail"]
 
 
-def test_download_images_server_error():
+def test_download_images_server_error(client):
     with (
         patch("imaging_api.routers.download.decrypt", return_value="decrypted-project-id"),
         patch(

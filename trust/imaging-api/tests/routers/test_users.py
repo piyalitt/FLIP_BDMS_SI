@@ -12,23 +12,8 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-from fastapi.testclient import TestClient
-
-from imaging_api.main import app
 from imaging_api.routers.schemas import User
-from imaging_api.utils.auth import get_xnat_auth_headers
 from imaging_api.utils.exceptions import NotFoundError
-
-client = TestClient(app)
-
-
-@pytest.fixture(autouse=True)
-def override_auth_headers():
-    app.dependency_overrides[get_xnat_auth_headers] = lambda: {"Cookie": "JSESSIONID=fake"}
-    yield
-    app.dependency_overrides.clear()
-
 
 _SAMPLE_USER = User(
     lastModified=1000,
@@ -45,7 +30,7 @@ _SAMPLE_USER = User(
 _SAMPLE_USER_DICT = _SAMPLE_USER.model_dump()
 
 
-def test_get_users_success():
+def test_get_users_success(client):
     with patch("imaging_api.routers.users.get_xnat_users", return_value=[_SAMPLE_USER]):
         response = client.get("/users")
 
@@ -54,7 +39,7 @@ def test_get_users_success():
     assert response.json()[0]["username"] == "johndoe"
 
 
-def test_create_user_success():
+def test_create_user_success(client):
     with patch("imaging_api.routers.users.create_user", return_value=_SAMPLE_USER):
         response = client.post(
             "/users",
@@ -71,7 +56,7 @@ def test_create_user_success():
     assert response.json()["username"] == "johndoe"
 
 
-def test_create_user_failure():
+def test_create_user_failure(client):
     with patch("imaging_api.routers.users.create_user", side_effect=Exception("XNAT error")):
         response = client.post(
             "/users",
@@ -87,7 +72,7 @@ def test_create_user_failure():
     assert response.status_code == 500
 
 
-def test_update_user_success():
+def test_update_user_success(client):
     updated_user_data = _SAMPLE_USER_DICT.copy()
     updated_user_data["enabled"] = False
 
@@ -105,7 +90,7 @@ def test_update_user_success():
     assert response.status_code == 200
 
 
-def test_update_user_not_found():
+def test_update_user_not_found(client):
     with patch(
         "imaging_api.routers.users.get_user_profile_by",
         side_effect=NotFoundError("User not found"),
@@ -118,7 +103,7 @@ def test_update_user_not_found():
     assert response.status_code == 404
 
 
-def test_update_user_not_modified():
+def test_update_user_not_modified(client):
     with (
         patch("imaging_api.routers.users.get_user_profile_by", return_value=_SAMPLE_USER),
         patch("imaging_api.routers.users.requests.put") as mock_put,
@@ -134,7 +119,7 @@ def test_update_user_not_modified():
     assert response.json()["username"] == "johndoe"
 
 
-def test_update_user_put_404():
+def test_update_user_put_404(client):
     with (
         patch("imaging_api.routers.users.get_user_profile_by", return_value=_SAMPLE_USER),
         patch("imaging_api.routers.users.requests.put") as mock_put,
@@ -149,7 +134,7 @@ def test_update_user_put_404():
     assert response.status_code == 404
 
 
-def test_update_user_put_server_error():
+def test_update_user_put_server_error(client):
     with (
         patch("imaging_api.routers.users.get_user_profile_by", return_value=_SAMPLE_USER),
         patch("imaging_api.routers.users.requests.put") as mock_put,
@@ -164,7 +149,7 @@ def test_update_user_put_server_error():
     assert response.status_code == 500
 
 
-def test_add_user_to_project_success():
+def test_add_user_to_project_success(client):
     with (
         patch("imaging_api.routers.users.get_user_profile_by", return_value=_SAMPLE_USER),
         patch("imaging_api.routers.users.add_user_to_project", return_value=_SAMPLE_USER),
@@ -175,7 +160,7 @@ def test_add_user_to_project_success():
     assert response.json()["username"] == "johndoe"
 
 
-def test_add_user_to_project_user_not_found():
+def test_add_user_to_project_user_not_found(client):
     with patch(
         "imaging_api.routers.users.get_user_profile_by",
         side_effect=NotFoundError("User not found"),
@@ -185,7 +170,7 @@ def test_add_user_to_project_user_not_found():
     assert response.status_code == 404
 
 
-def test_add_user_to_project_add_failure():
+def test_add_user_to_project_add_failure(client):
     with (
         patch("imaging_api.routers.users.get_user_profile_by", return_value=_SAMPLE_USER),
         patch(
@@ -198,7 +183,7 @@ def test_add_user_to_project_add_failure():
     assert response.status_code == 404
 
 
-def test_add_user_to_project_generic_error():
+def test_add_user_to_project_generic_error(client):
     with (
         patch("imaging_api.routers.users.get_user_profile_by", return_value=_SAMPLE_USER),
         patch(

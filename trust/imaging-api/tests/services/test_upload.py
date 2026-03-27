@@ -29,17 +29,11 @@ from imaging_api.utils.exceptions import AlreadyExistsError
 XNAT_URL = get_settings().XNAT_URL
 
 
-@pytest.fixture
-def headers():
-    return {}
-
-
 # ── create_xnat_scan ──
 
 
 @patch("imaging_api.services.upload.requests.put")
 def test_create_existing_xnat_scan(mock_put, headers):
-    # Mock the response to simulate a successful response
     mock_put.return_value = MagicMock(status_code=200)
 
     create_xnat_scan(
@@ -63,7 +57,6 @@ def test_create_xnat_scan_failure(mock_put, headers):
 
 @patch("imaging_api.services.upload.requests.put")
 def test_create_existing_xnat_resource(mock_put, headers):
-    # Mock the response to simulate a resource already existing
     mock_put.return_value = MagicMock(status_code=409)
 
     with pytest.raises(AlreadyExistsError) as exc_info:
@@ -89,7 +82,6 @@ def test_create_xnat_resource_non_200_non_409(mock_put, headers):
 @patch("imaging_api.services.upload.requests.put")
 def test_create_xnat_resource_success(mock_put, headers):
     mock_put.return_value = MagicMock(status_code=200)
-    # Should not raise
     create_xnat_resource("PROJ", "SUBJ", "EXP", "SCAN1", "DICOM", headers)
 
 
@@ -132,45 +124,32 @@ def test_upload_nonexistent_file_to_xnat(headers):
 @patch("imaging_api.services.upload.check_file_exists_in_xnat")
 @patch("imaging_api.services.upload.requests.put")
 def test_upload_file_to_xnat(mock_put, mock_check_file_exists_in_xnat, headers):
-    # Mock the response to simulate a successful upload
     mock_put.return_value = MagicMock(status_code=200)
-
-    # Mock the check_file_exists_in_xnat to return False (file does not exist)
     mock_check_file_exists_in_xnat.return_value = False
 
-    # Create a temporary file to simulate the file to be uploaded
     with tempfile.NamedTemporaryFile(delete=False) as temp_file:
         temp_file.write(b"Hello, world!")
-    temp_file.close()
-    temp_file_path = temp_file.name
+        temp_file_path = temp_file.name
 
-    # Test data
-    project_id = "test"
-    subject_id = "XNAT_S00002"
-    experiment_id_or_label = "XNAT_E00002"
-    scan_id = "TEST_SCAN"
-    resource_id = "TEST_FILES"
-    exist_ok = False
-
-    uploaded_file = upload_file_to_xnat(
-        project_id=project_id,
-        subject_id=subject_id,
-        experiment_id_or_label=experiment_id_or_label,
-        scan_id=scan_id,
-        resource_id=resource_id,
-        file_path=temp_file_path,
-        exist_ok=exist_ok,
-        headers=headers,
-    )
-    temp_file_name = os.path.basename(temp_file_path)
-    assert (
-        uploaded_file == f"{XNAT_URL}/data/projects/test/subjects/{subject_id}/"
-        f"experiments/{experiment_id_or_label}/scans/{scan_id}/"
-        f"resources/{resource_id}/files/{temp_file_name}?inbody=true"
-    )
-
-    # Clean up the temporary file
-    os.remove(temp_file_path)
+    try:
+        uploaded_file = upload_file_to_xnat(
+            project_id="test",
+            subject_id="XNAT_S00002",
+            experiment_id_or_label="XNAT_E00002",
+            scan_id="TEST_SCAN",
+            resource_id="TEST_FILES",
+            file_path=temp_file_path,
+            exist_ok=False,
+            headers=headers,
+        )
+        temp_file_name = os.path.basename(temp_file_path)
+        assert (
+            uploaded_file == f"{XNAT_URL}/data/projects/test/subjects/XNAT_S00002/"
+            f"experiments/XNAT_E00002/scans/TEST_SCAN/"
+            f"resources/TEST_FILES/files/{temp_file_name}?inbody=true"
+        )
+    finally:
+        os.remove(temp_file_path)
 
 
 @patch("imaging_api.services.upload.check_file_exists_in_xnat", return_value=True)
@@ -208,8 +187,7 @@ class TestUploadDataToXnat:
         with tempfile.TemporaryDirectory() as tmp_dir:
             upload_dir = os.path.join(tmp_dir, "net1", "upload")
             os.makedirs(upload_dir)
-            test_file = os.path.join(upload_dir, "scan.nii")
-            with open(test_file, "w") as f:
+            with open(os.path.join(upload_dir, "scan.nii"), "w") as f:
                 f.write("nifti-data")
 
             with patch("imaging_api.services.upload.BASE_IMAGES_DOWNLOAD_DIR", tmp_dir):
