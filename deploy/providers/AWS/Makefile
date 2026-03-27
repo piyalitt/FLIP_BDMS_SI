@@ -289,7 +289,7 @@ deploy-trust: update-env ## Deploy trust relationships after central hub is depl
 add-local-trust: ## Provision an on-prem Trust host and register it with the Central Hub
 	## LOCAL_TRUST_SSH_KEY is optional. When omitted, runs locally (no SSH) — use this
 	## when the trust host IS the operator workstation or is not reachable via its public IP.
-	## Local mode generates TLS certs and prints the sudo commands to run (UFW, cert install, kit deploy).
+	## Local mode configures the host and prints the sudo commands to run (UFW rules, kit deploy).
 	@[ -n "$(LOCAL_TRUST_IP)" ] || (echo ""; echo "❌  ERROR: LOCAL_TRUST_IP is required."; echo "   Usage: make add-local-trust LOCAL_TRUST_IP=<public-ip> [LOCAL_TRUST_SSH_KEY=<path>]"; echo "   Omit LOCAL_TRUST_SSH_KEY to provision the local machine (no SSH)."; echo ""; exit 1)
 	@echo "🔧 Provisioning on-premises Trust host at $(LOCAL_TRUST_IP)..."
 	@uv sync

@@ -65,7 +65,6 @@ terraform destroy -auto-approve \
   -target=module.trust_ec2.aws_instance.trust_host \
   -target=module.trust_ec2.aws_security_group.trust_host_sg \
   -target=module.trust_ec2.aws_vpc_security_group_ingress_rule.ssh \
-  -target=module.trust_ec2.aws_vpc_security_group_ingress_rule.trust_api \
   -target=module.trust_ec2.aws_vpc_security_group_ingress_rule.xnat \
   -target=module.trust_ec2.aws_vpc_security_group_ingress_rule.pacs_ui \
   -target=module.trust_ec2.aws_vpc_security_group_egress_rule.allow_all \

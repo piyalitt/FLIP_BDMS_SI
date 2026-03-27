@@ -1031,30 +1031,17 @@ def main(
         #     )
 
         # Local (on-premises) Trust checks
+        # In the outbound-only polling model, the local trust polls the hub —
+        # we cannot verify connectivity from here. Direct the operator to check
+        # trust-api logs for successful task polling and heartbeats.
         local_trust_ip = os.getenv("LOCAL_TRUST_IP")
         if local_trust_ip:
             print_section("Local Trust Checks")
-
-            # Resolve path to repo root (path goes: file -> AWS -> providers -> deploy -> FLIP)
-            _local_trust_ca = str(Path(__file__).parent.parents[3] / "trust" / "certs" / "local-trust-ca.crt")
-
-            # 1. Verify local trust health endpoint is reachable from this machine
-            check_http_endpoint(
-                f"https://{local_trust_ip}:{TRUST_API_PORT}/health",
-                f"Local Trust API Health ({local_trust_ip})",
-                200,
-                cafile=_local_trust_ca if Path(_local_trust_ca).exists() else None,
+            print_status(
+                "INFO",
+                f"Local trust at {local_trust_ip} uses outbound polling. "
+                "Verify by checking trust-api logs for successful hub polling and heartbeats.",
             )
-
-            # 2. Firewall enforcement: cloud Trust EC2 must NOT be able to reach local trust.
-            # UFW only whitelists the Central Hub IP; if the cloud Trust EC2 can reach the
-            # local trust health endpoint, the firewall is misconfigured.
-            if trust_ip:
-                check_endpoint_blocked_from_ssh(
-                    "flip-trust",
-                    f"https://{local_trust_ip}:{TRUST_API_PORT}/health",
-                    allowed_source_ip=central_hub_eip,
-                )
         else:
             print_status("INFO", "LOCAL_TRUST_IP not set — skipping local Trust checks")
 
