@@ -11,7 +11,7 @@
 #
 
 # Development stage - for Docker Compose with volume mounts
-FROM node:20.9.0-alpine AS development
+FROM node:22-alpine AS development
 
 # Install dependencies for building node modules
 RUN apk add --no-cache python3 make g++ xdg-utils
