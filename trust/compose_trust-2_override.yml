@@ -1,7 +1,0 @@
-# Override for Trust 2 to avoid host port conflicts when running multiple Trust instances
-
-services:
-
-  trust-api:
-    ports:
-      - "8021:8000"
