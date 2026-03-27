@@ -19,7 +19,7 @@ import boto3
 from sqlmodel import Session, col, select
 
 from flip_api.config import get_settings
-from flip_api.db.models.main_models import Queries, Trust, TrustTask, XNATImageStatus
+from flip_api.db.models.main_models import Queries, Trust, TrustTask, XNATImageStatus, XNATProjectStatus
 from flip_api.domain.interfaces.trust import (
     ICreatedImagingProject,
     ISesProjectAccessTemplateData,
@@ -47,17 +47,27 @@ def handle_imaging_task_completed(task: TrustTask, db: Session) -> None:
     payload_data = json.loads(task.payload)
     project_id = UUID(payload_data["project_id"])
 
-    # Persist imaging project status to database
-    query_id = _get_latest_query_id(project_id, db)
-    insert_status(
-        trust_id=task.trust_id,
-        xnat_project_id=imaging_project.imaging_project_id,
-        project_id=project_id,
-        status=XNATImageStatus.CREATED,
-        db=db,
-        query_id=query_id,
-    )
-    logger.info(f"Saved imaging project status for '{imaging_project.name}'")
+    # Persist imaging project status to database (idempotent: skip if already exists from a prior attempt)
+    existing_status = db.exec(
+        select(XNATProjectStatus)
+        .where(XNATProjectStatus.trust_id == task.trust_id)
+        .where(XNATProjectStatus.project_id == project_id)
+        .where(XNATProjectStatus.retrieve_image_status == XNATImageStatus.CREATED)
+    ).first()
+
+    if not existing_status:
+        query_id = _get_latest_query_id(project_id, db)
+        insert_status(
+            trust_id=task.trust_id,
+            xnat_project_id=imaging_project.imaging_project_id,
+            project_id=project_id,
+            status=XNATImageStatus.CREATED,
+            db=db,
+            query_id=query_id,
+        )
+        logger.info(f"Saved imaging project status for '{imaging_project.name}'")
+    else:
+        logger.info(f"Status row already exists for trust {task.trust_id}, project {project_id} — skipping insert")
 
     # Skip emails if no users to notify
     if not imaging_project.created_users and not imaging_project.added_users:

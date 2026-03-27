@@ -17,24 +17,23 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from log_config import LoggingMiddleware
 
-# Ensure structured logging is configured on import
-import trust_api.utils.logger  # noqa: F401
 from trust_api.routers.health import router as health_router
 from trust_api.services.task_poller import run_poller
+from trust_api.utils.logger import logger
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Start the task poller background service."""
     poller_task = asyncio.create_task(run_poller())
-    print("Trust API started with task poller")
+    logger.info("Trust API started with task poller")
     yield
     poller_task.cancel()
     try:
         await poller_task
     except asyncio.CancelledError:
         pass
-    print("Trust API shutting down")
+    logger.info("Trust API shutting down")
 
 
 app = FastAPI(

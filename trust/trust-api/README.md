@@ -62,9 +62,9 @@ Key environment variables (set in [`.env.development.example`](../../.env.develo
 | `TRUST_NAME` | Name of this Trust instance (must match `Trust.name` in hub DB, e.g. `Trust_1`) |
 | `DATA_ACCESS_API_URL` | Internal URL of the data-access-api |
 | `IMAGING_API_URL` | Internal URL of the imaging-api |
-| `FLIP_API_URL` | URL of the Central Hub API (for task polling) |
-| `AES_KEY_BASE64` | Base64-encoded AES-256 key for decrypting task payloads |
+| `CENTRAL_HUB_API_URL` | URL of the Central Hub API (for task polling) |
 | `PRIVATE_API_KEY` | Secret key for authenticating with the Central Hub |
+| `POLL_INTERVAL_SECONDS` | Polling frequency in seconds (default: 5) |
 
 ## Scaling Assumptions
 
@@ -72,7 +72,7 @@ The trust-api task poller is designed to run as a **single replica per trust**. 
 task-claim endpoint does not use row-level database locking, so running multiple poller replicas
 for the same trust would cause duplicate task execution.
 
-If horizontal scaling is needed, the hub endpoint (`GET /tasks/{trust_id}/pending`) must be
+If horizontal scaling is needed, the hub endpoint (`GET /tasks/{trust_name}/pending`) must be
 updated to use `SELECT ... FOR UPDATE SKIP LOCKED` to ensure each task is claimed by exactly
 one replica.
 

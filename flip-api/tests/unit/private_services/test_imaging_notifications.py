@@ -126,11 +126,13 @@ def test_inserts_xnat_project_status(mock_ses, mock_decrypt, mock_settings, mock
 
     mock_query = _mock_query()
     mock_db = MagicMock()
+    idempotency_result = MagicMock()
+    idempotency_result.first.return_value = None  # No existing status row
     query_result = MagicMock()
     query_result.first.return_value = mock_query
     trust_result = MagicMock()
     trust_result.first.return_value = _mock_trust()
-    mock_db.exec.side_effect = [query_result, trust_result]
+    mock_db.exec.side_effect = [idempotency_result, query_result, trust_result]
 
     handle_imaging_task_completed(task, mock_db)
 
@@ -152,11 +154,13 @@ def test_inserts_status_with_no_query(mock_ses, mock_decrypt, mock_settings, moc
     task = _make_task(users)
 
     mock_db = MagicMock()
+    idempotency_result = MagicMock()
+    idempotency_result.first.return_value = None  # No existing status row
     query_result = MagicMock()
     query_result.first.return_value = None  # No query exists
     trust_result = MagicMock()
     trust_result.first.return_value = _mock_trust()
-    mock_db.exec.side_effect = [query_result, trust_result]
+    mock_db.exec.side_effect = [idempotency_result, query_result, trust_result]
 
     handle_imaging_task_completed(task, mock_db)
 
@@ -168,7 +172,11 @@ def test_no_emails_when_no_users_at_all(mock_ses, mock_decrypt, mock_settings, m
     """Should skip email sending when no created or added users, but still insert status."""
     task = _make_task(created_users=[], added_users=[])
     mock_db = MagicMock()
-    mock_db.exec.return_value.first.return_value = _mock_query()
+    idempotency_result = MagicMock()
+    idempotency_result.first.return_value = None  # No existing status row
+    query_result = MagicMock()
+    query_result.first.return_value = _mock_query()
+    mock_db.exec.side_effect = [idempotency_result, query_result]
 
     handle_imaging_task_completed(task, mock_db)
 
