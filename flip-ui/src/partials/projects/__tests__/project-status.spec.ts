@@ -272,6 +272,87 @@ describe("ProjectStatus", () => {
         });
     });
 
+    describe("conditional display logic", () => {
+        beforeEach(() => {
+            mockSwrvData.value = mockTrustData;
+        });
+
+        it("shows green icon when reimport count is below max", () => {
+            const wrapper = mountProjectStatus(true);
+            const trust1ReimportStatus = wrapper.find("[data-test=project-reimport-status-trust-1]");
+
+            expect(trust1ReimportStatus.exists()).toBe(true);
+            // The reimport icon (sibling SVG) should be green for below-max counts
+            const icon = trust1ReimportStatus.element.parentElement!.querySelector("svg");
+            expect(icon!.classList.contains("text-green-500")).toBe(true);
+        });
+
+        it("shows yellow icon when reimport count reaches max", () => {
+            const wrapper = mountProjectStatus(true);
+            const trust3ReimportStatus = wrapper.find("[data-test=project-reimport-status-trust-3]");
+
+            expect(trust3ReimportStatus.exists()).toBe(true);
+            const icon = trust3ReimportStatus.element.parentElement!.querySelector("svg");
+            expect(icon!.classList.contains("text-yellow-500")).toBe(true);
+        });
+
+        it("shows 'Created' text for trusts with completed project creation", () => {
+            const wrapper = mountProjectStatus(true);
+            const trust1Li = wrapper.findAll("li").find(li => li.find("[data-test=trust-name-trust-1]").exists())!;
+
+            expect(trust1Li.text()).toContain("Created");
+        });
+
+        it("shows 'Awaiting creation…' text for trusts with incomplete project creation", () => {
+            const wrapper = mountProjectStatus(true);
+            const trust2Li = wrapper.findAll("li").find(li => li.find("[data-test=trust-name-trust-2]").exists())!;
+
+            expect(trust2Li.text()).toContain("Awaiting creation…");
+        });
+
+        it("does not show import-status-warning for trusts with incomplete creation", () => {
+            const wrapper = mountProjectStatus(true);
+
+            // trust-2 has projectCreationCompleted=false and importStatus=undefined
+            // The alert requires BOTH !importStatus AND projectCreationCompleted
+            expect(wrapper.find("[data-test=import-status-warning-trust-2]").exists()).toBe(false);
+        });
+
+        it("does not show import statistics grid for trusts without importStatus", () => {
+            const wrapper = mountProjectStatus(true);
+
+            // trust-2 and trust-3 have no importStatus, should not show stats
+            expect(wrapper.find("[data-test=successful-imports-trust-2]").exists()).toBe(false);
+            expect(wrapper.find("[data-test=successful-imports-trust-3]").exists()).toBe(false);
+        });
+
+        it("does not show reimport section for trusts with incomplete creation", () => {
+            const wrapper = mountProjectStatus(true);
+
+            // trust-2 has projectCreationCompleted=false, reimportCount=undefined
+            expect(wrapper.find("[data-test=project-reimport-status-trust-2]").exists()).toBe(false);
+        });
+    });
+
+    describe("route change behavior", () => {
+        it("clears data when route projectId changes", async () => {
+            mockSwrvData.value = mockTrustData;
+            const wrapper = mountProjectStatus(true);
+
+            expect(wrapper.findAll("li").length).toBe(3);
+
+            mockRoute.params = { projectId: "different-project-id" };
+            await wrapper.vm.$nextTick();
+
+            // Data should be cleared, showing loading skeletons
+            expect(wrapper.find("ul[role='list']").exists()).toBe(false);
+        });
+
+        afterEach(() => {
+            mockRoute.params = { projectId: "test-project-id" };
+        });
+    });
+
     describe("empty data", () => {
         it("shows awaiting message when data is an empty array", () => {
             mockSwrvData.value = [];
@@ -286,6 +367,14 @@ describe("ProjectStatus", () => {
 
             expect(wrapper.find(ProjectStatusComponent.overviewProjectCreation).text()).toBe("0/0");
             expect(wrapper.find(ProjectStatusComponent.overviewImageRetrieval).text()).toBe("0");
+        });
+
+        it("does not show overview sidebar when data is undefined", () => {
+            mockSwrvData.value = undefined;
+            const wrapper = mountProjectStatus(true);
+
+            // When data is undefined, the skeleton loading state is shown, not the data view
+            expect(wrapper.find(ProjectStatusComponent.overviewProjectCreation).exists()).toBe(false);
         });
     });
 });

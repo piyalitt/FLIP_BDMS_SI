@@ -31,6 +31,7 @@ from flip_api.domain.schemas.projects import (
 from flip_api.domain.schemas.status import XNATImageStatus
 from flip_api.project_services.services.image_service import (
     _get_latest_imaging_status,
+    base64_url_encode,
     delete_imaging_project,
     get_imaging_project_statuses,
     get_imaging_projects,
@@ -647,3 +648,51 @@ class TestGetImagingProjectStatusesEdgeCases:
 
         assert results == []
         mock_logger.error.assert_called_once()
+
+
+class TestBase64UrlEncode:
+    def test_encodes_string(self):
+        """Should produce correct base64url encoding."""
+        result = base64_url_encode("hello world")
+        expected = base64.urlsafe_b64encode(b"hello world").decode("utf-8").rstrip("=")
+        assert result == expected
+
+    def test_strips_padding(self):
+        """Should strip '=' padding characters from output."""
+        result = base64_url_encode("a")
+        assert "=" not in result
+
+
+class TestReimportFailedStudiesRateLimited:
+    @patch(MOCK_LOGGER_PATH)
+    def test_all_queries_rate_limited(
+        self,
+        mock_logger: MagicMock,
+        mock_db_session: MagicMock,
+    ):
+        """Should return True and queue no tasks when all queries are within the rate limit."""
+        queries = [
+            IReimportQuery(
+                query_id=uuid4(),
+                query="SELECT 1",
+                xnat_project_id=uuid4(),
+                last_reimport=datetime.now(timezone.utc) - timedelta(minutes=5),
+                trust_id=uuid4(),
+                trust_name="T1",
+            ),
+            IReimportQuery(
+                query_id=uuid4(),
+                query="SELECT 2",
+                xnat_project_id=uuid4(),
+                last_reimport=datetime.now(timezone.utc) - timedelta(minutes=10),
+                trust_id=uuid4(),
+                trust_name="T2",
+            ),
+        ]
+
+        result = reimport_failed_studies(queries, mock_db_session, project_reimport_rate_minutes=60)
+
+        assert result is True
+        mock_db_session.add.assert_not_called()
+        mock_db_session.commit.assert_called_once()
+        mock_logger.info.assert_any_call("No queries were eligible for reimport at this time.")
