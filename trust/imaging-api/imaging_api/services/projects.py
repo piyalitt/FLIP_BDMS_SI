@@ -91,7 +91,7 @@ def get_all_projects(headers: dict[str, str]) -> list[Project]:
         headers (dict[str, str]): XNAT authentication headers
 
     Returns:
-        List[Project]: List of XNAT project objects
+        list[Project]: List of XNAT project objects
     """
     try:
         response = requests.get(f"{XNAT_URL}/data/projects", headers=headers)
@@ -471,7 +471,7 @@ def get_subjects(project_id: str, headers: dict[str, str]) -> list[Subject]:
         headers (dict[str, str]): XNAT authentication headers.
 
     Returns:
-        List[Subject]: List of XNAT subject objects.
+        list[Subject]: List of XNAT subject objects.
 
     Raises:
         Exception: If there is an error while fetching the subjects from XNAT.
@@ -496,7 +496,7 @@ def get_experiments(project_id: str, headers: dict[str, str]) -> list[Experiment
         headers (dict[str, str]): XNAT authentication headers.
 
     Returns:
-        List[Experiment]: List of XNAT experiment objects.
+        list[Experiment]: List of XNAT experiment objects.
 
     Raises:
         Exception: If there is an error while fetching the experiments from XNAT.
@@ -556,7 +556,7 @@ def get_subject_id_from_experiment_response(experiment_response: dict[str, Any])
     Extracts the XNAT subject ID from the XNAT experiment response JSON.
 
     Args:
-        experiment_response (Dict[str, Any]): XNAT experiment response JSON.
+        experiment_response (dict[str, Any]): XNAT experiment response JSON.
 
     Returns:
         str: Subject ID

@@ -32,7 +32,7 @@ def get_xnat_users(headers: dict[str, str]) -> list[User]:
         headers (dict[str, str]): XNAT authentication headers.
 
     Returns:
-        List[imaging_api.routers.schemas.User]: List of XNAT users.
+        list[imaging_api.routers.schemas.User]: List of XNAT users.
     """
     response = requests.get(f"{XNAT_URL}/xapi/users/profiles", headers=headers)
     users = [User(**user) for user in response.json()]
@@ -149,7 +149,7 @@ def create_user_from_central_hub_user(
         headers (dict[str, str]): XNAT authentication headers.
 
     Returns:
-        Tuple[imaging_api.routers.schemas.CreatedUser, imaging_api.routers.schemas.User]: The created user and the user
+        tuple[imaging_api.routers.schemas.CreatedUser, imaging_api.routers.schemas.User]: The created user and the user
         profile.
     """
     create_user_request = to_create_imaging_user(central_hub_user, headers)

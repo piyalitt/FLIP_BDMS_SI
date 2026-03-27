@@ -50,7 +50,7 @@ def get_status_endpoint(
         user_id (UUID): ID of the authenticated user.
 
     Returns:
-        List[INetStatus]: A list of INetStatus objects containing the status of each network.
+        list[INetStatus]: A list of INetStatus objects containing the status of each network.
 
     Raises:
         HTTPException: If there is an error while retrieving the net statuses.

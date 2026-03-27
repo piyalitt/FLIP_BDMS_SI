@@ -44,7 +44,7 @@ def get_uploaded_files_info(
         user_id (UUID): ID of the user (obtained from auth token)
 
     Returns:
-        List[Dict[str, Any]]: A list of dictionaries containing file information
+        list[dict[str, Any]]: A list of dictionaries containing file information
 
     Raises:
         HTTPException: If no files are found or if there is an error during the operation.
@@ -124,7 +124,7 @@ def get_uploaded_files_info_post(
         user_id (UUID): ID of the user (obtained from auth token)
 
     Returns:
-        List[Dict[str, Any]]: A list of dictionaries containing file information
+        list[dict[str, Any]]: A list of dictionaries containing file information
 
     Raises:
         HTTPException: If no files are found or if there is an error during the operation.

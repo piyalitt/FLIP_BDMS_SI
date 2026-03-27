@@ -159,7 +159,7 @@ def check_client_status(endpoint: str) -> list[IClientStatus] | None:
         endpoint (str): The endpoint of the server to check the status from.
 
     Returns:
-        List[IClientStatus] | None: A list of client statuses if available, otherwise None.
+        list[IClientStatus] | None: A list of client statuses if available, otherwise None.
     """
     url = f"{endpoint}/check_client_status"
     logger.debug(f"Checking client status at '{url}'")
@@ -197,7 +197,7 @@ def fetch_client_status(endpoint: str) -> list[IClientStatus] | None:
         endpoint (str): The endpoint of the server to fetch the status from.
 
     Returns:
-        List[IClientStatus] | None: A list of client statuses if available, otherwise None.
+        list[IClientStatus] | None: A list of client statuses if available, otherwise None.
     """
     client_statuses = check_client_status(endpoint)
     if not client_statuses:
@@ -212,7 +212,7 @@ def is_client_available(client_name: str, client_statuses: list[IClientStatus]) 
 
     Args:
         client_name (str): The name of the client to check.
-        client_statuses (List[IClientStatus]): A list of client statuses to check against.
+        client_statuses (list[IClientStatus]): A list of client statuses to check against.
 
     Returns:
         bool: True if the client is available, False otherwise.
@@ -233,7 +233,7 @@ def validate_client_availability(clients: list[str], endpoint: str) -> None:
     If any client is unavailable, it raises a ValueError.
 
     Args:
-        clients (List[str]): A list of client names to check the availability of.
+        clients (list[str]): A list of client names to check the availability of.
         endpoint (str): The endpoint of the FL API service.
 
     Returns:
@@ -287,9 +287,9 @@ def start_training(
     Args:
         model_id (UUID): The ID of the model to start training for.
         fl_job_id (UUID): The ID of the FL job to add the backend job id given successful job submission.
-        clients (List[str]): A list of client names to start training on.
+        clients (list[str]): A list of client names to start training on.
         endpoint (str): The endpoint of the FL API service.
-        bundle_urls (List[str]): A list of URLs for the application bundle.
+        bundle_urls (list[str]): A list of URLs for the application bundle.
         session (Session): An instance of the database connection.
 
     Raises:
@@ -721,7 +721,7 @@ def get_bundle_urls(s3_path: str) -> list[str]:
         s3_path (str): The S3 path of the bundle to get the URLs for.
 
     Returns:
-        List[str]: A list of pre-signed URLs for the bundle files.
+        list[str]: A list of pre-signed URLs for the bundle files.
 
     Raises:
         ClientError: If there is an error listing objects or generating pre-signed URLs.
@@ -867,7 +867,7 @@ def add_fl_job(model_id: UUID, clients: list[str], session: Session) -> None:
 
     Args:
         model_id (UUID): The ID of the model for which the FL job is being created.
-        clients (List[str]): A list of client names associated with the FL job.
+        clients (list[str]): A list of client names associated with the FL job.
         session (Session): The SQLModel session to use for the database operation.
 
     Raises:

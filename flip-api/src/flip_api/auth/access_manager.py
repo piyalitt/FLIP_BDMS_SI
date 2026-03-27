@@ -273,7 +273,7 @@ def check_authorization_token(api_key: str = Security(api_key_header_scheme)) ->
             - 401 if the API key is missing or invalid.
 
     Returns:
-        The validated API key if it is correct.
+        str: The validated API key if it is correct.
     """
     expected_api_key = get_settings().PRIVATE_API_KEY
 

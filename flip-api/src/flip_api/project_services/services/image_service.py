@@ -56,7 +56,7 @@ def get_imaging_projects(project_id: UUID, db: Session) -> list[ImagingProject]:
         db (Session): The database session for executing queries.
 
     Returns:
-        List[ImagingProject]: A list of ImagingProject objects associated with the given project ID.
+        list[ImagingProject]: A list of ImagingProject objects associated with the given project ID.
 
     Raises:
         SQLAlchemyError: If there is an error executing the database query.
@@ -146,8 +146,8 @@ def get_xnat_project_status_info(xnat_project_id: UUID, db: Session) -> XnatProj
         db (Session): The database session for executing queries.
 
     Returns:
-        Optional[XnatProjectStatusInfo]: An object containing the XNAT project status information, or None if the
-                                         project status could not be found.
+        XnatProjectStatusInfo | None: An object containing the XNAT project status information, or None if the
+                                    project status could not be found.
 
     Raises:
         SQLAlchemyError: If there is an error executing the database query.
@@ -180,12 +180,12 @@ def get_imaging_project_statuses(
     Retrieve the imaging project statuses for a list of imaging projects.
 
     Args:
-        imaging_projects (List[ImagingProject]): The list of imaging projects to retrieve statuses for.
+        imaging_projects (list[ImagingProject]): The list of imaging projects to retrieve statuses for.
         encoded_query (str): The Base64 URL encoded query to send to the imaging project endpoints.
         db (Session): The database session for executing queries.
 
     Returns:
-        List[IImagingStatus]: A list of IImagingStatus containing the status information for each imaging project.
+        list[IImagingStatus]: A list of IImagingStatus containing the status information for each imaging project.
     """
     logger.debug(
         f"Attempting to retrieve the imaging project status. Trusts requested: {[ip.name for ip in imaging_projects]}"
@@ -292,7 +292,7 @@ def reimport_failed_studies(
     specified time interval has passed since the last reimport.
 
     Args:
-        reimport_queries (List[IReimportQuery]): A list of queries containing information about which projects and
+        reimport_queries (list[IReimportQuery]): A list of queries containing information about which projects and
             trusts to reimport studies for, along with the last reimport time.
         db (Session): The database session for updating reimport status.
         project_reimport_rate_minutes (int): The minimum number of minutes that must have passed since the last

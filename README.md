@@ -164,10 +164,6 @@ installing new packages, running tests, and debugging the code.
 Some aliases are defined in the Makefile to make this easier:
 
 ```bash
-make flip-ui-shell
-```
-
-```bash
 make down
 ```
 

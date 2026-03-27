@@ -41,7 +41,7 @@ def retrieve_trusts_in_model_endpoint(
     Args:
         model_id (UUID): The ID of the model to retrieve trusts for.
         db (Session): Database session.
-        user_id (Optional[UUID]): User ID from authentication, if available.
+        user_id (UUID | None): User ID from authentication, if available.
 
     Returns:
         None

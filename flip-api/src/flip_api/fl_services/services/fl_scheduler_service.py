@@ -187,7 +187,7 @@ def get_net_by_name(name: str, session: Session) -> INetDetails | None:
         session (Session): SQLModel session
 
     Returns:
-        Optional[INetDetails]: Details of the net or None if not found
+        INetDetails | None: Details of the net or None if not found
     """
     logger.info(f"Getting {name} info from db...")
 
@@ -217,7 +217,7 @@ def get_nets(session: Session) -> list[INetDetails]:
         session (Session): The database session.
 
     Returns:
-        List[INetDetails]: A list of all nets.
+        list[INetDetails]: A list of all nets.
     """
     logger.info("Getting net info from db...")
     try:
@@ -244,7 +244,7 @@ def check_for_available_net(session: Session) -> ISchedulerResponse | None:
         session (Session): The database session.
 
     Returns:
-        Optional[ISchedulerResponse]: The scheduler response if an available net is found, otherwise None.
+        ISchedulerResponse | None: The scheduler response if an available net is found, otherwise None.
     """
     logger.info("Checking for any available nets...")
 
@@ -282,7 +282,7 @@ def check_for_queued_jobs(scheduler_id: UUID, session: Session) -> IJobResponse 
         session (Session): The database session.
 
     Returns:
-        Optional[IJobResponse]: The job response if a queued job is found, otherwise None.
+        IJobResponse | None: The job response if a queued job is found, otherwise None.
     """
     logger.info("Checking for any queued jobs...")
 

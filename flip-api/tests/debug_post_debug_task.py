@@ -20,7 +20,6 @@ from flip_api.db.models.main_models import (
     FLJob,
     FLLogs,
     FLMetrics,
-    Image,
     Model,
     ModelsAudit,
     ModelTrustIntersect,
@@ -84,14 +83,6 @@ def delete_projects_models(session: Session, project_ids: list[str]) -> bool:
         print(f"  ✅ Deleted {deleted_count} models audit records")
     except Exception as e:
         print(f"  ❌ Error deleting models audit records: {e}")
-        return False
-    try:
-        # Now delete images and uploaded files
-        result = session.execute(delete(Image).where(col(Image.model_id).in_(model_ids)))
-        deleted_count = result.rowcount if hasattr(result, "rowcount") else 0
-        print(f"  ✅ Deleted {deleted_count} image records")
-    except Exception as e:
-        print(f"  ❌ Error deleting image records: {e}")
         return False
     try:
         # delete model trust intersects

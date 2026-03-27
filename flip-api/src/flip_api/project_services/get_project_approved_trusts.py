@@ -55,7 +55,7 @@ def get_project_approved_trusts_endpoint(
         current_user_id (UUID): The ID of the currently authenticated user, provided by dependency injection.
 
     Returns:
-         List[Trust]: A list of approved trusts for the project.
+         list[Trust]: A list of approved trusts for the project.
 
     Raises:
         HTTPException: If the request cannot be processed.
