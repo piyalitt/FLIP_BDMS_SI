@@ -408,8 +408,7 @@ add-local-trust: ## Provision an on-prem Trust host and register it with the Cen
 		echo ""; \
 		echo "  # 2. Configure firewall — allow Central Hub ($$CH_IP) access to Trust ports:"; \
 		echo "  sudo ufw allow from $$CH_IP to any port $(TRUST_API_PORT) proto tcp comment 'FLIP Trust-API HTTPS from AWS CH'"; \
-		echo "  sudo ufw allow from $$CH_IP to any port 8002 proto tcp comment 'FL Server port from AWS CH'"; \
-		echo "  sudo ufw allow from $$CH_IP to any port 8003 proto tcp comment 'FL Admin port from AWS CH'"; \
+		echo "  sudo ufw allow from $$CH_IP to any port 8002 proto tcp comment 'FL Server/Admin port from AWS CH'"; \
 		echo "  sudo ufw default deny incoming"; \
 		echo "  sudo ufw default allow outgoing"; \
 		echo "  sudo ufw enable"; \
