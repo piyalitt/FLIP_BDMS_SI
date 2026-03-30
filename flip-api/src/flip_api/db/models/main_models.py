@@ -19,7 +19,6 @@ from sqlmodel import Field, Relationship, SQLModel
 
 from flip_api.domain.schemas.actions import ModelAuditAction, ProjectAuditAction
 from flip_api.domain.schemas.file import FileUploadStatus
-from flip_api.domain.schemas.images import ImageType
 from flip_api.domain.schemas.status import (
     JobStatus,
     ModelStatus,
@@ -85,14 +84,6 @@ class FLLogs(SQLModel, table=True):
     trust_name: str | None = Field(default=None, nullable=True)
     log: str = Field()
 
-
-class Image(SQLModel, table=True):
-    __tablename__ = "image"  # type: ignore
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    imageref: str = Field()
-    effectivefrom: Annotated[datetime, Field(default_factory=datetime.utcnow)]
-    model_id: UUID | None = Field(default=None, foreign_key="model.id")
-    type: ImageType = Field()
 
 
 class Model(SQLModel, table=True):

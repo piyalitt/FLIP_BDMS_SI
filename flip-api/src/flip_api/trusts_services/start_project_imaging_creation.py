@@ -54,7 +54,7 @@ def send_xnat_login_to_new_users(
         imaging_project_id (UUID): ID of the project.
         imaging_project_name (str): Name of the project.
         trust (ITrust): Trust information.
-        created_users (List[ICreatedImagingUser]): List of users with their credentials.
+        created_users (list[ICreatedImagingUser]): List of users with their credentials.
 
     Returns:
          None

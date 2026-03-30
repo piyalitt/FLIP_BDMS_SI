@@ -43,17 +43,8 @@ export const useSiteDetailsStore = defineStore("siteDetails", {
         }
     },
     actions: {
-        async setSiteDetails(details: ISiteDetails) {
-            try {
-                const response = await updateSiteDetails("/site/details", details);
-                this.$state = { ...response };
-            }
-            catch {
-                Snackbar.error({
-                    title: "Banner Not Updated",
-                    text: "The banner has not been updated."
-                });
-            }
+        setSiteDetails(details: ISiteDetails) {
+            this.$state = { ...details };
         },
         async updateBanner(payload: ISiteBanner) {
 

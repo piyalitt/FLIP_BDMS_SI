@@ -78,6 +78,11 @@
         "PATH": "${workspaceFolder}/flip-api/.venv/bin:${env:PATH}",
         "VIRTUAL_ENV": "${workspaceFolder}/flip-api/.venv"
     },
+    "[terraform]": {
+        "editor.defaultFormatter": "hashicorp.terraform",
+        "editor.formatOnSave": true,
+        "editor.formatOnSaveMode": "file"
+    },
     // deactivate pylance error checking
     "python.analysis.typeCheckingMode": "off",
     // deactivate mypy missing library stubs errors

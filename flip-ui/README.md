@@ -34,11 +34,11 @@ or as part of the full platform:
 make up
 ```
 
-The UI is accessible at the port defined by `FLIP_UI_PORT` in [`.env.development.example`](../.env.development.example)
-(default: `3000`):
+The UI is accessible at the port defined by `UI_PORT` in [`.env.development.example`](../.env.development.example)
+(default: `443`):
 
 ```
-http://localhost:3000
+https://localhost
 ```
 
 ## Configuration

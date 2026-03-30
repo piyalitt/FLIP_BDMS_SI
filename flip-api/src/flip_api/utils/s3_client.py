@@ -121,7 +121,7 @@ class S3Client:
             s3_paths: List of full S3 paths (e.g., s3://bucket-name/key)
 
         Returns:
-            Dict[str, Any]: Dictionary containing deletion results per bucket.
+            dict[str, Any]: Dictionary containing deletion results per bucket.
 
         Raises:
             Exception: If batch deletion fails for any bucket
@@ -174,7 +174,7 @@ class S3Client:
             s3_path: Full S3 path (e.g., s3://bucket-name/key)
 
         Returns:
-            Dict[str, Any]: Response containing object data.
+            dict[str, Any]: Response containing object data.
 
         Raises:
             EndpointConnectionError: If connection to the S3 endpoint fails.
@@ -198,7 +198,7 @@ class S3Client:
             s3_path: Full S3 path (e.g., s3://bucket-name/key)
 
         Returns:
-            Dict[str, Any]: Metadata of the object.
+            dict[str, Any]: Metadata of the object.
 
         Raises:
             Exception: If getting object metadata fails.

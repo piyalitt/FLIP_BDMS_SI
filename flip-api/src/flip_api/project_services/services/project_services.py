@@ -61,7 +61,7 @@ def update_project_user_access(project_id: UUID, user_ids: list[UUID], session: 
 
     Args:
         project_id (UUID): The ID of the project for which to update user access.
-        user_ids (List[UUID]): A list of user IDs to grant access to the project.
+        user_ids (list[UUID]): A list of user IDs to grant access to the project.
         session (Session): The SQLModel session to use for database operations.
 
     Returns:
@@ -290,7 +290,7 @@ def get_project_query(project_from_db: IProjectResponse) -> IProjectQuery | None
         a query.
 
     Returns:
-        Optional[IProjectQuery]: The project query if it exists and is valid, otherwise None.
+        IProjectQuery | None: The project query if it exists and is valid, otherwise None.
     """
     logger.debug(project_from_db)
     query = project_from_db.query
@@ -316,7 +316,7 @@ def get_approved_trusts_for_project(project_id: UUID, session: Session) -> list[
         session (Session): The SQLModel session to use for database operations.
 
     Returns:
-        List[Trust]: A list of Trust objects that are approved for the specified project.
+        list[Trust]: A list of Trust objects that are approved for the specified project.
     """
     stmt = (
         select(Trust.id, Trust.name, Trust.endpoint)
@@ -342,7 +342,7 @@ def get_trusts_approval_status_for_project(project_id: UUID, session: Session) -
         session (Session): The SQLModel session to use for database operations.
 
     Returns:
-        List[IApprovedTrust]: A list of IApprovedTrust objects containing trust details and their approval status for
+        list[IApprovedTrust]: A list of IApprovedTrust objects containing trust details and their approval status for
         the specified project.
     """
     # This query assumes ProjectTrustIntersect has all trusts linked to a project,
@@ -391,7 +391,7 @@ def get_project_models_service(
         all_results (bool, optional): Whether to retrieve all results without pagination. Defaults to False.
 
     Returns:
-        Tuple[IPagedResponse[IModelsInfoResponse], PagingInfo]: A tuple containing the paged response with model info
+        tuple[IPagedResponse[IModelsInfoResponse], PagingInfo]: A tuple containing the paged response with model info
         and paging details.
     """
     paging_details = get_paging_details(query_string_parameters=query_params)
@@ -457,7 +457,7 @@ def get_users_with_access_service(project_id: UUID, session: Session) -> list[Us
         session (Session): The SQLModel session to use for database operations.
 
     Returns:
-        List[UserAccessInfo]: A list of UserAccessInfo objects containing user IDs of those who have access to the
+        list[UserAccessInfo]: A list of UserAccessInfo objects containing user IDs of those who have access to the
         project.
     """
     stmt = select(ProjectUserAccess.user_id).where(ProjectUserAccess.project_id == project_id)
@@ -579,7 +579,7 @@ def stage_project_service(
 
     Args:
         project_id (UUID): The ID of the project to stage.
-        trust_ids (List[UUID]): List of Trust IDs to stage the project for.
+        trust_ids (list[UUID]): List of Trust IDs to stage the project for.
         current_user_id (UUID): The ID of the user performing the action, for auditing.
         session (Session): SQLModel session for database operations.
 
@@ -799,7 +799,7 @@ def get_users_with_access(project_id: UUID, session: Session) -> list[UUID]:
         session (Session): The SQLModel session to use for database operations.
 
     Returns:
-        List[UUID]: A list of user IDs with access to the project.
+        list[UUID]: A list of user IDs with access to the project.
     """
     logger.debug("Attempting to get project users...")
 

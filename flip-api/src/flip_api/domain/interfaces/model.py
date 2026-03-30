@@ -25,15 +25,6 @@ class ModelStatusEdit(str, Enum):
     PENDING = "PENDING"
 
 
-class ImageType(str, Enum):
-    CLIENT = "CLIENT"
-    SERVER = "SERVER"
-
-
-class IImage(BaseModel):
-    imageRef: str
-
-
 class IModelDetails(BaseModel):
     name: str = Field(..., max_length=75)
     description: str = Field("", max_length=250)

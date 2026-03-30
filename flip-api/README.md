@@ -71,7 +71,7 @@ The flip-api is configured via environment variables. In development these are s
 | `AWS_COGNITO_APP_CLIENT_ID` | AWS Cognito App Client ID |
 | `AES_KEY_BASE64` | AES encryption key for Trust communication (base64-encoded) |
 | `UPLOADED_MODEL_FILES_BUCKET` | S3 bucket for uploaded model files |
-| `UPLOADED_FEDERATED_DATA_BUCKET` | S3 bucket for federated training data |
+| `UPLOADED_FEDERATED_DATA_BUCKET` | S3 bucket for storing models and artefacts |
 
 See [`.env.development.example`](../.env.development.example) for the full list of required variables.
 

@@ -63,7 +63,7 @@ All trust-side APIs use the ``log_config`` library located at
   ``message`` and any extra fields.
 - **LoggingMiddleware** -- FastAPI/Starlette middleware that generates a
   ``request_id`` (from the ``X-Request-ID`` header or a UUID), logs
-  ``REQUEST_STARTED`` / ``REQUEST_COMPLETED`` / ``REQUEST_FAILED`` events and
+  ``request.started`` / ``request.completed`` / ``request.failed`` events and
   records ``method``, ``path``, ``status_code`` and ``duration_ms``.
 - **request_context** -- a ``contextvars.ContextVar`` that carries per-request
   fields (e.g. ``request_id``) into every log emitted during that request.
@@ -129,7 +129,7 @@ Every log line is a JSON object:
      "api": "trust-api",
      "logger": "trust_api.routers.cohort",
      "message": "Project approved",
-     "event": "PROJECT_APPROVED",
+     "event": "project.approved",
      "project_id": "abc-123",
      "request_id": "d4e5f6a7-..."
    }
@@ -150,9 +150,10 @@ Key behaviours:
 - Discovers containers every 5 seconds via ``discovery.docker``.
 - Extracts Docker labels as log labels: ``container``, ``service``,
   ``project`` (via ``discovery.relabel``).
-- Parses JSON log lines and promotes ``level``, ``api``, ``event`` and
-  ``request_id`` to Loki labels for efficient querying (via
-  ``loki.process`` with ``stage.json`` and ``stage.labels``).
+- Parses JSON log lines and promotes ``level``, ``api`` and ``event``
+  to Loki labels for efficient querying (via ``loki.process`` with
+  ``stage.json`` and ``stage.labels``). ``request_id`` is extracted
+  from the JSON but not promoted to a label.
 
 Loki
 ====
@@ -298,7 +299,7 @@ Logs for a specific event:
 
 .. code-block:: text
 
-   {event="TRAINING_FAILED"}
+   {event="training.failed"}
 
 Full-text search within a service:
 
