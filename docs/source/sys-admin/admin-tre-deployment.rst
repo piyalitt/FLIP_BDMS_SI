@@ -471,7 +471,7 @@ UK TRE Federation Landscape
 Deploying federated learning across TREs is an active area of development in the UK. The
 `DARE UK <https://dareuk.org.uk/>`_
 `TREvolution programme <https://dareuk.org.uk/trevolution/enable-federation/>`_
-(£6.2M, UKRI-funded, launched 2025)
+(UKRI-funded, launched 2025)
 is developing standardised federation capabilities across UK TREs, including reference
 architecture, semi-automated output checking, and federated analysis. TREvolution introduces
 **Patterns** and **Weaves** -- configurable combinations of analysis type, technology
