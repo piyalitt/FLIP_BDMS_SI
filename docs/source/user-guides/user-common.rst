@@ -352,8 +352,8 @@ Prior to commencing training you may also upload an optional ``config.json`` fil
     {
       "GLOBAL_ROUNDS": 5,
       "LOCAL_ROUNDS": 2,
-      "IGNORE_RESULT_ERROR": false
-      "AGGREGATOR": "InTimeAccumulateWeightedAggregator"
+      "IGNORE_RESULT_ERROR": false,
+      "AGGREGATOR": "InTimeAccumulateWeightedAggregator",
       "AGGREGATION_WEIGHTS": {
          "KCH": 1.0,
          "UCLH": 0.5
@@ -362,7 +362,7 @@ Prior to commencing training you may also upload an optional ``config.json`` fil
 
 .. note::
 
-   All config properties have default values. If a ``config.json`` file is not uploaded, or some properties are missing from the file, default vaules will be utilised at runtime.
+   All config properties have default values. If a ``config.json`` file is not uploaded, or some properties are missing from the file, default values will be utilised at runtime.
    See default values specified below.
 
 **GLOBAL_ROUNDS**
