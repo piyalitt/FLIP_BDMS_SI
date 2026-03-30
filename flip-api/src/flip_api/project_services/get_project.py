@@ -137,16 +137,19 @@ def get_project_details_endpoint(
     # Pydantic will validate if it's a valid EmailStr format during IReturnedProject instantiation.
     resolved_owner_email = owner_cognito_user.email
 
-    users_with_access_email = [
-        get_user_by_email_or_id(
-            user_pool_id=user_pool_id,
-            user_id=user_id,
-        ).email
+    users_with_access_cognito = [
+        get_user_by_email_or_id(user_pool_id=user_pool_id, user_id=user_id)
         for user_id in users_with_access_info
     ]
-    users_with_access_email += [resolved_owner_email]
-    users_with_access_email = list(set(users_with_access_email))  # Remove duplicates
-    users_with_access_email = list(filter(None, users_with_access_email))  # Remove any None values
+    users_with_access_cognito.append(owner_cognito_user)
+
+    # Deduplicate by ID and filter out disabled users (matching legacy behavior)
+    seen_ids: set[UUID] = set()
+    unique_users = []
+    for user in users_with_access_cognito:
+        if user.id not in seen_ids and not user.is_disabled:
+            seen_ids.add(user.id)
+            unique_users.append(user)
 
     # Build object to return
     response_data = IReturnedProject(
@@ -157,7 +160,7 @@ def get_project_details_endpoint(
         owner_email=resolved_owner_email,
         approved_trusts=approved_trusts_for_project,
         query=get_project_query(project_db),
-        users=users_with_access_email,  # type: ignore # The list is cleaned of None values above
+        users=unique_users,
         creation_timestamp=project_db.creation_timestamp.isoformat(timespec="milliseconds"),
         owner_id=project_db.owner_id,
     )  # type: ignore[call-arg]

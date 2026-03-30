@@ -10,7 +10,6 @@
 # limitations under the License.
 #
 
-from typing import List
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -20,7 +19,7 @@ from imaging_api.db.models import DirectArchiveSession, DirectArchiveSessionORM
 from imaging_api.utils.logger import logger
 
 
-async def get_direct_archive_sessions_by_project(project_id: str, session: AsyncSession) -> List[DirectArchiveSession]:
+async def get_direct_archive_sessions_by_project(project_id: str, session: AsyncSession) -> list[DirectArchiveSession]:
     """
     Get all direct archive sessions for a given project.
     This function queries the database for all direct archive sessions associated with the specified project ID.
@@ -30,7 +29,7 @@ async def get_direct_archive_sessions_by_project(project_id: str, session: Async
         session (AsyncSession): The SQLAlchemy async session to use for the database query.
 
     Returns:
-        List[DirectArchiveSession]: A list of DirectArchiveSession objects representing the
+        list[DirectArchiveSession]: A list of DirectArchiveSession objects representing the
         sessions found for the project.
 
     Raises:

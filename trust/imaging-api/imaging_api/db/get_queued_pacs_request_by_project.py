@@ -10,7 +10,6 @@
 # limitations under the License.
 #
 
-from typing import List
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -20,7 +19,7 @@ from imaging_api.db.models import QueuedPacsRequest, QueuedPacsRequestORM
 from imaging_api.utils.logger import logger
 
 
-async def get_queued_pacs_request_by_project(project_id: str, session: AsyncSession) -> List[QueuedPacsRequest]:
+async def get_queued_pacs_request_by_project(project_id: str, session: AsyncSession) -> list[QueuedPacsRequest]:
     """
     Get all queued PACS requests for a given project.
 
@@ -29,7 +28,7 @@ async def get_queued_pacs_request_by_project(project_id: str, session: AsyncSess
         session (AsyncSession): The SQLAlchemy async session.
 
     Returns:
-        List[QueuedPacsRequest]: A list of queued PACS requests for the project.
+        list[QueuedPacsRequest]: A list of queued PACS requests for the project.
 
     Raises:
         HTTPException: If project_id is empty.

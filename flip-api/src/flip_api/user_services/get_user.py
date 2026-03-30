@@ -10,14 +10,13 @@
 # limitations under the License.
 #
 
-from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import ValidationError
 
 from flip_api.auth.dependencies import verify_token
-from flip_api.domain.schemas.users import GetUserByEmail, GetUserById
+from flip_api.domain.schemas.users import CognitoUser, GetUserByEmail, GetUserById
 from flip_api.utils.cognito_helpers import get_user_by_email_or_id, get_user_pool_id
 from flip_api.utils.logger import logger
 
@@ -25,7 +24,7 @@ router = APIRouter(prefix="/users", tags=["user_services"])
 
 
 # [#114] ✅
-@router.get("/{user_id}", response_model=dict[str, Any])
+@router.get("/{user_id}", response_model=CognitoUser, response_model_by_alias=True)
 def get_user(
     user_id: str,
     request: Request,
@@ -40,7 +39,7 @@ def get_user(
         token_id (UUID): User ID from authentication token.
 
     Returns:
-        dict[str, Any]: User details if found
+        CognitoUser: User details if found
 
     Raises:
         HTTPException: If the user ID format is invalid, if the user is not found, or if there is an error getting the

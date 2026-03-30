@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-from typing import Annotated, List
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -55,7 +55,7 @@ def ping_pacs_endpoint(pacs_id: int, headers: XNATAuthHeaders) -> PacsStatus:
     "/query_by_accession_number",
     summary="Query Imaging Provider (PACS) by Accession Number",
 )
-def query_by_accession_number_endpoint(accession_number: str, headers: XNATAuthHeaders) -> List[Study]:
+def query_by_accession_number_endpoint(accession_number: str, headers: XNATAuthHeaders) -> list[Study]:
     """
     Queries the imaging provider (PACS) to retrieve a list of studies associated with the provided accession number.
 
@@ -64,7 +64,7 @@ def query_by_accession_number_endpoint(accession_number: str, headers: XNATAuthH
         headers (XNATAuthHeaders): XNAT authentication headers.
 
     Returns:
-        List[Study]: List of studies associated with the provided accession number.
+        list[Study]: List of studies associated with the provided accession number.
 
     Raises:
         HTTPException: If no studies are found for the given accession number or if there is an error during the query.
@@ -83,7 +83,7 @@ def query_by_accession_number_endpoint(accession_number: str, headers: XNATAuthH
 )
 def queue_image_import_request_endpoint(
     import_request: ImportStudyRequest, headers: XNATAuthHeaders
-) -> List[ImportStudyResponse]:
+) -> list[ImportStudyResponse]:
     """
     Queues a job within the imaging provider (PACS) to import the images from the image store.
 
@@ -92,7 +92,7 @@ def queue_image_import_request_endpoint(
         headers (XNATAuthHeaders): XNAT authentication headers.
 
     Returns:
-        List[ImportStudyResponse]: List of import responses for the queued studies.
+        list[ImportStudyResponse]: List of import responses for the queued studies.
 
     Raises:
         HTTPException: If there is an error during the queuing of the image import request or if the request cannot be

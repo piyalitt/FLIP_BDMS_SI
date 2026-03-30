@@ -26,7 +26,6 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple
 
 import click
 
@@ -128,7 +127,7 @@ def get_terraform_output(output_name: str) -> str:
         exit(1)
 
 
-def find_host_section(content: str, host_name: str, identity_file: str) -> Optional[Tuple[int, int, Optional[str]]]:
+def find_host_section(content: str, host_name: str, identity_file: str) -> tuple[int, int, str | None] | None:
     """Find a specific host section in SSH config content.
 
     Args:
@@ -197,7 +196,11 @@ def update_hostname_in_section(section: str, new_hostname: str) -> str:
 
 
 def add_ssh_host_key(hostname: str) -> bool:
-    """Add SSH host key to known_hosts.
+    """Refresh SSH host key in known_hosts (remove stale entry, then add current key).
+
+    Called after every Terraform apply that may have replaced an EC2 instance.
+    Removing before scanning prevents host-key-changed errors when the same IP
+    is reused by a freshly provisioned instance.
 
     Args:
         hostname: Hostname or IP address
@@ -207,6 +210,13 @@ def add_ssh_host_key(hostname: str) -> bool:
     """
     try:
         known_hosts = Path.home() / ".ssh" / "known_hosts"
+        # Remove any existing entries for this host so a re-provisioned instance
+        # (same IP, new host key) does not trigger a host-key-changed error.
+        subprocess.run(
+            ["ssh-keygen", "-R", hostname],
+            capture_output=True,
+            check=False,  # non-fatal if host was not in known_hosts
+        )
         result = subprocess.run(
             ["ssh-keyscan", "-H", hostname],
             capture_output=True,

@@ -11,7 +11,6 @@
 #
 
 import json
-from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -29,12 +28,12 @@ router = APIRouter(prefix="/files", tags=["file_services"])
 
 
 # [#114] ✅
-@router.get("/model/{model_id}/fl/results", response_model=List[str])
+@router.get("/model/{model_id}/fl/results", response_model=list[str])
 def retrieve_federated_results(
     model_id: UUID,
     db: Session = Depends(get_session),
     user_id: UUID = Depends(verify_token),
-) -> List[str]:
+) -> list[str]:
     """
     Retrieve federated results for a model from S3.
 
@@ -44,16 +43,16 @@ def retrieve_federated_results(
         user_id (UUID): User ID from authentication.
 
     Returns:
-        List[str]: A list of presigned URLs for the files associated with the model.
+        list[str]: A list of presigned URLs for the files associated with the model.
 
     Raises:
-        HTTPException: If the user does not have access to the model, if the model ID does not exist, if S3 command
+        HTTPException: If the user is not allowed, if the model ID does not exist, if S3 command
                        gives an error while listing objects, or if there are any errors retrieving objects from S3.
     """
     try:
         # Check user access
         if not can_access_model(user_id, model_id, db):
-            logger.error(f"User ID: {user_id} does not have access to Model ID: {model_id}")
+            logger.error(f"User ID: {user_id} does not have access to model {model_id}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"User with ID: {user_id} is denied access to this model",

@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-from typing import Any, Dict, List
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
@@ -39,7 +39,7 @@ def receive_cohort_query(query_input: CohortQueryInput) -> StatisticsResponse:
     Raises:
         HTTPException: If there is an error during the execution of the query or if the query returns too few records.
     """
-    logger.info(f"Received cohort query: {query_input}")
+    logger.info("Received cohort query")
 
     minimum_cohort_size = get_settings().COHORT_QUERY_THRESHOLD
     logger.info(f"Minimum cohort size needed to return statistics: {minimum_cohort_size}")
@@ -57,7 +57,7 @@ def receive_cohort_query(query_input: CohortQueryInput) -> StatisticsResponse:
     # TODO: Move this check to centralhub and use the aggregated results only, here we are using partial results from
     # each trust
     try:
-        logger.info(f"Executing query: {query_input.query}")
+        logger.info("Executing cohort query")
 
         df = get_records(query_input.query)
         df = df.dropna(axis=1, how="all")  # Ignore entirely empty columns
@@ -78,12 +78,12 @@ def receive_cohort_query(query_input: CohortQueryInput) -> StatisticsResponse:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    logger.info(f"Response: {results}")
+    logger.info("Cohort query returned results")
     return results
 
 
 @router.post("/dataframe")
-def get_dataframe(query_input: DataframeQuery) -> Dict[str, List[Any]]:
+def get_dataframe(query_input: DataframeQuery) -> dict[str, list[Any]]:
     """
     Retrieves query results in a DataFrame-like structure (column-oriented dictionary).
 
@@ -96,14 +96,14 @@ def get_dataframe(query_input: DataframeQuery) -> Dict[str, List[Any]]:
         query_input (DataframeQuery): The input data for the DataFrame query.
 
     Returns:
-        Dict[str, List[Any]]: The query results in a DataFrame-like structure.
+        dict[str, list[Any]]: The query results in a DataFrame-like structure.
 
     Raises:
         HTTPException: If there is an error during the execution of the query or if the query returns too few records.
     """
     project_id = decrypt(query_input.encrypted_project_id)
 
-    logger.info(f"Received DataFrame query for project {project_id} with query: {query_input.query}")
+    logger.info(f"Received DataFrame query for project {project_id}")
 
     # Validate the query
     try:
@@ -119,10 +119,4 @@ def get_dataframe(query_input: DataframeQuery) -> Dict[str, List[Any]]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # TODO Potentially store to cache - and at the beginning of the function, check if the query is already in the cache
-    # Set cache expiration time e.g. 60 days (if the OMOP database is not updated frequently)
-    # This avoids re-running the query if the same one is requested multiple times
-
-    # df.to_csv("data.csv", index=False) # debugging
-    return df.to_dict(orient="list")
     return df.to_dict(orient="list")

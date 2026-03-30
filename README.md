@@ -83,6 +83,7 @@ For example:
 | `make restart-no-trust` | Stop and start all services except the trust services related services |
 | `make clean` | Remove all stopped containers, networks, and images |
 | `make ci` | Run the CI pipeline locally using `act` |
+| `make up-local-trust-stag` | Run a local (on-premises) trust in staging mode (HTTPS via nginx-tls) |
 | `make unit_test` | Run the tests for all services |
 
 You can add new commands to the Makefile to create smaller deployments for testing and development.
@@ -101,7 +102,7 @@ The XNAT services are deployed using Docker Swarm mode for better resource manag
 **Swarm-specific commands:**
 
 - XNAT services are deployed as Docker stacks (`xnat1` and `xnat2`)
-- The Swarm deployment uses the [trust/xnat/xnat-docker-compose/docker-compose-stack.yml](trust/xnat/xnat-docker-compose/docker-compose-stack.yml) file
+- The Swarm deployment uses the [trust/xnat/docker-compose-stack.yml](trust/xnat/docker-compose-stack.yml) file
 - Networks are created as overlay networks with `--attachable` flag for flexibility
 
 **Note:** Docker Swarm mode must be initialized on your system. If not already initialized, run:
@@ -125,18 +126,13 @@ Then create the networks again:
 make create-networks
 ```
 
-To manually manage XNAT Swarm services:
+To manually manage XNAT services (uses Docker Swarm):
 
 ```bash
-# Start XNAT services in Swarm mode
 cd trust/xnat
-make up-swarm
-
-# Stop XNAT services in Swarm mode
-make down-swarm
-
-# Get a shell in the XNAT container (Swarm mode)
-make xnat-shell-swarm
+make up          # Start XNAT services
+make down        # Stop XNAT services
+make xnat-shell  # Get a shell in the XNAT container
 ```
 
 ### Basic Usage
@@ -167,10 +163,6 @@ This will give you a shell in the `flip-ui` container. You can run any command i
 installing new packages, running tests, and debugging the code.
 
 Some aliases are defined in the Makefile to make this easier:
-
-```bash
-make flip-ui-shell
-```
 
 ```bash
 make down
@@ -207,6 +199,8 @@ If you see errors like "fed_client.json does not exist" or "missing startup fold
 For production deployments on AWS, see the [AWS Deployment Guide](deploy/README.md). This covers provisioning
 infrastructure with OpenTofu (Terraform), configuring AWS services, and deploying the platform at scale.
 
+For hybrid on-premises trust deployments, see the [Local Trust Deployment Guide](deploy/providers/local/README.md).
+
 ## Project Structure
 
 The repository is organised as follows:
@@ -221,7 +215,12 @@ The repository is organised as follows:
   - `omop-db`: Contains a mocked OMOP database
   - `orthanc`: Contains a mocked PACS service (uses [Orthanc](https://www.orthanc-server.com/))
   - `trust-api`: Contains the trust API service
+  - `nginx`: Contains the nginx TLS termination proxy for trust HTTPS endpoints
   - `xnat`: Contains a mocked [XNAT](https://www.xnat.org/) service
+
+### HTTPS / TLS
+
+Trust services are served over HTTPS via an nginx TLS termination proxy using self-signed CA certificates. The Central Hub verifies trust endpoints using a CA bundle containing all trust CAs. See [trust/README.md](trust/README.md) for certificate generation and setup, and [deploy/providers/local/README.md](deploy/providers/local/README.md) for hybrid on-premises deployment with HTTPS.
 
 ## Contributing
 

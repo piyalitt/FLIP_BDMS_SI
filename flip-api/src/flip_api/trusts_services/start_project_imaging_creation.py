@@ -10,7 +10,6 @@
 # limitations under the License.
 #
 
-from typing import List
 from uuid import UUID
 
 import boto3
@@ -44,7 +43,7 @@ router = APIRouter(prefix="/trust", tags=["trusts_services"])
 
 
 def send_xnat_login_to_new_users(
-    imaging_project_id: UUID, imaging_project_name: str, trust: ITrust, created_users: List[ICreatedImagingUser]
+    imaging_project_id: UUID, imaging_project_name: str, trust: ITrust, created_users: list[ICreatedImagingUser]
 ):
     """
     Sends XNAT login credentials to new users in the imaging project.
@@ -55,7 +54,7 @@ def send_xnat_login_to_new_users(
         imaging_project_id (UUID): ID of the project.
         imaging_project_name (str): Name of the project.
         trust (ITrust): Trust information.
-        created_users (List[ICreatedImagingUser]): List of users with their credentials.
+        created_users (list[ICreatedImagingUser]): List of users with their credentials.
 
     Returns:
          None
@@ -168,6 +167,7 @@ async def start_project_imaging_creation(
             project_name=project.name,
             query=project.query.query if project.query else None,
             users=[user for user in cognito_users if user.id in unique_users],
+            dicom_to_nifti=project.dicom_to_nifti,
         )
 
         # Make request to trust to create imaging project
