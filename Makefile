@@ -66,8 +66,8 @@ FL_BACKEND_COMPOSE_FILE := deploy/compose.$(__DCKR_SUFFIX).$(FL_BACKEND).yml
 
 # Resolve FL_PROVISIONED_DIR (from .env) to an absolute path relative to this Makefile
 # Docker requires absolute paths for volume mounts; the .env value may be relative
-FL_PROVISIONED_DIR := $(shell realpath $(dir $(lastword $(MAKEFILE_LIST)))/$(FL_PROVISIONED_DIR))
-export FL_PROVISIONED_DIR
+MAKEFILE_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
+override FL_PROVISIONED_DIR := $(abspath $(MAKEFILE_DIR)/$(FL_PROVISIONED_DIR))
 
 # Service configuration
 define SERVICE_CONFIG

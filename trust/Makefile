@@ -42,8 +42,8 @@ FL_BACKEND_COMPOSE_FILE := compose_trust.$(__DCKR_SUFFIX).$(FL_BACKEND).yml
 
 # Resolve FL_PROVISIONED_DIR (from .env) to an absolute path relative to the repo root
 # Docker requires absolute paths for volume mounts; the .env value may be relative
-FL_PROVISIONED_DIR := $(shell realpath $(dir $(lastword $(MAKEFILE_LIST)))/../$(FL_PROVISIONED_DIR))
-export FL_PROVISIONED_DIR
+MAKEFILE_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
+override FL_PROVISIONED_DIR := $(abspath $(MAKEFILE_DIR)/../$(FL_PROVISIONED_DIR))
 
 network1 = deploy_trust-network-1
 network2 = deploy_trust-network-2
