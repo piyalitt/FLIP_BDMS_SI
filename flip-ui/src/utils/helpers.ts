@@ -85,18 +85,9 @@ export const capatilizeString = (value: string): string => {
 };
 
 /**
- * Get a random number
+ * Get a cryptographically random identifier (UUID v4)
  */
-export const getRandomId = (): string => {
-    if (typeof globalThis.crypto?.randomUUID === "function") {
-        return globalThis.crypto.randomUUID();
-    }
-
-    const bytes = new Uint8Array(16);
-    globalThis.crypto.getRandomValues(bytes);
-
-    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-};
+export const getRandomId = (): string => crypto.randomUUID();
 
 
 export const getInitials = (name: string): string => {
