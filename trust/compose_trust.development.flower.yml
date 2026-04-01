@@ -41,9 +41,9 @@ services:
       - --root-certificates
       - /certs/ca.crt
       - --superlink
-      - superlink:9092
+      - fl-server-net-1:9092
       - --auth-supernode-private-key
-      - /keys/supernode_credentials_1
+      - /keys/supernode_credentials_${TRUST_NUMBER}
       - --clientappio-api-address
       - ${SUPERNODE_1_CLIENTAPPIO_API_ADDRESS:-127.0.0.1:9094}
       - --health-server-address
@@ -82,7 +82,7 @@ services:
       - --superlink
       - fl-server-net-2:9092
       - --auth-supernode-private-key
-      - /keys/supernode_credentials_2
+      - /keys/supernode_credentials_${TRUST_NUMBER}
       - --clientappio-api-address
       - ${SUPERNODE_2_CLIENTAPPIO_API_ADDRESS:-127.0.0.1:9095}
       - --health-server-address
