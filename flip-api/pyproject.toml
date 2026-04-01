@@ -33,6 +33,7 @@ dependencies = [
     "boto3-stubs>=1.37.22",
     "types-python-jose>=3.4.0.20250224",
     "pyjwt[crypto]>=2.12.1",
+    "cryptography>=46.0.5",
     "python-dotenv>=1.0.1",
     "psycopg2-binary>=2.9.10",
     "sqlparse>=0.5.3",
