@@ -19,10 +19,13 @@ services:
   fl-api-net-1:
     container_name: flip-fl-api-net-1
     image: ${DOCKER_REGISTRY}${DOCKER_FL_API_NAME}:${DOCKER_FL_TAG}
+    volumes:
+      - ${FL_PROVISIONED_DIR}/net-1/certificates:/certs:ro
     environment:
       - DEBUG=${DEBUG}
       - SUPERLINK_ADDRESS=fl-server-net-1:9093
       - SUPERLINK_HEALTH_ADDRESS=fl-server-net-1:9097
+      - SUPERLINK_ROOT_CERTIFICATES=/certs/ca.crt
       - SUPERNODE_HEALTH_ADDRESSES=Trust_1=trust1-fl-client-net-1-1:9098,Trust_2=trust2-fl-client-net-1-1:9098
     ports:
       - "${FL_API_PORT}:8000"
@@ -37,10 +40,13 @@ services:
   fl-api-net-2:
     container_name: flip-fl-api-net-2
     image: ${DOCKER_REGISTRY}${DOCKER_FL_API_NAME}:${DOCKER_FL_TAG}
+    volumes:
+      - ${FL_PROVISIONED_DIR}/net-2/certificates:/certs:ro
     environment:
       - DEBUG=${DEBUG}
       - SUPERLINK_ADDRESS=fl-server-net-2:9093
       - SUPERLINK_HEALTH_ADDRESS=fl-server-net-2:9097
+      - SUPERLINK_ROOT_CERTIFICATES=/certs/ca.crt
       - SUPERNODE_HEALTH_ADDRESSES=Trust_1=trust1-fl-client-net-2-1:9098,Trust_2=trust2-fl-client-net-2-1:9098
     depends_on:
       - fl-server-net-2
