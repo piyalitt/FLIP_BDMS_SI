@@ -135,9 +135,10 @@
         - /opt/flip
         - /opt/flip/data
 
-- name: download participant kit services to Central Hub
+- name: download NVFLARE participant kit to Central Hub
   hosts: central_hub
   become: true
+  when: fl_backend == "nvflare"
   vars:
     central_services_dir: "/opt/flip/services"
     central_s3_sources:
@@ -152,7 +153,7 @@
         group: ubuntu
         mode: "0755"
 
-    - name: sync Central Hub services from S3
+    - name: sync NVFLARE participant kit from S3
       shell: |
         set -euo pipefail
         src="{{ item }}"
@@ -165,6 +166,33 @@
       loop: "{{ central_s3_sources }}"
       register: central_sync
       changed_when: "'download:' in central_sync.stdout or 'copy:' in central_sync.stdout"
+
+- name: download Flower participant kit to Central Hub
+  hosts: central_hub
+  become: true
+  when: fl_backend == "flower"
+  vars:
+    central_services_dir: "/opt/flip/services"
+  tasks:
+    - name: ensure central services directory exists
+      file:
+        path: "{{ central_services_dir }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: "0755"
+
+    - name: sync Flower net-1 certificates and keys from S3
+      shell: |
+        set -euo pipefail
+        mkdir -p "{{ central_services_dir }}/net-1"
+        aws s3 sync \
+          "s3://{{ flip_aicentre_bucket }}/fl-flower-participant-kits/{{ fl_kit_date }}/net-1/" \
+          "{{ central_services_dir }}/net-1/"
+      args:
+        executable: /bin/bash
+      register: cert_sync
+      changed_when: "'download:' in cert_sync.stdout or 'copy:' in cert_sync.stdout"
 
 - name: create Trust EC2 application directories
   hosts: trust_ec2
@@ -190,12 +218,12 @@
         - /opt/flip/xnat/xnat-data/cache
         - /opt/flip/xnat/xnat-db-data
 
-- name: download participant kit services to Trust EC2
+- name: download NVFLARE participant kit to Trust EC2
   hosts: trust_ec2
   become: true
+  when: fl_backend == "nvflare"
   vars:
     trust_services_dir: "/opt/flip/services"
-    trust_s3_source: "s3://{{ flip_aicentre_bucket }}/fl-flare-participant-kits/{{ fl_kit_date }}/net-1/services/Trust_1/"
   tasks:
     - name: ensure trust services directory exists
       file:
@@ -205,14 +233,41 @@
         group: ubuntu
         mode: "0755"
 
-    - name: sync Trust_1 service from S3
+    - name: sync NVFLARE Trust_1 participant kit from S3
       shell: |
         set -euo pipefail
-        src="{{ trust_s3_source }}"
-        name="$(basename "${src%/}")"
-        dest="{{ trust_services_dir }}/${name}"
+        dest="{{ trust_services_dir }}/Trust_1"
         mkdir -p "$dest"
-        aws s3 sync "$src" "$dest"
+        aws s3 sync \
+          "s3://{{ flip_aicentre_bucket }}/fl-flare-participant-kits/{{ fl_kit_date }}/net-1/services/Trust_1/" \
+          "$dest"
+      args:
+        executable: /bin/bash
+      register: trust_sync
+      changed_when: "'download:' in trust_sync.stdout or 'copy:' in trust_sync.stdout"
+
+- name: download Flower participant kit to Trust EC2
+  hosts: trust_ec2
+  become: true
+  when: fl_backend == "flower"
+  vars:
+    trust_services_dir: "/opt/flip/services"
+  tasks:
+    - name: ensure trust services directory exists
+      file:
+        path: "{{ trust_services_dir }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: "0755"
+
+    - name: sync Flower net-1 certificates and keys from S3
+      shell: |
+        set -euo pipefail
+        mkdir -p "{{ trust_services_dir }}/net-1"
+        aws s3 sync \
+          "s3://{{ flip_aicentre_bucket }}/fl-flower-participant-kits/{{ fl_kit_date }}/net-1/" \
+          "{{ trust_services_dir }}/net-1/"
       args:
         executable: /bin/bash
       register: trust_sync
