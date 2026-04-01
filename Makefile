@@ -64,9 +64,9 @@ endif
 COMMON_COMPOSE_FILE := deploy/compose.$(__DCKR_SUFFIX).yml
 FL_BACKEND_COMPOSE_FILE := deploy/compose.$(__DCKR_SUFFIX).$(FL_BACKEND).yml
 
-# Override FL_PROVISIONED_DIR to use absolute path resolved relative to this Makefile
-# This allows the repo to work on any machine without hardcoding paths
-override FL_PROVISIONED_DIR := $(shell realpath $(dir $(lastword $(MAKEFILE_LIST)))/../flip-fl-base/workspace)
+# Resolve FL_PROVISIONED_DIR (from .env) to an absolute path relative to this Makefile
+# Docker requires absolute paths for volume mounts; the .env value may be relative
+FL_PROVISIONED_DIR := $(shell realpath $(dir $(lastword $(MAKEFILE_LIST)))/$(FL_PROVISIONED_DIR))
 export FL_PROVISIONED_DIR
 
 # Service configuration

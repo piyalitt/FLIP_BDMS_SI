@@ -56,6 +56,8 @@ services:
       # Mount the AWS credentials (needed to upload model results to S3)
       - ~/.aws/config:/root/.aws/config:ro
       - ~/.aws/sso/cache:/root/.aws/sso/cache:rw
+      # Provisioned Flower secrets (only certificates are needed here)
+      - ${FL_PROVISIONED_DIR}/net-1/certificates:/certs:ro
     environment:
       - NET_ID=net-1
       - LOCAL_DEV=false
@@ -69,7 +71,13 @@ services:
       - PRIVATE_API_KEY=${PRIVATE_API_KEY}
       - AWS_PROFILE=${AWS_PROFILE}
     command:
-      - --insecure
+      - --ssl-ca-certfile
+      - /certs/ca.crt
+      - --ssl-certfile
+      - /certs/server.pem
+      - --ssl-keyfile
+      - /certs/server.key
+      - --enable-supernode-auth
       - --health-server-address
       - 0.0.0.0:9097
     ports:
@@ -79,6 +87,22 @@ services:
     restart: unless-stopped
     init: true
 
+  # One-shot service to register SuperNode public keys with the SuperLink
+  register-supernode-keys-net-1:
+    container_name: register-supernode-keys-net-1
+    image: ${DOCKER_REGISTRY}${DOCKER_FL_SERVER_NAME}:${DOCKER_FL_TAG}
+    environment:
+      - SUPERLINK_ADDRESS=fl-server-net-1:9093
+    volumes:
+      - ${FL_PROVISIONED_DIR}/net-1/certificates:/certs:ro
+      - ${FL_PROVISIONED_DIR}/net-1/keys:/keys:ro
+      - ${FL_PROVISIONED_DIR}/../register-supernode-keys.sh:/scripts/register-supernode-keys.sh:ro
+    entrypoint: ["/bin/bash", "/scripts/register-supernode-keys.sh"]
+    depends_on:
+      - fl-server-net-1
+    networks:
+      - shared-net-1
+
   fl-server-net-2:
     container_name: fl-server-net-2
     image: ${DOCKER_REGISTRY}${DOCKER_FL_SERVER_NAME}:${DOCKER_FL_TAG}
@@ -86,6 +110,8 @@ services:
       # Mount the AWS credentials (needed to upload model results to S3)
       - ~/.aws/config:/root/.aws/config:ro
       - ~/.aws/sso/cache:/root/.aws/sso/cache:rw
+      # Provisioned Flower secrets (only certificates are needed here)
+      - ${FL_PROVISIONED_DIR}/net-2/certificates:/certs:ro
     environment:
       - NET_ID=net-2
       - LOCAL_DEV=false
@@ -99,10 +125,32 @@ services:
       - PRIVATE_API_KEY=${PRIVATE_API_KEY}
       - AWS_PROFILE=${AWS_PROFILE}
     command:
-      - --insecure
+      - --ssl-ca-certfile
+      - /certs/ca.crt
+      - --ssl-certfile
+      - /certs/server.pem
+      - --ssl-keyfile
+      - /certs/server.key
+      - --enable-supernode-auth
       - --health-server-address
       - 0.0.0.0:9097
     networks:
       - shared-net-2
     restart: unless-stopped
     init: true
+
+  # One-shot service to register SuperNode public keys with the SuperLink
+  register-supernode-keys-net-2:
+    container_name: register-supernode-keys-net-2
+    # It doesn't really matter if we use FL server or FL base image here since register-supernode-keys.sh is in both
+    image: ${DOCKER_REGISTRY}${DOCKER_FL_SERVER_NAME}:${DOCKER_FL_TAG}
+    environment:
+      - SUPERLINK_ADDRESS=fl-server-net-2:9093
+    volumes:
+      - ${FL_PROVISIONED_DIR}/net-2/certificates:/certs:ro
+      - ${FL_PROVISIONED_DIR}/net-2/keys:/keys:ro
+    entrypoint: ["/bin/bash", "/scripts/register-supernode-keys.sh"]
+    depends_on:
+      - fl-server-net-2
+    networks:
+      - shared-net-2

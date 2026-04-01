@@ -20,6 +20,9 @@ services:
     volumes:
       # Mount the base images download directory to share images downloaded from XNAT with FL clients
       - ${BASE_IMAGES_DOWNLOAD_DIR}:/app/data/images
+      # Provisioned Flower secrets (certificates, keys)
+      - ${FL_PROVISIONED_DIR}/net-1/certificates:/certs:ro
+      - ${FL_PROVISIONED_DIR}/net-1/keys:/keys:ro
     environment:
       - NET_ID=net-1
       - SUPERNODE_NAME=Trust_${TRUST_NUMBER}
@@ -35,11 +38,16 @@ services:
       - PRIVATE_API_KEY_HEADER=${PRIVATE_API_KEY_HEADER}
       - PRIVATE_API_KEY=${PRIVATE_API_KEY}
     command:
-      - --insecure
+      - --root-certificates
+      - /certs/ca.crt
       - --superlink
-      - fl-server-net-1:9092
+      - superlink:9092
+      - --auth-supernode-private-key
+      - /keys/supernode_credentials_1
+      - --clientappio-api-address
+      - ${SUPERNODE_1_CLIENTAPPIO_API_ADDRESS:-127.0.0.1:9094}
       - --health-server-address
-      - 0.0.0.0:9098
+      - ${SUPERNODE_1_HEALTH_SERVER_BIND_ADDRESS:-0.0.0.0:9098}
     networks:
       - default
       - deploy_shared-net-1
@@ -51,6 +59,9 @@ services:
     volumes:
       # Mount the base images download directory to share images downloaded from XNAT with FL clients
       - ${BASE_IMAGES_DOWNLOAD_DIR}:/app/data/images
+      # Provisioned Flower secrets (certificates, keys)
+      - ${FL_PROVISIONED_DIR}/net-2/certificates:/certs:ro
+      - ${FL_PROVISIONED_DIR}/net-2/keys:/keys:ro
     environment:
       - NET_ID=net-2
       - SUPERNODE_NAME=Trust_${TRUST_NUMBER}
@@ -66,11 +77,16 @@ services:
       - PRIVATE_API_KEY_HEADER=${PRIVATE_API_KEY_HEADER}
       - PRIVATE_API_KEY=${PRIVATE_API_KEY}
     command:
-      - --insecure
+      - --root-certificates
+      - /certs/ca.crt
       - --superlink
       - fl-server-net-2:9092
+      - --auth-supernode-private-key
+      - /keys/supernode_credentials_2
+      - --clientappio-api-address
+      - ${SUPERNODE_2_CLIENTAPPIO_API_ADDRESS:-127.0.0.1:9095}
       - --health-server-address
-      - 0.0.0.0:9098
+      - ${SUPERNODE_2_HEALTH_SERVER_BIND_ADDRESS:-0.0.0.0:9098}
     networks:
       - default
       - deploy_shared-net-2

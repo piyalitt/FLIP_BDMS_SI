@@ -57,3 +57,16 @@ services:
       - "${FL_SERVER_PORT}:9092"
     restart: unless-stopped
     init: true
+
+  # One-shot service to register SuperNode public keys with the SuperLink
+  register-supernode-keys-net-1:
+    container_name: register-supernode-keys-net-1
+    image: ${DOCKER_REGISTRY}${DOCKER_FL_SERVER_NAME}:${DOCKER_FL_TAG}
+    environment:
+      - SUPERLINK_ADDRESS=fl-server-net-1:9093
+    volumes:
+      - /opt/flip/services/net-1/certificates:/certs:ro
+      - /opt/flip/services/net-1/keys:/keys:ro
+    entrypoint: ["/bin/bash", "/scripts/register-supernode-keys.sh"]
+    depends_on:
+      - fl-server-net-1

@@ -20,6 +20,9 @@ services:
     volumes:
       # Mount the base images download directory to share images downloaded from XNAT with FL clients
       - ${BASE_IMAGES_DOWNLOAD_DIR}:/app/data/images
+      # Provisioned Flower secrets (certificates, keys)
+      - /opt/flip/services/certificates:/certs:ro
+      - /opt/flip/services/keys:/keys:ro
     environment:
       - NET_ID=net-1
       - SUPERNODE_NAME=Trust_${TRUST_NUMBER}
@@ -37,13 +40,16 @@ services:
     command:
       # Start the supernode health server so the Central Hub FL API can query
       # /check_client_status across hosts using SUPERNODE_HEALTH_ADDRESSES.
-      # TODO Replace --insecure with Flower TLS client configuration once the
-      # Central Hub SuperLink is configured to accept secure Trust connections.
-      - --insecure
+      - --root-certificates
+      - /certs/ca.crt
       - --superlink
-      - ${NLB_SUBDOMAIN}:${FL_SERVER_PORT}
+      - ${NLB_SUBDOMAIN}:9092
+      - --auth-supernode-private-key
+      - /keys/supernode_credentials_1
+      - --clientappio-api-address
+      - ${SUPERNODE_1_CLIENTAPPIO_API_ADDRESS:-127.0.0.1:9094}
       - --health-server-address
-      - 0.0.0.0:9098
+      - ${SUPERNODE_1_HEALTH_SERVER_BIND_ADDRESS:-0.0.0.0:9098}
     ports:
       - "${FLOWER_SUPERNODE_HEALTH_PORT}:9098"
     shm_size: '8gb'
