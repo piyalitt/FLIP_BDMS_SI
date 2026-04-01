@@ -61,6 +61,9 @@ source = { editable = "." }
 dependencies = [
     { name = "ansible-core" },
     { name = "click" },
+    { name = "cryptography" },
+    { name = "requests" },
+    { name = "urllib3" },
 ]
 
 [package.dev-dependencies]
@@ -74,14 +77,19 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "simpleeval" },
     { name = "taskipy" },
     { name = "terraform-local" },
+    { name = "tornado" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "ansible-core", specifier = ">=2.19.2" },
     { name = "click", specifier = ">=8.0.0" },
+    { name = "cryptography", specifier = ">=46.0.5" },
+    { name = "requests", specifier = ">=2.33.0" },
+    { name = "urllib3", specifier = ">=2.6.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -95,8 +103,10 @@ dev = [
     { name = "pytest", specifier = ">=8.4.1" },
     { name = "pytest-cov", specifier = ">=6.2.1" },
     { name = "ruff", specifier = ">=0.12.3" },
+    { name = "simpleeval", specifier = ">=1.0.4" },
     { name = "taskipy", specifier = ">=1.14.1" },
     { name = "terraform-local", specifier = ">=0.24.1" },
+    { name = "tornado", specifier = ">=6.5.2" },
 ]
 
 [[package]]
@@ -170,10 +180,10 @@ wheels = [
 
 [[package]]
 name = "cffi"
-version = "1.17.1"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser" },
+    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/fc/97/c783634659c2920c3fc70419e3af40972dbaf758daa229a7d6ea6135c90d/cffi-1.17.1.tar.gz", hash = "sha256:1c39c6016c32bc48dd54561950ebd6836e1670f2ae46128f67cf49e789c52824", size = 516621, upload-time = "2024-09-04T20:45:21.852Z" }
 wheels = [
@@ -322,7 +332,7 @@ wheels = [
 
 [[package]]
 name = "cryptography"
-version = "45.0.7"
+version = "46.0.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
@@ -1226,7 +1236,7 @@ wheels = [
 
 [[package]]
 name = "requests"
-version = "2.32.4"
+version = "2.33.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -1394,7 +1404,7 @@ wheels = [
 
 [[package]]
 name = "simpleeval"
-version = "1.0.3"
+version = "1.0.7"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ff/6f/15be211749430f52f2c8f0c69158a6fc961c03aac93fa28d44d1a6f5ebc7/simpleeval-1.0.3.tar.gz", hash = "sha256:67bbf246040ac3b57c29cf048657b9cf31d4e7b9d6659684daa08ca8f1e45829", size = 24358, upload-time = "2024-11-02T10:29:46.912Z" }
 wheels = [
@@ -1502,7 +1512,7 @@ wheels = [
 
 [[package]]
 name = "tornado"
-version = "6.5.1"
+version = "6.5.5"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/51/89/c72771c81d25d53fe33e3dca61c233b665b2780f21820ba6fd2c6793c12b/tornado-6.5.1.tar.gz", hash = "sha256:84ceece391e8eb9b2b95578db65e920d2a61070260594819589609ba9bc6308c", size = 509934, upload-time = "2025-05-22T18:15:38.788Z" }
 wheels = [
@@ -1566,7 +1576,7 @@ wheels = [
 
 [[package]]
 name = "urllib3"
-version = "2.5.0"
+version = "2.6.3"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/15/22/9ee70a2574a4f4599c47dd506532914ce044817c7752a79b6a51286319bc/urllib3-2.5.0.tar.gz", hash = "sha256:3fc47733c7e419d4bc3f6b3dc2b4f890bb743906a30d56ba4a5bfa4bbff92760", size = 393185, upload-time = "2025-06-18T14:07:41.644Z" }
 wheels = [
