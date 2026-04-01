@@ -66,7 +66,7 @@ The flip-api is configured via environment variables. In development these are s
 | `AWS_REGION` | AWS region for Cognito and S3 |
 | `AWS_COGNITO_USER_POOL_ID` | AWS Cognito User Pool ID |
 | `AWS_COGNITO_APP_CLIENT_ID` | AWS Cognito App Client ID |
-| `AES_KEY_BASE64` | Base64-encoded AES-256 key for encrypting trust task payloads |
+| `AES_KEY_BASE64` | Base64-encoded AES-256 key used to encrypt trust task payloads and project IDs. Shared between hub (encryption) and trusts (decryption) |
 | `PRIVATE_API_KEY` | Secret key for inter-service authentication between hub and trust APIs |
 | `UPLOADED_FEDERATED_DATA_BUCKET` | S3 bucket for storing models and artefacts |
 

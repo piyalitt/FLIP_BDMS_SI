@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     TASK_STALE_TIMEOUT_MINUTES: int = 30  # Tasks older than this in IN_PROGRESS are considered stale
     TASK_MAX_RETRIES: int = 3  # Max times a stale task can be retried before being marked FAILED
     SCHEDULER_STALE_TASK_RECOVERY_RATE: int = 10  # How often to check for stale tasks (in minutes)
+    MAX_TASK_RESULT_LENGTH: int = 10_000_000  # Max size (in characters) for task result payloads
 
     # Variables only used in testing
     FLIP_API_URL: str = "http://localhost:8080/api"  # this is currently only used in tests (TODO review)

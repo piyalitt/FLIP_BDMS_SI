@@ -14,13 +14,13 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
-from pydantic import BaseModel, Field
 from sqlmodel import Session, col, select
 
 from flip_api.auth.access_manager import check_authorization_token
 from flip_api.db.database import get_session
 from flip_api.db.models.main_models import Trust, TrustTask
-from flip_api.domain.schemas.status import TaskStatus, TaskType
+from flip_api.domain.schemas.private import TaskResultInput, TrustTaskResponse
+from flip_api.domain.schemas.status import TaskStatus
 from flip_api.private_services.imaging_notifications import handle_imaging_task_completed
 from flip_api.utils.logger import logger
 
@@ -28,25 +28,6 @@ router = APIRouter(tags=["private_services"])
 
 # Max tasks returned per poll to prevent unbounded responses
 PENDING_TASKS_LIMIT = 50
-
-# Max size (in characters) for task result payloads to prevent database bloat
-MAX_TASK_RESULT_LENGTH = 10_000_000
-
-
-class TrustTaskResponse(BaseModel):
-    """Response model for a single trust task."""
-
-    id: UUID
-    task_type: TaskType
-    payload: str
-    created_at: datetime
-
-
-class TaskResultInput(BaseModel):
-    """Input model for submitting a task result."""
-
-    success: bool
-    result: str | None = Field(default=None, max_length=MAX_TASK_RESULT_LENGTH)
 
 
 def _get_trust_by_name(trust_name: str, db: Session) -> Trust:
@@ -161,8 +142,7 @@ def submit_task_result(
 
         if task.trust_id != trust.id:
             logger.warning(
-                f"Trust '{trust_name}' attempted to submit result for task {task_id} "
-                f"which belongs to a different trust"
+                f"Trust '{trust_name}' attempted to submit result for task {task_id} which belongs to a different trust"
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

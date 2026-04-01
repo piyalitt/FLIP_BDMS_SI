@@ -87,8 +87,8 @@ services:
 
   trust-api:
     image: ghcr.io/londonaicentre/trust-api:${DOCKER_TAG}
-    ports:
-      - "${TRUST_API_PORT}:8000"
+    # No inbound port exposure — trust-api only makes outbound connections to the hub.
+    # Docker healthchecks use the internal container network.
     environment:
       CENTRAL_HUB_API_URL: ${CENTRAL_HUB_API_URL}
       DATA_ACCESS_API_URL: ${DATA_ACCESS_API_URL}

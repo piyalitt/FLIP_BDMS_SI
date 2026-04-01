@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     TRUST_NAME: str  # Must match Trust.name in hub DB (e.g. "Trust_1")
     POLL_INTERVAL_SECONDS: int = 5  # How often to poll the hub for tasks (seconds)
 
+    # Timeout for cohort query requests to data-access-api (seconds)
+    COHORT_QUERY_TIMEOUT_SECONDS: int = 300
+
 
 # Eager load once (for app use)
 _settings = Settings()  # type: ignore

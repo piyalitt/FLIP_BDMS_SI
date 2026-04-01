@@ -37,6 +37,14 @@ IMAGING_API_URL = get_settings().IMAGING_API_URL
 PRIVATE_API_KEY = get_settings().PRIVATE_API_KEY
 PRIVATE_API_KEY_HEADER = get_settings().PRIVATE_API_KEY_HEADER
 
+# Task type constants — must match TaskType enum in flip-api/src/flip_api/domain/schemas/status.py
+TASK_COHORT_QUERY = "cohort_query"
+TASK_CREATE_IMAGING = "create_imaging"
+TASK_DELETE_IMAGING = "delete_imaging"
+TASK_GET_IMAGING_STATUS = "get_imaging_status"
+TASK_REIMPORT_STUDIES = "reimport_studies"
+TASK_UPDATE_USER_PROFILE = "update_user_profile"
+
 
 async def handle_cohort_query(payload: dict[str, Any]) -> dict[str, Any]:
     """
@@ -59,6 +67,7 @@ async def handle_cohort_query(payload: dict[str, Any]) -> dict[str, Any]:
             method="POST",
             url=f"{DATA_ACCESS_API_URL}/cohort",
             json_body=payload,
+            timeout_seconds=get_settings().COHORT_QUERY_TIMEOUT_SECONDS,
         )
 
         # Convert all 'value' fields to strings before sending
@@ -105,7 +114,7 @@ async def handle_create_imaging(payload: dict[str, Any]) -> dict[str, Any]:
             json_body=payload,
         )
 
-        logger.info(f"Imaging project created: {response}")
+        logger.info(f"Imaging project created: id={response.get('ID')}, name={response.get('name')}")
         return {"success": True, "result": json.dumps(response)}
 
     except Exception as e:
@@ -234,10 +243,10 @@ async def handle_update_user_profile(payload: dict[str, Any]) -> dict[str, Any]:
 
 # Registry mapping task types to their handlers
 TASK_HANDLERS = {
-    "cohort_query": handle_cohort_query,
-    "create_imaging": handle_create_imaging,
-    "delete_imaging": handle_delete_imaging,
-    "get_imaging_status": handle_get_imaging_status,
-    "reimport_studies": handle_reimport_studies,
-    "update_user_profile": handle_update_user_profile,
+    TASK_COHORT_QUERY: handle_cohort_query,
+    TASK_CREATE_IMAGING: handle_create_imaging,
+    TASK_DELETE_IMAGING: handle_delete_imaging,
+    TASK_GET_IMAGING_STATUS: handle_get_imaging_status,
+    TASK_REIMPORT_STUDIES: handle_reimport_studies,
+    TASK_UPDATE_USER_PROFILE: handle_update_user_profile,
 }
