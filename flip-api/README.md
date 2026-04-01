@@ -52,7 +52,7 @@ The API is served on the port defined by `API_PORT` in [`.env.development.exampl
 (default: `8080`). Interactive API documentation (Swagger UI) is available at:
 
 ```
-http://localhost:<API_PORT>/docs
+http://localhost:<API_PORT>/api/docs
 ```
 
 ## Configuration

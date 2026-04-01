@@ -20,6 +20,7 @@ from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from data_access_api.config import get_settings
 from data_access_api.db.database import engine
 from data_access_api.routers.schema import CohortQueryInput, StatisticsResponse
+from data_access_api.services.query_cache import get_cached_result, set_cached_result
 from data_access_api.utils.logger import logger
 from data_access_api.utils.sql_parsers import extract_missing_identifier
 
@@ -72,6 +73,10 @@ def get_records(query: str) -> pd.DataFrame:
     """
     logger.info("Executing SQL query")
 
+    cached = get_cached_result(query)
+    if cached is not None:
+        return cached
+
     try:
         # TODO: Trace the query filtering to understand what the final user can see.
         # Executing the query with pandas allows the user to query anything in the database.
@@ -80,6 +85,7 @@ def get_records(query: str) -> pd.DataFrame:
         # data.
         # TODO check if we can check column types -- could be used to exclude primary keys, foreign keys, etc.
         df = pd.read_sql(query, engine)
+        set_cached_result(query, df)
         return df
 
     except DBAPIError as e:
@@ -267,10 +273,10 @@ def get_statistics(df: pd.DataFrame, query_input: CohortQueryInput, threshold: i
     if "person_id" in df.columns:
         logger.info("person_id column found in the query results; including age and sex distribution calculations.")
         age = get_age_distribution(df)
-        age["results"] = make_other_category(get_age_distribution(df)["results"], min_count=COHORT_QUERY_THRESHOLD)
+        age["results"] = make_other_category(age["results"], min_count=COHORT_QUERY_THRESHOLD)
 
         sex = get_sex_distribution(df)
-        sex["results"] = make_other_category(get_sex_distribution(df)["results"], min_count=COHORT_QUERY_THRESHOLD)
+        sex["results"] = make_other_category(sex["results"], min_count=COHORT_QUERY_THRESHOLD)
 
         stats.data += [age, sex]
     return stats
