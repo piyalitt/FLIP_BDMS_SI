@@ -52,23 +52,24 @@ openssl rand -base64 32
 
 ### 2. `PRIVATE_API_KEY`
 
-**Description**: API key for authenticating private service-to-service API calls.
+**Description**: Per-trust API key for authenticating trust-to-hub service calls. Each trust gets a unique key; the hub stores SHA-256 hashes in `TRUST_API_KEY_HASHES` and validates incoming keys with constant-time comparison.
 
 **How to generate**:
 
 ```bash
-# Generate a random API key
-openssl rand -hex 32
+# Generate a unique key for each trust
+make -C flip-api generate-trust-key TRUST_NAME=Trust_1
 ```
 
 **Example value**: `test-private-api-key-for-ci`
 
-**Used by**:
+**Used by** (trust-side CI only):
 
+- `trust_api.yml`
 - `imaging_api.yml`
 - `data_access_api.yml`
-- `trust_api.yml`
-- `central_hub_api.yml`
+
+> **Note**: The central hub (`flip-api`) no longer uses a shared `PRIVATE_API_KEY`. It validates per-trust keys via `TRUST_API_KEY_HASHES`.
 
 ---
 
@@ -85,7 +86,7 @@ These are set to static values in CI but could be made into secrets if needed:
 All secrets have fallback values that will be used if the secret is not configured:
 
 - `AES_KEY_BASE64`: Falls back to `dGVzdC1hZXMta2V5LWZvci1jaS10ZXN0aW5nLTMyYnl0ZXM=`
-- `PRIVATE_API_KEY`: Falls back to `test-private-api-key-for-ci`
+- `PRIVATE_API_KEY`: Falls back to `test-private-api-key-for-ci` (trust-side CI workflows only)
 
 This ensures CI doesn't break if secrets are missing, but these fallback values should **never** be used in production.
 
@@ -99,6 +100,7 @@ Each CI workflow follows this pattern:
     cp .env.development.example .env.development
     # Override sensitive values with GitHub secrets
     echo "AES_KEY_BASE64=${{ secrets.AES_KEY_BASE64 }}" >> .env.development
+    # PRIVATE_API_KEY is only needed in trust-side workflows (trust-api, imaging-api, data-access-api)
     echo "PRIVATE_API_KEY=${{ secrets.PRIVATE_API_KEY }}" >> .env.development
     echo "DATA_ACCESS_POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> ../../.env.development
     echo "OMOP_POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> ../../.env.development

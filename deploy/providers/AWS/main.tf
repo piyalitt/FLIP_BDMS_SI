@@ -172,7 +172,8 @@ module "flip_api_secret" {
   recovery_window_in_days = 30
 
   secret_string = jsonencode({
-    aes_key = var.AES_KEY_BASE64
+    aes_key              = var.AES_KEY_BASE64
+    trust_api_key_hashes = var.TRUST_API_KEY_HASHES
   })
 }
 

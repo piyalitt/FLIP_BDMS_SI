@@ -55,14 +55,14 @@ async def _poll_for_tasks(client: httpx.AsyncClient) -> list[dict]:
             f"{CENTRAL_HUB_API_URL}/tasks/{TRUST_NAME}/pending",
             headers=_auth_headers(),
         )
-        if response.status_code == 200:
-            tasks = response.json()
-            if tasks:
-                logger.info(f"Received {len(tasks)} pending tasks from hub")
-            return tasks
-        else:
+        if response.status_code != 200:
             logger.warning(f"Unexpected status {response.status_code} polling for tasks")
             return []
+
+        tasks = response.json()
+        if tasks:
+            logger.info(f"Received {len(tasks)} pending tasks from hub")
+        return tasks
     except Exception as e:
         logger.error(f"Error polling for tasks: {e}")
         return []
@@ -131,7 +131,7 @@ async def _report_task_result(client: httpx.AsyncClient, task_id: str, result: d
                 f"(attempt {attempt + 1}/{_REPORT_MAX_RETRIES}): {e}"
             )
         if attempt < _REPORT_MAX_RETRIES - 1:
-            delay = _REPORT_RETRY_DELAY_SECONDS * (2 ** attempt)
+            delay = _REPORT_RETRY_DELAY_SECONDS * (2**attempt)
             await asyncio.sleep(delay)
 
     logger.error(f"Failed to report result for task {task_id} after {_REPORT_MAX_RETRIES} attempts")

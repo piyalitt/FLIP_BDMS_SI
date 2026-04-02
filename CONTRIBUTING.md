@@ -128,7 +128,16 @@ To get started, copy the example file:
 cp .env.development.example .env.development
 ```
 
-Then update any placeholder values. Docker services receive these variables via the `env_file` directive in the
+Then generate per-trust API keys (must be done before `make up`):
+
+```bash
+make generate-dev-keys
+```
+
+This generates a unique key for each trust, updates `PRIVATE_API_KEY_TRUST_<N>` and `TRUST_API_KEY_HASHES` in
+`.env.development`, and saves plaintext keys to `trust/trust-keys/`.
+
+Docker services receive these variables via the `env_file` directive in the
 compose file — avoid hardcoding values in Dockerfiles or compose files directly.
 
 **FL-specific environment variables:**

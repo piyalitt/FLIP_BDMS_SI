@@ -56,6 +56,7 @@ export TF_VAR_flip_cognito_admin_email=aicentreflip@gmail.com
 export TF_VAR_flip_cognito_researcher_email=rafaelagd@gmail.com
 export TF_VAR_POSTGRES_DB=${POSTGRES_DB}
 export TF_VAR_AES_KEY_BASE64=${AES_KEY_BASE64}
+export TF_VAR_TRUST_API_KEY_HASHES=${TRUST_API_KEY_HASHES}
 export TF_VAR_POSTGRES_USER=${POSTGRES_USER}
 export TF_VAR_DB_PORT=${DB_PORT}
 export TF_VAR_UI_PORT=${UI_PORT}
@@ -427,31 +428,38 @@ help: ## Show this help message
 	@echo ""
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?##"}; {printf "  \033[36m%-20s\033[0m %s\n", $$0, $$1, $$2}'
 
+.PHONY: generate-keys
+generate-keys: ## Generate trust API keys for trusts that still have placeholder values
+	@echo "🔑 Generating trust API keys (skipping already-generated)..."
+	@$(MAKE) -C ../../../flip-api generate-trust-api-keys ENV_FILE=$(MAIN_ENV_FILE) $(if $(FORCE),FORCE=true)
+
 .PHONY: full-deploy
 full-deploy: ## Full AWS deployment: provision infrastructure, deploy cloud Trust + Central Hub
 	## Step order:
 	## 1. login + init + import: auth, Terraform init, import any pre-existing resources
-	## 2. plan+apply: provision all AWS infrastructure (EC2, RDS, VPC, secrets)
-	## 3. update-env: refresh .env with Terraform outputs (EC2 IPs, DB endpoint, Cognito IDs)
-	## 4. ssh-config + ansible-init: configure SSH aliases and provision EC2s with Docker
-	## 5. deploy-centralhub + deploy-trust + status: deploy containers and verify
-full-deploy: github-login aws-login init import-persistent plan apply update-env ssh-config ansible-init deploy-centralhub deploy-trust status
+	## 2. generate-keys: generate trust API keys (skips if already set)
+	## 3. plan+apply: provision all AWS infrastructure (EC2, RDS, VPC, secrets)
+	## 4. update-env: refresh .env with Terraform outputs (EC2 IPs, DB endpoint, Cognito IDs)
+	## 5. ssh-config + ansible-init: configure SSH aliases and provision EC2s with Docker
+	## 6. deploy-centralhub + deploy-trust + status: deploy containers and verify
+full-deploy: github-login aws-login init import-persistent generate-keys plan apply update-env ssh-config ansible-init deploy-centralhub deploy-trust status
 
 .PHONY: full-deploy-stag
 full-deploy-stag: ## Full staging deployment with on-prem local trust (requires LOCAL_TRUST_IP=<public-ip>)
 	## Step order:
 	## 1. login + init + import: auth, Terraform init, import pre-existing persistent resources
-	## 2. plan+apply (PROD=stag): provision all AWS infrastructure (EC2, RDS, VPC, ALB, secrets)
-	## 3. update-env: refresh .env.stag with Terraform outputs (EC2 IPs, DB endpoint, Cognito IDs)
-	## 4. ssh-config + ansible-init: configure SSH aliases, provision EC2s with Docker + FL kit
-	## 5. deploy-centralhub + deploy-trust: deploy Central Hub and cloud Trust containers
-	## 6. add-local-trust LOCAL_TRUST_IP=<ip>: configure UFW,
+	## 2. generate-keys: generate trust API keys (skips if already set)
+	## 3. plan+apply (PROD=stag): provision all AWS infrastructure (EC2, RDS, VPC, ALB, secrets)
+	## 4. update-env: refresh .env.stag with Terraform outputs (EC2 IPs, DB endpoint, Cognito IDs)
+	## 5. ssh-config + ansible-init: configure SSH aliases, provision EC2s with Docker + FL kit
+	## 6. deploy-centralhub + deploy-trust: deploy Central Hub and cloud Trust containers
+	## 7. add-local-trust LOCAL_TRUST_IP=<ip>: configure UFW,
 	##    deploy local Trust_$(LOCAL_TRUST_NUMBER) FL kit, and update AWS security groups
-	## 7. status: verify all services healthy
+	## 8. status: verify all services healthy
 	## NOTE: After this completes you must manually:
 	##   - Start local trust stack: cd ../../../trust && env PROD=stag make up-local-trust-stag
 	@[ -n "$(LOCAL_TRUST_IP)" ] || (echo ""; echo "❌  ERROR: LOCAL_TRUST_IP is required."; echo "   Usage: make full-deploy-stag LOCAL_TRUST_IP=<public-ip>"; echo ""; exit 1)
-full-deploy-stag: github-login aws-login init import-persistent plan apply update-env ssh-config ansible-init deploy-centralhub deploy-trust add-local-trust status
+full-deploy-stag: github-login aws-login init import-persistent generate-keys plan apply update-env ssh-config ansible-init deploy-centralhub deploy-trust add-local-trust status
 
 .PHONY: full-deploy-stag-hybrid
 full-deploy-stag-hybrid: ## Full staging hybrid deployment including local trust provisioning

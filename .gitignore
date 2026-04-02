@@ -332,9 +332,12 @@ flip-fl-api/transfer/*/*
 *.tfplan
 
 # Environment files with sensitive credentials
-.env.development    
+.env.development
 .env.stag
 .env.production
+
+# Per-trust API keys (plaintext — never commit)
+trust/trust-keys/
 
 
 trust/terraform.tfstate

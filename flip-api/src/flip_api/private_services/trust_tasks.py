@@ -13,17 +13,18 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from sqlmodel import Session, col, select
 
-from flip_api.auth.access_manager import check_authorization_token
+from flip_api.auth.access_manager import authenticate_trust, verify_trust_identity
 from flip_api.db.database import get_session
 from flip_api.db.models.main_models import Trust, TrustTask
 from flip_api.domain.schemas.private import TaskResultInput, TrustTaskResponse
-from flip_api.domain.schemas.status import TaskStatus
+from flip_api.domain.schemas.status import TaskStatus, TaskType
 from flip_api.private_services.imaging_notifications import handle_imaging_task_completed
 from flip_api.utils.encryption import encrypt
 from flip_api.utils.logger import logger
+from flip_api.utils.rate_limiter import limiter
 
 router = APIRouter(tags=["private_services"])
 
@@ -32,7 +33,18 @@ PENDING_TASKS_LIMIT = 50
 
 
 def _get_trust_by_name(trust_name: str, db: Session) -> Trust:
-    """Look up a trust by name, raising 404 if not found."""
+    """Look up a trust by name, raising 404 if not found.
+
+    Args:
+        trust_name (str): Name of the trust to look up.
+        db (Session): Database session.
+
+    Returns:
+        Trust: The trust object.
+
+    Raises:
+        HTTPException: 404 if the trust is not found.
+    """
     trust = db.exec(select(Trust).where(Trust.name == trust_name)).first()
     if not trust:
         raise HTTPException(
@@ -48,17 +60,19 @@ def _get_trust_by_name(trust_name: str, db: Session) -> Trust:
     status_code=status.HTTP_200_OK,
     response_model=list[TrustTaskResponse],
 )
+@limiter.limit("12/minute")
 def get_pending_tasks(
+    request: Request,
     trust_name: str,
     db: Session = Depends(get_session),
-    token: str = Depends(check_authorization_token),
+    authenticated_trust: str = Depends(authenticate_trust),
 ) -> list[TrustTaskResponse]:
     """
     Returns pending tasks for the specified trust and marks them as in_progress.
 
     This endpoint is polled by trusts to pick up work dispatched by the central hub.
     """
-    del token
+    verify_trust_identity(trust_name, authenticated_trust)
     logger.debug(f"Trust '{trust_name}' polling for pending tasks")
 
     try:
@@ -115,20 +129,22 @@ def get_pending_tasks(
     status_code=status.HTTP_200_OK,
     response_model=dict[str, str],
 )
+@limiter.limit("60/minute")
 def submit_task_result(
+    request: Request,
     trust_name: str,
     task_id: UUID,
     task_result: TaskResultInput = Body(...),
     db: Session = Depends(get_session),
-    token: str = Depends(check_authorization_token),
+    authenticated_trust: str = Depends(authenticate_trust),
 ) -> dict[str, str]:
     """
     Receives the result of a completed task from a trust.
 
-    The trust_name path parameter is verified against the task's owning trust
+    The trust_name path parameter is verified against the authenticated trust identity
     to prevent one trust from submitting results for another trust's tasks.
     """
-    del token
+    verify_trust_identity(trust_name, authenticated_trust)
     logger.info(f"Received result for task {task_id} from trust '{trust_name}'")
 
     try:
@@ -196,16 +212,18 @@ def submit_task_result(
     status_code=status.HTTP_200_OK,
     response_model=dict[str, str],
 )
+@limiter.limit("12/minute")
 def trust_heartbeat(
+    request: Request,
     trust_name: str,
     db: Session = Depends(get_session),
-    token: str = Depends(check_authorization_token),
+    authenticated_trust: str = Depends(authenticate_trust),
 ) -> dict[str, str]:
     """
     Receives a heartbeat from a trust, updating its last_heartbeat timestamp.
     This replaces the hub-initiated health check with a trust-initiated heartbeat.
     """
-    del token
+    verify_trust_identity(trust_name, authenticated_trust)
     logger.debug(f"Heartbeat received from trust '{trust_name}'")
 
     try:

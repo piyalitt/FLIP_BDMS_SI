@@ -108,9 +108,8 @@ def update_trust_status(
                 )
         else:
             pass
-            # TODO implement check_authorization_token
-            # Check authorization token
-            # if not check_authorization_token(request.headers):
+            # TODO implement authenticate_trust
+            # if not authenticate_trust(request.headers):
             #     raise HTTPException(
             #         status_code=403,
             #         detail="No userId passed, Authorization token is invalid."

@@ -47,8 +47,7 @@ services:
       - DB_PORT=${DB_PORT}
       - POSTGRES_DB=${POSTGRES_DB}
       - PRIVATE_API_KEY_HEADER=${PRIVATE_API_KEY_HEADER}
-      - PRIVATE_API_KEY=${PRIVATE_API_KEY}
-      # - AES_KEY_BASE64=${AES_KEY_BASE64} # in production, AES key is retrieved from AWS Secrets Manager
+      # in production, TRUST_API_KEY_HASHES and AES_KEY_BASE64 are retrieved from AWS Secrets Manager at runtime
       - AWS_SECRET_NAME=${AWS_SECRET_NAME}
       - AWS_SES_ADMIN_EMAIL_ADDRESS=${AWS_SES_ADMIN_EMAIL_ADDRESS}
       - AWS_SES_SENDER_EMAIL_ADDRESS=${AWS_SES_SENDER_EMAIL_ADDRESS}

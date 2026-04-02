@@ -39,6 +39,13 @@ def handle_imaging_task_completed(task: TrustTask, db: Session) -> None:
 
     Called after the task result has been committed to the database.
     Any exceptions are expected to be caught by the caller.
+
+    Args:
+        task (TrustTask): The completed CREATE_IMAGING task with result data.
+        db (Session): Database session.
+
+    Raises:
+        ValueError: If the task has no result data.
     """
     if not task.result:
         raise ValueError(f"Task {task.id} has no result data")
@@ -135,7 +142,15 @@ def handle_imaging_task_completed(task: TrustTask, db: Session) -> None:
 
 
 def _get_latest_query_id(project_id: UUID, db: Session) -> UUID | None:
-    """Get the most recent query ID for a project, or None."""
+    """Get the most recent query ID for a project, or None.
+
+    Args:
+        project_id (UUID): ID of the project.
+        db (Session): Database session.
+
+    Returns:
+        UUID | None: The query ID, or None if no queries exist.
+    """
     query = db.exec(
         select(Queries)
         .where(Queries.project_id == project_id)
@@ -147,6 +162,12 @@ def _get_latest_query_id(project_id: UUID, db: Session) -> UUID | None:
 
 def _parse_imaging_result(result_json: str) -> ICreatedImagingProject:
     """Parse the task result JSON into a structured imaging project response.
+
+    Args:
+        result_json (str): JSON string from the task result.
+
+    Returns:
+        ICreatedImagingProject: Structured imaging project response.
 
     Raises:
         json.JSONDecodeError: If result_json is not valid JSON.

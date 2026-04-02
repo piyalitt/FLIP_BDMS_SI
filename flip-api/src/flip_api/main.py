@@ -14,8 +14,10 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 
 from flip_api.cohort_services import (
     get_cohort_query_results,
@@ -94,6 +96,7 @@ from flip_api.user_services import (
     set_user_roles,
     update_user,
 )
+from flip_api.utils.rate_limiter import limiter
 
 
 @asynccontextmanager
@@ -117,6 +120,15 @@ app = FastAPI(
     openapi_url=f"{API_PREFIX}/openapi.json",
     redoc_url=f"{API_PREFIX}/redoc",
 )
+
+# Rate limiter — keyed by trust_name path parameter (falls back to client IP)
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Try again later."})
+
 
 # CORS middleware
 app.add_middleware(

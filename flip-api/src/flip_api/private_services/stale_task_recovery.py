@@ -39,10 +39,10 @@ def recover_stale_tasks(db: Session) -> int:
     indefinitely.
 
     Args:
-        db: Database session.
+        db (Session): Database session.
 
     Returns:
-        Number of tasks recovered (re-queued or failed).
+        int: Number of tasks recovered (re-queued or failed).
     """
     settings = get_settings()
     timeout_minutes = settings.TASK_STALE_TIMEOUT_MINUTES
@@ -94,10 +94,10 @@ def retry_failed_post_processing(db: Session) -> int:
     and email notifications) failed, this retries it.
 
     Args:
-        db: Database session.
+        db (Session): Database session.
 
     Returns:
-        Number of tasks retried.
+        int: Number of tasks retried.
     """
     from flip_api.private_services.imaging_notifications import handle_imaging_task_completed
 

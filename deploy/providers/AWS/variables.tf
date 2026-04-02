@@ -56,6 +56,11 @@ variable "AES_KEY_BASE64" {
   type = string
 }
 
+variable "TRUST_API_KEY_HASHES" {
+  description = "JSON string mapping trust names to SHA-256 hashes of their API keys"
+  type        = string
+}
+
 variable "FLIP_BUCKET_NAME" {
   type = string
 }

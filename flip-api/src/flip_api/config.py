@@ -29,7 +29,9 @@ class Settings(BaseSettings):
     )
 
     PRIVATE_API_KEY_HEADER: str
-    PRIVATE_API_KEY: str
+
+    # Per-trust API key hashes: {"Trust_1": "sha256hex...", "Trust_2": "sha256hex..."}
+    TRUST_API_KEY_HASHES: dict[str, str] = {}
 
     # AWS settings
     AWS_PROFILE: str | None = None

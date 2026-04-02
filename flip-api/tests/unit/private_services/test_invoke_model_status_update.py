@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 
 from flip_api.domain.schemas.status import ModelStatus
 from flip_api.private_services.invoke_model_status_update import (
-    check_authorization_token,
+    authenticate_trust,
     get_session,
 )
 from flip_api.private_services.invoke_model_status_update import router as invoke_model_status_update_router
@@ -32,14 +32,14 @@ MOCKED_SERVICE_FUNCTION_PATH = "flip_api.private_services.invoke_model_status_up
 
 
 @pytest.fixture
-def mock_auth_token():
-    return "valid_test_token"
+def mock_auth_trust():
+    return "Trust_1"
 
 
 @pytest.fixture
-def client(mock_db_session: MagicMock, mock_auth_token: str):
+def client(mock_db_session: MagicMock, mock_auth_trust: str):
     test_app.dependency_overrides[get_session] = lambda: mock_db_session
-    test_app.dependency_overrides[check_authorization_token] = lambda: mock_auth_token
+    test_app.dependency_overrides[authenticate_trust] = lambda: mock_auth_trust
     return TestClient(test_app)
 
 
@@ -56,7 +56,7 @@ class TestInvokeModelStatusUpdateEndpoint:
         client: TestClient,
         model_id: UUID,
         mock_db_session: MagicMock,
-        mock_auth_token: str,
+        mock_auth_trust: str,
     ):
         # Arrange
         model_status = ModelStatus.INITIATED.value
@@ -125,7 +125,7 @@ class TestInvokeModelStatusUpdateEndpoint:
     def test_invoke_update_unauthorized(self, model_id: UUID, mock_db_session: MagicMock):
         # Arrange
         # Override auth to simulate failure
-        test_app.dependency_overrides[check_authorization_token] = lambda: (_ for _ in ()).throw(
+        test_app.dependency_overrides[authenticate_trust] = lambda: (_ for _ in ()).throw(
             HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
         )
         unauth_client = TestClient(test_app)  # Create client with this override
@@ -140,4 +140,4 @@ class TestInvokeModelStatusUpdateEndpoint:
         assert response.json() == {"detail": "Not authenticated"}
 
         # Clean up dependency override
-        test_app.dependency_overrides.pop(check_authorization_token)
+        test_app.dependency_overrides.pop(authenticate_trust)

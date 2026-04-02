@@ -227,7 +227,8 @@ When in doubt, update the docs. Outdated documentation is worse than no document
 - `FL_BACKEND` — `flower` (default) or `nvflare`
 - `PROD` — `true` (production), `stag` (staging), unset (development)
 - `AES_KEY_BASE64` — encryption key for trust communication
-- `PRIVATE_API_KEY` — service-to-service auth
+- `PRIVATE_API_KEY` — per-trust API key for trust-to-hub auth (each trust gets a unique key)
+- `TRUST_API_KEY_HASHES` — hub-side JSON dict mapping trust names to SHA-256 hashes of their API keys
 
 ## CI/CD
 

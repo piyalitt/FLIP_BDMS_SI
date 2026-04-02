@@ -79,7 +79,7 @@ cd deploy/providers/AWS
 make full-deploy-stag-hybrid LOCAL_TRUST_IP=<public-ip> [LOCAL_TRUST_SSH_KEY=~/.ssh/trust_key]
 ```
 
-This wrapper target runs the full AWS + local trust provisioning pipeline, updates the trust configuration in AWS Secrets Manager (`PRIVATE_API_KEY`, `AES_KEY_BASE64`), and redeploys Central Hub so the new secret values are loaded.
+This wrapper target runs the full AWS + local trust provisioning pipeline, updates the trust configuration in AWS Secrets Manager (per-trust `PRIVATE_API_KEY`, `AES_KEY_BASE64`, and `TRUST_API_KEY_HASHES`), and redeploys Central Hub so the new secret values are loaded.
 You still need to start the local trust stack on the trust host:
 
 ```bash

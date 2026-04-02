@@ -17,7 +17,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from flip_api.auth.access_manager import check_authorization_token
+from flip_api.auth.access_manager import authenticate_trust
 from flip_api.db.database import get_session
 from flip_api.db.models.main_models import Trust, TrustTask
 from flip_api.domain.schemas.status import TaskStatus, TaskType
@@ -75,10 +75,10 @@ def mock_pending_tasks(trust_id):
 
 @pytest.fixture
 def mock_auth():
-    """Override auth dependency to always pass."""
-    app.dependency_overrides[check_authorization_token] = lambda: "valid-key"
+    """Override auth dependency to return the default trust name (TRUST_NAME)."""
+    app.dependency_overrides[authenticate_trust] = lambda: TRUST_NAME
     yield
-    del app.dependency_overrides[check_authorization_token]
+    del app.dependency_overrides[authenticate_trust]
 
 
 def _mock_task_owned_by(trust_id, task_id, task_type=TaskType.COHORT_QUERY):
@@ -141,8 +141,10 @@ def test_get_pending_tasks_empty(mock_trust, mock_auth):
     del app.dependency_overrides[get_session]
 
 
-def test_get_pending_tasks_trust_not_found(mock_auth):
+def test_get_pending_tasks_trust_not_found():
     """Should return 404 when trust name is not found."""
+    app.dependency_overrides[authenticate_trust] = lambda: "NonExistentTrust"
+
     mock_db = MagicMock()
     mock_db.exec.return_value.first.return_value = None
 
@@ -153,11 +155,12 @@ def test_get_pending_tasks_trust_not_found(mock_auth):
     assert response.status_code == 404
 
     del app.dependency_overrides[get_session]
+    del app.dependency_overrides[authenticate_trust]
 
 
 def test_get_pending_tasks_requires_auth():
     """Should return 401 when no API key provided."""
-    app.dependency_overrides.pop(check_authorization_token, None)
+    app.dependency_overrides.pop(authenticate_trust, None)
 
     mock_db = MagicMock()
     app.dependency_overrides[get_session] = lambda: mock_db
@@ -167,6 +170,22 @@ def test_get_pending_tasks_requires_auth():
     assert response.status_code == 401
 
     del app.dependency_overrides[get_session]
+
+
+def test_get_pending_tasks_cross_trust_rejected():
+    """Should return 403 when authenticated as a different trust than the URL trust_name."""
+    app.dependency_overrides[authenticate_trust] = lambda: TRUST_NAME
+
+    mock_db = MagicMock()
+    app.dependency_overrides[get_session] = lambda: mock_db
+
+    response = client.get("/api/tasks/Trust_2/pending")
+
+    assert response.status_code == 403
+    assert "not authorised" in response.json()["detail"]
+
+    del app.dependency_overrides[get_session]
+    del app.dependency_overrides[authenticate_trust]
 
 
 # ---- POST /tasks/{trust_name}/{task_id}/result ----
@@ -299,8 +318,10 @@ def test_submit_task_result_forbidden_for_wrong_trust(trust_id, task_id, mock_au
     del app.dependency_overrides[get_session]
 
 
-def test_submit_task_result_trust_not_found(mock_auth):
+def test_submit_task_result_trust_not_found():
     """Should return 404 when trust name is not found."""
+    app.dependency_overrides[authenticate_trust] = lambda: "NonExistentTrust"
+
     mock_db = MagicMock()
     mock_db.exec.return_value.first.return_value = None
 
@@ -314,6 +335,26 @@ def test_submit_task_result_trust_not_found(mock_auth):
     assert response.status_code == 404
 
     del app.dependency_overrides[get_session]
+    del app.dependency_overrides[authenticate_trust]
+
+
+def test_submit_task_result_cross_trust_rejected():
+    """Should return 403 when authenticated as a different trust than the URL trust_name."""
+    app.dependency_overrides[authenticate_trust] = lambda: TRUST_NAME
+
+    mock_db = MagicMock()
+    app.dependency_overrides[get_session] = lambda: mock_db
+
+    response = client.post(
+        f"/api/tasks/Trust_2/{uuid4()}/result",
+        json={"success": True, "result": '{"data": "test"}'},
+    )
+
+    assert response.status_code == 403
+    assert "not authorised" in response.json()["detail"]
+
+    del app.dependency_overrides[get_session]
+    del app.dependency_overrides[authenticate_trust]
 
 
 # ---- POST /trust/{trust_name}/heartbeat ----
@@ -335,8 +376,10 @@ def test_heartbeat_updates_timestamp(mock_trust, mock_auth):
     del app.dependency_overrides[get_session]
 
 
-def test_heartbeat_trust_not_found(mock_auth):
+def test_heartbeat_trust_not_found():
     """Should return 404 for unknown trust name."""
+    app.dependency_overrides[authenticate_trust] = lambda: "NonExistentTrust"
+
     mock_db = MagicMock()
     mock_db.exec.return_value.first.return_value = None
 
@@ -347,6 +390,23 @@ def test_heartbeat_trust_not_found(mock_auth):
     assert response.status_code == 404
 
     del app.dependency_overrides[get_session]
+    del app.dependency_overrides[authenticate_trust]
+
+
+def test_heartbeat_cross_trust_rejected():
+    """Should return 403 when authenticated as a different trust than the URL trust_name."""
+    app.dependency_overrides[authenticate_trust] = lambda: TRUST_NAME
+
+    mock_db = MagicMock()
+    app.dependency_overrides[get_session] = lambda: mock_db
+
+    response = client.post("/api/trust/Trust_2/heartbeat")
+
+    assert response.status_code == 403
+    assert "not authorised" in response.json()["detail"]
+
+    del app.dependency_overrides[get_session]
+    del app.dependency_overrides[authenticate_trust]
 
 
 # ---- Email notification on CREATE_IMAGING result ----

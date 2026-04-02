@@ -63,8 +63,8 @@ def retrieve_trusts_in_model_endpoint(
                     detail=f"User with ID: {user_id} is denied access to this model",
                 )
         else:
-            # TODO implement check_authorization_token
-            # if not check_authorization_token(request):
+            # TODO implement authenticate_trust
+            # if not authenticate_trust(request):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="No user_id given, Authorization token is invalid."
             )
