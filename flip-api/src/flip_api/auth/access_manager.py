@@ -332,7 +332,7 @@ def authenticate_trust(api_key: str = Security(api_key_header_scheme)) -> str:
     # Iterate all entries with constant-time comparison to prevent timing side-channels.
     for trust_name, stored_hash in trust_hashes.items():
         if hmac.compare_digest(provided_hash, stored_hash):
-            logger.debug(f"Trust '{trust_name}' authenticated successfully.")
+            logger.debug("Trust authenticated successfully.")
             return trust_name
 
     logger.warning("Trust authentication failed: no matching trust for provided key")
