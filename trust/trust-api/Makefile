@@ -25,7 +25,7 @@ mypy_command = uv run mypy . --ignore-missing-imports
 build:
 	@export BASE_IMAGES_DOWNLOAD_DIR=/tmp/images; \
 	TRUST_NETWORK_NAME="deploy_trust-network-1" \
-	$(docker_command) build $(service_name) --no-cache
+	$(docker_command) -p trust1 build $(service_name) --no-cache
 up:
 #   For testing, set network to trust 1
 	TRUST_NETWORK_NAME="deploy_trust-network-1" \

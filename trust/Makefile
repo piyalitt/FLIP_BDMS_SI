@@ -100,8 +100,8 @@ TRUST_2_VARS = \
 	PRIVATE_API_KEY=${PRIVATE_API_KEY_TRUST_2}
 
 build:
-	$(TRUST_1_VARS) ${DOCKER_COMPOSE_CMD} build --no-cache
-	$(TRUST_2_VARS) ${DOCKER_COMPOSE_CMD} build
+	$(TRUST_1_VARS) ${DOCKER_COMPOSE_CMD} -p ${trust1} build --no-cache
+	$(TRUST_2_VARS) ${DOCKER_COMPOSE_CMD} -p ${trust2} build
 
 # Uses --pull always to ensure the latest FL images and omop-db image are used
 # ensure omop data is up to date before bringing up trust 1
