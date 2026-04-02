@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     IMAGING_API_URL: str
     PRIVATE_API_KEY: str
     PRIVATE_API_KEY_HEADER: str
+    AES_KEY_BASE64: str  # Shared key for decrypting task payloads from the hub
 
     # Polling configuration
     TRUST_NAME: str  # Must match Trust.name in hub DB (e.g. "Trust_1")

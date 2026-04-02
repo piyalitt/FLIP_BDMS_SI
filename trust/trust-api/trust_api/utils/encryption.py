@@ -10,54 +10,34 @@
 # limitations under the License.
 #
 
+"""AES-CBC decryption for task payloads received from the central hub."""
+
 import base64
-import os
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from flip_api.config import get_settings
-from flip_api.utils.get_secrets import get_secret
+from trust_api.config import get_settings
 
 _aes_key_cache: bytes | None = None
 
 
 def get_aes_key() -> bytes:
-    """Retrieve the AES key and return it as bytes.
+    """Retrieve the AES key from the environment and return it as bytes.
 
-    In production, fetches from AWS Secrets Manager. In dev, uses the environment variable directly.
     Cached after first call — the key does not change during the lifetime of a process.
     """
     global _aes_key_cache  # noqa: PLW0603
     if _aes_key_cache is not None:
         return _aes_key_cache
 
-    stt = get_settings()
-    aes_key_b64 = get_secret("aes_key") if stt.ENV == "production" else stt.AES_KEY_BASE64
-    _aes_key_cache = base64.b64decode(aes_key_b64)
+    _aes_key_cache = base64.b64decode(get_settings().AES_KEY_BASE64)
     return _aes_key_cache
 
 
-def encrypt(plaintext: str, key: bytes | None = None) -> str:
-    """Encrypt plaintext using AES-CBC with PKCS7 padding. Returns Base64-encoded ciphertext."""
-    if key is None:
-        key = get_aes_key()
-
-    iv = os.urandom(16)
-
-    padder = padding.PKCS7(128).padder()
-    padded_data = padder.update(plaintext.encode()) + padder.finalize()
-
-    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
-    encryptor = cipher.encryptor()
-    ciphertext = encryptor.update(padded_data) + encryptor.finalize()
-
-    return base64.b64encode(iv + ciphertext).decode()
-
-
 def decrypt(encoded_payload: str, key: bytes | None = None) -> str:
-    """Decrypt Base64-encoded ciphertext using AES-CBC with PKCS7 padding. Returns the original plaintext."""
+    """Decrypt Base64-encoded ciphertext using AES-CBC with PKCS7 padding."""
     if key is None:
         key = get_aes_key()
 

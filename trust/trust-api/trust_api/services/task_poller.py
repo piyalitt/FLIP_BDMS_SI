@@ -25,6 +25,7 @@ import httpx
 
 from trust_api.config import get_settings
 from trust_api.services.task_handlers import TASK_HANDLERS
+from trust_api.utils.encryption import decrypt
 from trust_api.utils.logger import logger
 
 CENTRAL_HUB_API_URL = get_settings().CENTRAL_HUB_API_URL
@@ -156,9 +157,9 @@ async def _process_task(task: dict) -> dict:
         return {"success": False, "error": f"Unknown task type: {task_type}"}
 
     try:
-        payload = json.loads(payload_str)
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON payload for task {task_id}: {e}")
+        payload = json.loads(decrypt(payload_str))
+    except (ValueError, json.JSONDecodeError) as e:
+        logger.error(f"Failed to decrypt or parse payload for task {task_id}: {e}")
         return {"success": False, "error": f"Invalid payload: {e}"}
 
     logger.info(f"Processing task {task_id} (type={task_type})")

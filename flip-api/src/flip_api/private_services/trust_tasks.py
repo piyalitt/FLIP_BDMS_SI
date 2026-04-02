@@ -22,6 +22,7 @@ from flip_api.db.models.main_models import Trust, TrustTask
 from flip_api.domain.schemas.private import TaskResultInput, TrustTaskResponse
 from flip_api.domain.schemas.status import TaskStatus
 from flip_api.private_services.imaging_notifications import handle_imaging_task_completed
+from flip_api.utils.encryption import encrypt
 from flip_api.utils.logger import logger
 
 router = APIRouter(tags=["private_services"])
@@ -88,7 +89,7 @@ def get_pending_tasks(
                 TrustTaskResponse(
                     id=task.id,
                     task_type=task.task_type,
-                    payload=task.payload,
+                    payload=encrypt(task.payload),
                     created_at=task.created_at,
                 )
             )
