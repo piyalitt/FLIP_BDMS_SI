@@ -177,7 +177,10 @@ async def test_report_task_result_includes_error_in_result():
 @pytest.mark.asyncio
 async def test_process_task_dispatches_cohort_query():
     """Should dispatch to the correct handler based on task_type."""
-    with patch("trust_api.services.task_poller.TASK_HANDLERS") as mock_handlers:
+    with (
+        patch("trust_api.services.task_poller.TASK_HANDLERS") as mock_handlers,
+        patch("trust_api.services.task_poller.decrypt", side_effect=lambda x: x),
+    ):
         mock_handler = AsyncMock(return_value={"success": True})
         mock_handlers.get.return_value = mock_handler
 
@@ -211,7 +214,10 @@ async def test_process_task_unknown_type():
 @pytest.mark.asyncio
 async def test_process_task_invalid_payload():
     """Should return failure for invalid JSON payload."""
-    with patch("trust_api.services.task_poller.TASK_HANDLERS") as mock_handlers:
+    with (
+        patch("trust_api.services.task_poller.TASK_HANDLERS") as mock_handlers,
+        patch("trust_api.services.task_poller.decrypt", side_effect=lambda x: x),
+    ):
         mock_handlers.get.return_value = AsyncMock()
 
         task = {
