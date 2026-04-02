@@ -229,6 +229,9 @@ When in doubt, update the docs. Outdated documentation is worse than no document
 - `AES_KEY_BASE64` — encryption key for trust communication
 - `PRIVATE_API_KEY` — per-trust API key for trust-to-hub auth (each trust gets a unique key)
 - `TRUST_API_KEY_HASHES` — hub-side JSON dict mapping trust names to SHA-256 hashes of their API keys
+- `INTERNAL_SERVICE_KEY_HEADER` — HTTP header name for internal service auth
+- `INTERNAL_SERVICE_KEY` — internal service key for fl-server-to-hub auth (Central Hub only)
+- `INTERNAL_SERVICE_KEY_HASH` — hub-side SHA-256 hash of the internal service key
 
 ## CI/CD
 
@@ -265,6 +268,8 @@ FLIP supports two deployment models:
 2. **Hybrid/On-Premises**: Central Hub on AWS EC2 + Trust services on a local/on-premises host
 
 Trusts poll the Central Hub for tasks over HTTPS. Trust communication payloads are encrypted via `AES_KEY_BASE64`.
+
+**FL Service Authentication**: The fl-server (on the Central Hub) authenticates to flip-api using `INTERNAL_SERVICE_KEY` via the `INTERNAL_SERVICE_KEY_HEADER` header. This is separate from trust API keys. FL clients (on the trust side) do **not** have Central Hub API credentials — only the fl-server communicates with flip-api. FL clients relay metrics and exceptions to the fl-server, which forwards them to the Central Hub.
 
 ### Docker Compose (Development vs Production)
 
@@ -358,7 +363,9 @@ When making infrastructure or deployment changes, **always think through both en
 - Never commit secrets or credentials — pre-commit hooks enforce this
 - Never bypass TLS certificate validation (`curl -k` is prohibited)
 - Use `AES_KEY_BASE64` for encrypted trust communication
-- AWS Cognito for hub authentication, private API keys for inter-service auth
+- AWS Cognito for hub authentication, per-trust API keys for trust-to-hub auth
+- Internal service key (`INTERNAL_SERVICE_KEY`) for fl-server-to-hub auth — separate from trust keys
+- FL clients (trust side) intentionally have no access to Central Hub API credentials
 - Do not hardcode environment values in Dockerfiles or compose files
 
 ## Important: Rules for adding or modifying code

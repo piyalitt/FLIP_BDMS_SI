@@ -15,7 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 from sqlmodel import Session
 
-from flip_api.auth.access_manager import authenticate_trust
+from flip_api.auth.access_manager import authenticate_internal_service
 from flip_api.db.database import get_session
 from flip_api.domain.schemas.status import ModelStatus
 from flip_api.model_services.update_model_status import update_model_status_endpoint
@@ -34,17 +34,17 @@ def invoke_model_status_update_endpoint(
     model_id: UUID,
     model_status: ModelStatus = Path(..., title="New model status"),
     db: Session = Depends(get_session),
-    authenticated_trust: str = Depends(authenticate_trust),
+    _: None = Depends(authenticate_internal_service),
 ) -> dict[str, str]:
     """
     Invokes the internal process for updating a model's status.
-    This endpoint acts as a passthrough to the underlying model status update service.
+
+    This endpoint is internal-only: it accepts requests from the fl-server on the Central Hub, not from trusts.
 
     Args:
         model_id (UUID): The ID of the model whose status is to be updated.
         model_status (ModelStatus): The new status to set for the model.
         db (Session): The database session, provided by dependency injection.
-        authenticated_trust (str): Authenticated trust name (validated by dependency).
 
     Returns:
         dict[str, str]: A dictionary containing the result of the status update operation.
@@ -52,8 +52,6 @@ def invoke_model_status_update_endpoint(
     Raises:
         HTTPException: If there is an error during the status update process.
     """
-    # Any authenticated trust may trigger a status update — the FL server calls this on behalf of all participants
-    del authenticated_trust
     endpoint_path = f"/model/{model_id}/status/{model_status.value}"
     logger.debug(f"Attempting to call the model status update service for model_id: {model_id} via {endpoint_path}")
 

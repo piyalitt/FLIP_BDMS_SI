@@ -299,6 +299,45 @@ def _get_trust_api_key_hashes() -> dict[str, str]:
     return _trust_api_key_hashes_cache
 
 
+INTERNAL_SERVICE_KEY_HEADER_NAME = get_settings().INTERNAL_SERVICE_KEY_HEADER
+internal_key_header_scheme = APIKeyHeader(name=INTERNAL_SERVICE_KEY_HEADER_NAME, auto_error=False)
+
+
+def authenticate_internal_service(api_key: str = Security(internal_key_header_scheme)) -> None:
+    """Authenticate an internal service (e.g., fl-server on the Central Hub).
+
+    The fl-server sends an internal service key in the X-Internal-Service-Key header.
+    This dependency hashes the provided key and compares it against the stored hash
+    using constant-time comparison.
+
+    Args:
+        api_key (str): The internal service key from the request header.
+
+    Raises:
+        HTTPException: 401 if the key is missing, unconfigured, or invalid.
+    """
+    if not api_key:
+        logger.warning("Internal service authentication failed: key missing from request.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated: internal service key is missing.",
+        )
+    expected_hash = get_settings().INTERNAL_SERVICE_KEY_HASH
+    if not expected_hash:
+        logger.warning("Internal service authentication failed: INTERNAL_SERVICE_KEY_HASH not configured.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Internal service auth not configured.",
+        )
+    provided_hash = hashlib.sha256(api_key.encode()).hexdigest()
+    if not hmac.compare_digest(provided_hash, expected_hash):
+        logger.warning("Internal service authentication failed: invalid key.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid internal service key.",
+        )
+
+
 def authenticate_trust(api_key: str = Security(api_key_header_scheme)) -> str:
     """Authenticate a trust by its per-trust API key and return the trust name.
 

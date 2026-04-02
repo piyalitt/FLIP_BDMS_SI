@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 
 from flip_api.domain.schemas.status import ModelStatus
 from flip_api.private_services.invoke_model_status_update import (
-    authenticate_trust,
+    authenticate_internal_service,
     get_session,
 )
 from flip_api.private_services.invoke_model_status_update import router as invoke_model_status_update_router
@@ -32,14 +32,9 @@ MOCKED_SERVICE_FUNCTION_PATH = "flip_api.private_services.invoke_model_status_up
 
 
 @pytest.fixture
-def mock_auth_trust():
-    return "Trust_1"
-
-
-@pytest.fixture
-def client(mock_db_session: MagicMock, mock_auth_trust: str):
+def client(mock_db_session: MagicMock):
     test_app.dependency_overrides[get_session] = lambda: mock_db_session
-    test_app.dependency_overrides[authenticate_trust] = lambda: mock_auth_trust
+    test_app.dependency_overrides[authenticate_internal_service] = lambda: None
     return TestClient(test_app)
 
 
@@ -56,7 +51,6 @@ class TestInvokeModelStatusUpdateEndpoint:
         client: TestClient,
         model_id: UUID,
         mock_db_session: MagicMock,
-        mock_auth_trust: str,
     ):
         # Arrange
         model_status = ModelStatus.INITIATED.value
@@ -65,14 +59,13 @@ class TestInvokeModelStatusUpdateEndpoint:
 
         # Act
         response = client.put(f"/api/model/{model_id}/status/{model_status}")
-        print(response.json())
+
         # Assert
         assert response.status_code == status.HTTP_200_OK
         assert response.json() == service_response
         mock_update_model.assert_called_once_with(
             model_id=model_id, model_status=ModelStatus.INITIATED, db=mock_db_session, user_id=None
         )
-        # Check logs if specific logging is implemented in the endpoint for success
 
     @patch(MOCKED_SERVICE_FUNCTION_PATH)
     @patch("flip_api.private_services.invoke_model_status_update.logger.error")
@@ -125,9 +118,10 @@ class TestInvokeModelStatusUpdateEndpoint:
     def test_invoke_update_unauthorized(self, model_id: UUID, mock_db_session: MagicMock):
         # Arrange
         # Override auth to simulate failure
-        test_app.dependency_overrides[authenticate_trust] = lambda: (_ for _ in ()).throw(
-            HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-        )
+        def mock_auth():
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+        test_app.dependency_overrides[authenticate_internal_service] = mock_auth
         unauth_client = TestClient(test_app)  # Create client with this override
 
         model_status = ModelStatus.INITIATED.value
@@ -140,4 +134,4 @@ class TestInvokeModelStatusUpdateEndpoint:
         assert response.json() == {"detail": "Not authenticated"}
 
         # Clean up dependency override
-        test_app.dependency_overrides.pop(authenticate_trust)
+        test_app.dependency_overrides.pop(authenticate_internal_service)

@@ -20,6 +20,7 @@ from sqlmodel import Session
 
 # Module to be tested
 from flip_api.auth.access_manager import (
+    authenticate_internal_service,
     authenticate_trust,
     can_modify_model,
     can_modify_project,
@@ -29,6 +30,9 @@ VALID_TEST_KEY = "test_secret_key_12345_valid"
 VALID_TEST_KEY_HASH = hashlib.sha256(VALID_TEST_KEY.encode()).hexdigest()
 WRONG_TEST_KEY = "wrong_secret_key_67890_invalid"
 TRUST_NAME = "Trust_1"
+
+INTERNAL_SERVICE_KEY = "internal_service_key_abc123"
+INTERNAL_SERVICE_KEY_HASH = hashlib.sha256(INTERNAL_SERVICE_KEY.encode()).hexdigest()
 
 PATCH_HAS_PERMISSIONS = "flip_api.auth.access_manager.has_permissions"
 PATCH_CAN_MODIFY_PROJECT = "flip_api.auth.access_manager.can_modify_project"
@@ -89,6 +93,52 @@ class TestAuthenticateTrust:
         with patch(PATCH_GET_SETTINGS, return_value=mock), patch(PATCH_HASH_CACHE, None):
             assert authenticate_trust(api_key=VALID_TEST_KEY) == TRUST_NAME
             assert authenticate_trust(api_key=second_key) == "Trust_2"
+
+
+class TestAuthenticateInternalService:
+    """Tests for the authenticate_internal_service dependency."""
+
+    def test_valid_key_succeeds(self):
+        """Valid internal service key should not raise an exception."""
+        mock = MagicMock()
+        mock.INTERNAL_SERVICE_KEY_HASH = INTERNAL_SERVICE_KEY_HASH
+        with patch(PATCH_GET_SETTINGS, return_value=mock):
+            result = authenticate_internal_service(api_key=INTERNAL_SERVICE_KEY)
+        assert result is None
+
+    def test_missing_key_returns_401(self):
+        """Missing (None) key should raise 401."""
+        with pytest.raises(HTTPException) as exc_info:
+            authenticate_internal_service(api_key=None)
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert exc_info.value.detail == "Not authenticated: internal service key is missing."
+
+    def test_empty_key_returns_401(self):
+        """Empty string key should raise 401."""
+        with pytest.raises(HTTPException) as exc_info:
+            authenticate_internal_service(api_key="")
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert exc_info.value.detail == "Not authenticated: internal service key is missing."
+
+    def test_invalid_key_returns_401(self):
+        """Wrong key should raise 401."""
+        mock = MagicMock()
+        mock.INTERNAL_SERVICE_KEY_HASH = INTERNAL_SERVICE_KEY_HASH
+        with patch(PATCH_GET_SETTINGS, return_value=mock):
+            with pytest.raises(HTTPException) as exc_info:
+                authenticate_internal_service(api_key=WRONG_TEST_KEY)
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert exc_info.value.detail == "Invalid internal service key."
+
+    def test_unconfigured_hash_returns_401(self):
+        """Empty INTERNAL_SERVICE_KEY_HASH should raise 401."""
+        mock = MagicMock()
+        mock.INTERNAL_SERVICE_KEY_HASH = ""
+        with patch(PATCH_GET_SETTINGS, return_value=mock):
+            with pytest.raises(HTTPException) as exc_info:
+                authenticate_internal_service(api_key=INTERNAL_SERVICE_KEY)
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert exc_info.value.detail == "Internal service auth not configured."
 
 
 class TestCanModifyProject:

@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-"""Generate per-trust API keys for all trusts and write them into an environment file.
+"""Generate per-trust API keys and the internal service key, and write them into an environment file.
 
 Usage:
     make generate-trust-api-keys
@@ -104,6 +104,21 @@ def main() -> None:
     hashes_dict = {name: trust_keys[name][1] for name in trust_entries}
     hashes_json = json.dumps(hashes_dict)
 
+    # Generate internal service key (used by fl-server on the Central Hub)
+    internal_key: str | None = None
+    internal_key_hash: str | None = None
+    internal_key_generated = False
+    for line in lines:
+        if line.startswith("INTERNAL_SERVICE_KEY="):
+            existing = line.split("=", 1)[1]
+            if args.force or _is_placeholder(existing):
+                internal_key, internal_key_hash = generate_trust_key("FL_Server", output_dir=key_dir)
+                internal_key_generated = True
+            else:
+                internal_key = existing
+                internal_key_hash = hashlib.sha256(existing.encode()).hexdigest()
+            break
+
     # Rewrite lines
     new_lines: list[str] = []
     for line in lines:
@@ -113,17 +128,26 @@ def main() -> None:
             new_lines.append(f"PRIVATE_API_KEY_{trust_name}={trust_keys[trust_name][0]}")
         elif line.startswith("TRUST_API_KEY_HASHES="):
             new_lines.append(f"TRUST_API_KEY_HASHES={hashes_json}")
+        elif line.startswith("INTERNAL_SERVICE_KEY=") and internal_key is not None:
+            new_lines.append(f"INTERNAL_SERVICE_KEY={internal_key}")
+        elif line.startswith("INTERNAL_SERVICE_KEY_HASH=") and internal_key_hash is not None:
+            new_lines.append(f"INTERNAL_SERVICE_KEY_HASH={internal_key_hash}")
         else:
             new_lines.append(line)
 
     env_file.write_text("\n".join(new_lines) + "\n")
 
-    print(f"Updated {env_file.name}: {generated} generated, {skipped} skipped (already set).")
+    print(f"Updated {env_file.name}: {generated} trust keys generated, {skipped} skipped (already set).")
     for name in trust_entries:
         action = "generated" if args.force or _is_placeholder(trust_entries[name]) else "skipped"
         print(f"  {name}: {action}")
     if generated:
         print(f"  TRUST_API_KEY_HASHES updated with {len(trust_entries)} entries")
+    if internal_key_generated:
+        print("  INTERNAL_SERVICE_KEY: generated")
+        print("  INTERNAL_SERVICE_KEY_HASH: updated")
+    elif internal_key is not None:
+        print("  INTERNAL_SERVICE_KEY: skipped (already set)")
 
 
 if __name__ == "__main__":

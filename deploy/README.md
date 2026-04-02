@@ -140,3 +140,33 @@ aws cognito-idp admin-create-user \
 - [ ] Email templates render correctly in Gmail, Outlook, Apple Mail
 - [ ] Links in email templates resolve to correct environment subdomain (e.g., `https://flip-staging.example.com`)
 - [ ] SMS fallback messages deliver (if SMS is enabled in Cognito)
+
+## Service Authentication
+
+FLIP uses two separate authentication mechanisms for service-to-hub communication:
+
+### Trust API Keys (trust-api → flip-api)
+
+Each trust has a unique API key (`PRIVATE_API_KEY`) sent in the `PRIVATE_API_KEY_HEADER` header. The hub stores only 
+SHA-256 hashes of these keys in `TRUST_API_KEY_HASHES`. Used for task polling, cohort result submission, and heartbeat 
+endpoints.
+
+Generate keys with `make generate-dev-keys` (development) or via AWS Secrets Manager (production).
+
+### Internal Service Key (fl-server → flip-api)
+
+The fl-server on the Central Hub authenticates to flip-api using `INTERNAL_SERVICE_KEY` sent in the
+`INTERNAL_SERVICE_KEY_HEADER` header. The hub validates it against
+`INTERNAL_SERVICE_KEY_HASH`. Used for model status updates, training metrics, and training log endpoints.
+
+FL clients (trust side) **do not** have Central Hub API credentials. Only the fl-server communicates with flip-api.
+FL clients relay metrics and exceptions to the fl-server, which forwards them to the Central Hub.
+
+| Variable | Where used | Purpose |
+|---|---|---|
+| `PRIVATE_API_KEY_HEADER` | flip-api, trust-api | Header name for trust auth |
+| `PRIVATE_API_KEY_TRUST_<N>` | trust-api | Per-trust plaintext key |
+| `TRUST_API_KEY_HASHES` | flip-api | JSON dict of trust name → SHA-256 hash |
+| `INTERNAL_SERVICE_KEY_HEADER` | flip-api, fl-server | Header name for internal service auth |
+| `INTERNAL_SERVICE_KEY` | fl-server | Internal service plaintext key |
+| `INTERNAL_SERVICE_KEY_HASH` | flip-api | SHA-256 hash of internal service key |

@@ -15,7 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlmodel import Session
 
-from flip_api.auth.access_manager import authenticate_trust, verify_trust_identity
+from flip_api.auth.access_manager import authenticate_internal_service
 from flip_api.db.database import get_session
 from flip_api.domain.schemas.private import TrainingMetrics
 from flip_api.model_services.services.model_service import validate_trusts
@@ -37,17 +37,19 @@ def save_training_metrics_endpoint(
     training_metrics: TrainingMetrics,
     request: Request,
     db: Session = Depends(get_session),
-    authenticated_trust: str = Depends(authenticate_trust),
+    _: None = Depends(authenticate_internal_service),
 ) -> None:
     """
     Receives and saves training metrics for a given model ID and trust.
+
+    This endpoint is internal-only: it accepts requests from the fl-server on the
+    Central Hub (authenticated via INTERNAL_SERVICE_KEY_HEADER), not from trusts.
 
     Args:
         model_id (UUID): The unique identifier for the model.
         training_metrics (TrainingMetrics): The training metrics to be saved.
         request (Request): The FastAPI request object, used for logging and context.
         db (Session): Database session dependency.
-        authenticated_trust (str): Authenticated trust name (validated by dependency).
 
     Returns:
         Response: HTTP 204 No Content on success, or appropriate error response.
@@ -56,7 +58,6 @@ def save_training_metrics_endpoint(
         HTTPException: If the trust is not associated with the model.
         HTTPException: If an internal server error occurs during processing.
     """
-    verify_trust_identity(training_metrics.trust, authenticated_trust)
     endpoint_path = request.url.path
 
     logger.debug(
