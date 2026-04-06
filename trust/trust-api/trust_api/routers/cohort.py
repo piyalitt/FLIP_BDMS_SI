@@ -35,7 +35,8 @@ async def post_cohort_query(query_input: CohortQueryInput):
         query_input (trust_api.routers.schemas.CohortQueryInput): The input data for the cohort query.
 
     Returns:
-        dict: The JSON response from the remote /cohort endpoint.
+        None: This endpoint does not return a response body. Cohort results are forwarded
+        to the Central Hub via a separate HTTP call.
     """
     logger.debug(f"Received cohort query: {query_input.model_dump()}")
 
