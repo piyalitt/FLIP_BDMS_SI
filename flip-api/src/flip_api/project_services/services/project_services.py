@@ -298,7 +298,7 @@ def get_project_query(project_from_db: IProjectResponse) -> IProjectQuery | None
     if query:
         logger.debug(query)
 
-        if query.id and query.trusts_queried:
+        if query.id and query.trusts_queried is not None:
             return query
 
         logger.warning("Unable to parse query. Assuming there isn't one.")
