@@ -13,37 +13,30 @@
 name: Validate PR Source Branch
 
 on:
-    pull_request:
-        types: [opened, reopened, synchronize]
-        branches:
-            - main
-
-permissions:
-    pull-requests: write
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+    branches:
+      - main
 
 jobs:
-    validate-source-branch:
-        name: Ensure PR to main originates from develop
-        runs-on: ubuntu-latest
+  validate-source-branch:
+    name: Ensure PR to main originates from develop
+    runs-on: ubuntu-latest
 
-        steps:
-            - name: Check source branch
-              run: |
-                  SOURCE_BRANCH="${{ github.head_ref }}"
-                  TARGET_BRANCH="${{ github.base_ref }}"
+    steps:
+      - name: Check source branch
+        run: |
+          SOURCE_BRANCH="${{ github.head_ref }}"
+          TARGET_BRANCH="${{ github.base_ref }}"
 
-                  echo "PR Details:"
-                  echo "  Source branch: ${SOURCE_BRANCH}"
-                  echo "  Target branch: ${TARGET_BRANCH}"
+          echo "PR Details:"
+          echo "  Source branch: ${SOURCE_BRANCH}"
+          echo "  Target branch: ${TARGET_BRANCH}"
 
-                  if [ "${TARGET_BRANCH}" = "main" ]; then
-                    if [ "${SOURCE_BRANCH}" != "develop" ]; then
-                      echo "❌ VALIDATION FAILED"
-                      echo "PRs to 'main' must originate from 'develop' branch."
-                      echo "Current source branch: ${SOURCE_BRANCH}"
-                      exit 1
-                    fi
-                    echo "✅ VALIDATION PASSED: PR to main originates from develop"
-                  else
-                    echo "ℹ️  Not a PR to main; skipping branch source validation"
-                  fi
+          if [ "${SOURCE_BRANCH}" != "develop" ]; then
+            echo "❌ VALIDATION FAILED"
+            echo "PRs to 'main' must originate from 'develop' branch."
+            echo "Current source branch: ${SOURCE_BRANCH}"
+            exit 1
+          fi
+          echo "✅ VALIDATION PASSED: PR to main originates from develop"
