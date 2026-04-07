@@ -20,10 +20,12 @@ from sqlmodel import Session
 
 # Module to be tested
 from flip_api.auth.access_manager import (
+    _get_trust_api_key_hashes,
     authenticate_internal_service,
     authenticate_trust,
     can_modify_model,
     can_modify_project,
+    verify_trust_identity,
 )
 
 VALID_TEST_KEY = "test_secret_key_12345_valid"
@@ -280,3 +282,50 @@ class TestCanModifyModel:
             result = can_modify_model(user_id, model_id, db)
 
         assert result is False
+
+
+class TestVerifyTrustIdentity:
+    def test_matching_trust_names_succeeds(self):
+        """No exception when authenticated trust matches the URL trust name."""
+        verify_trust_identity("Trust_1", "Trust_1")
+
+    def test_mismatched_trust_names_raises_403(self):
+        """Should raise 403 when authenticated trust does not match the expected name."""
+        with pytest.raises(HTTPException) as exc_info:
+            verify_trust_identity("Trust_1", "Trust_2")
+        assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+        assert "Trust_2" in exc_info.value.detail
+        assert "Trust_1" in exc_info.value.detail
+
+
+class TestGetTrustApiKeyHashes:
+    def test_returns_hashes_from_settings(self):
+        """Should return hashes from TRUST_API_KEY_HASHES setting."""
+        expected = {"Trust_1": "abc123"}
+        mock = MagicMock()
+        mock.TRUST_API_KEY_HASHES = expected
+        with patch(PATCH_GET_SETTINGS, return_value=mock), patch(PATCH_HASH_CACHE, None):
+            result = _get_trust_api_key_hashes()
+        assert result == expected
+
+    def test_returns_empty_dict_when_no_hashes_in_dev(self):
+        """Should return empty dict when no hashes configured in non-production env."""
+        mock = MagicMock()
+        mock.TRUST_API_KEY_HASHES = {}
+        mock.ENV = "development"
+        with patch(PATCH_GET_SETTINGS, return_value=mock), patch(PATCH_HASH_CACHE, None):
+            result = _get_trust_api_key_hashes()
+        assert result == {}
+
+    def test_production_falls_back_to_secrets_manager(self):
+        """Should load hashes from AWS Secrets Manager when in production with no env hashes."""
+        mock = MagicMock()
+        mock.TRUST_API_KEY_HASHES = {}
+        mock.ENV = "production"
+        with (
+            patch(PATCH_GET_SETTINGS, return_value=mock),
+            patch(PATCH_HASH_CACHE, None),
+            patch("flip_api.utils.get_secrets.get_secret", return_value='{"Trust_1": "hash1"}'),
+        ):
+            result = _get_trust_api_key_hashes()
+        assert result == {"Trust_1": "hash1"}

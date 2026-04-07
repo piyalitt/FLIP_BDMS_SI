@@ -50,3 +50,27 @@ class TestGenerateTrustKey:
 
         assert nested_dir.exists()
         assert (nested_dir / "Trust_Nested.key").read_text() == key
+
+
+class TestGenerateTrustKeyMain:
+    def test_main_prints_key_info(self, tmp_path, capsys):
+        """main() should print the trust name, key, hash, and key file path."""
+        from unittest.mock import patch
+
+        with (
+            patch("sys.argv", ["generate_trust_key", "--trust-name", "Trust_CLI"]),
+            patch("flip_api.scripts.generate_trust_key.Path.resolve", return_value=tmp_path / "fake"),
+            patch(
+                "flip_api.scripts.generate_trust_key.generate_trust_key",
+                return_value=("test-key-abc", "test-hash-def"),
+            ) as mock_gen,
+        ):
+            from flip_api.scripts.generate_trust_key import main
+
+            main()
+
+        mock_gen.assert_called_once_with("Trust_CLI")
+        captured = capsys.readouterr()
+        assert "Trust_CLI" in captured.out
+        assert "test-key-abc" in captured.out
+        assert "test-hash-def" in captured.out

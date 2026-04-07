@@ -166,3 +166,92 @@ class TestGenerateTrustApiKeys:
         new_key = trust_1_line.split("=", 1)[1]
         assert new_key != existing_key
         assert "<" not in new_key
+
+    def test_generates_internal_service_key_placeholder(self, tmp_path):
+        """main() should generate INTERNAL_SERVICE_KEY when it has a placeholder value."""
+        env_content = (
+            "PRIVATE_API_KEY_TRUST_1=<placeholder>\n"
+            'TRUST_API_KEY_HASHES={"TRUST_1": "<hash>"}\n'
+            "INTERNAL_SERVICE_KEY=<placeholder>\n"
+            "INTERNAL_SERVICE_KEY_HASH=<placeholder>\n"
+        )
+        env_file = tmp_path / ".env.test"
+        env_file.write_text(env_content)
+
+        with (
+            patch("flip_api.scripts.generate_trust_api_keys.REPO_ROOT", tmp_path),
+            patch("sys.argv", ["generate_trust_api_keys", "--env-file", str(env_file)]),
+        ):
+            main()
+
+        content = env_file.read_text()
+        lines = content.splitlines()
+
+        internal_key_line = [line for line in lines if line.startswith("INTERNAL_SERVICE_KEY=")][0]
+        internal_key = internal_key_line.split("=", 1)[1]
+        assert "<" not in internal_key
+        assert len(internal_key) > 0
+
+        internal_hash_line = [line for line in lines if line.startswith("INTERNAL_SERVICE_KEY_HASH=")][0]
+        internal_hash = internal_hash_line.split("=", 1)[1]
+        assert internal_hash == hashlib.sha256(internal_key.encode()).hexdigest()
+
+    def test_skips_existing_internal_service_key(self, tmp_path, capsys):
+        """main() should preserve INTERNAL_SERVICE_KEY when it already has a real value."""
+        existing_internal = "existing_internal_key_abc123"
+        env_content = (
+            "PRIVATE_API_KEY_TRUST_1=<placeholder>\n"
+            'TRUST_API_KEY_HASHES={"TRUST_1": "<hash>"}\n'
+            f"INTERNAL_SERVICE_KEY={existing_internal}\n"
+            "INTERNAL_SERVICE_KEY_HASH=<old-hash>\n"
+        )
+        env_file = tmp_path / ".env.test"
+        env_file.write_text(env_content)
+
+        with (
+            patch("flip_api.scripts.generate_trust_api_keys.REPO_ROOT", tmp_path),
+            patch("sys.argv", ["generate_trust_api_keys", "--env-file", str(env_file)]),
+        ):
+            main()
+
+        content = env_file.read_text()
+        lines = content.splitlines()
+
+        internal_key_line = [line for line in lines if line.startswith("INTERNAL_SERVICE_KEY=")][0]
+        assert internal_key_line == f"INTERNAL_SERVICE_KEY={existing_internal}"
+
+        internal_hash_line = [line for line in lines if line.startswith("INTERNAL_SERVICE_KEY_HASH=")][0]
+        expected_hash = hashlib.sha256(existing_internal.encode()).hexdigest()
+        assert internal_hash_line == f"INTERNAL_SERVICE_KEY_HASH={expected_hash}"
+
+        captured = capsys.readouterr()
+        assert "INTERNAL_SERVICE_KEY: skipped (already set)" in captured.out
+
+    def test_force_regenerates_internal_service_key(self, tmp_path, capsys):
+        """--force should regenerate INTERNAL_SERVICE_KEY even when it has a real value."""
+        existing_internal = "existing_internal_key_abc123"
+        env_content = (
+            "PRIVATE_API_KEY_TRUST_1=<placeholder>\n"
+            'TRUST_API_KEY_HASHES={"TRUST_1": "<hash>"}\n'
+            f"INTERNAL_SERVICE_KEY={existing_internal}\n"
+            "INTERNAL_SERVICE_KEY_HASH=<old-hash>\n"
+        )
+        env_file = tmp_path / ".env.test"
+        env_file.write_text(env_content)
+
+        with (
+            patch("flip_api.scripts.generate_trust_api_keys.REPO_ROOT", tmp_path),
+            patch("sys.argv", ["generate_trust_api_keys", "--env-file", str(env_file), "--force"]),
+        ):
+            main()
+
+        content = env_file.read_text()
+        lines = content.splitlines()
+
+        internal_key_line = [line for line in lines if line.startswith("INTERNAL_SERVICE_KEY=")][0]
+        new_internal = internal_key_line.split("=", 1)[1]
+        assert new_internal != existing_internal
+
+        captured = capsys.readouterr()
+        assert "INTERNAL_SERVICE_KEY: generated" in captured.out
+        assert "INTERNAL_SERVICE_KEY_HASH: updated" in captured.out
