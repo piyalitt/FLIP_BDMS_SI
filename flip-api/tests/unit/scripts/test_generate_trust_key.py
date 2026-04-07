@@ -11,6 +11,7 @@
 #
 
 import hashlib
+from unittest.mock import patch
 
 from flip_api.scripts.generate_trust_key import generate_trust_key
 
@@ -51,11 +52,30 @@ class TestGenerateTrustKey:
         assert nested_dir.exists()
         assert (nested_dir / "Trust_Nested.key").read_text() == key
 
+    def test_default_output_dir_when_none(self, tmp_path):
+        """generate_trust_key should use trust/trust-keys/ relative to repo root when output_dir is None."""
+        # Create a fake __file__ path so that parents[4] resolves to tmp_path
+        fake_file = tmp_path / "a" / "b" / "c" / "d" / "generate_trust_key.py"
+        fake_file.parent.mkdir(parents=True, exist_ok=True)
+        fake_file.touch()
+
+        import flip_api.scripts.generate_trust_key as mod
+
+        original_file = mod.__file__
+        try:
+            mod.__file__ = str(fake_file)
+            key, _ = generate_trust_key("Trust_Default", output_dir=None)
+
+            expected_dir = tmp_path / "trust" / "trust-keys"
+            assert expected_dir.exists()
+            assert (expected_dir / "Trust_Default.key").read_text() == key
+        finally:
+            mod.__file__ = original_file
+
 
 class TestGenerateTrustKeyMain:
     def test_main_prints_key_info(self, tmp_path, capsys):
         """main() should print the trust name, key, hash, and key file path."""
-        from unittest.mock import patch
 
         with (
             patch("sys.argv", ["generate_trust_key", "--trust-name", "Trust_CLI"]),
