@@ -210,6 +210,7 @@ resource "aws_iam_instance_profile" "ec2_profile" {
 }
 
 # Add permissions to access secrets
+# TODO: Replace this inline policy with a reusable managed IAM policy for read-only Secrets Manager access
 resource "aws_iam_role_policy" "ec2_secret" {
   name = "secret-read"
   role = module.ec2_role.iam_role_name
