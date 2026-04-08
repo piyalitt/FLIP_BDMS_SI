@@ -116,7 +116,7 @@ up-trusts: create-networks
 	@echo "✅ Trust services started successfully!"
 
 # Uses --pull always to ensure the latest FL images and 'stag'/'prod' version are used
-up-centralhub-ec2: create-networks
+up-centralhub-ec2: create-networks-centralhub
 	@echo "Hey! PROD="$(PROD)
 	@echo "Hey! UI_PORT="$(UI_PORT)
 	@echo "🚢 Starting central hub API services..."
@@ -141,7 +141,7 @@ up-local-trust-stag: create-networks
 	$(MAKE) -e DEBUG=$(DEBUG) -C trust up-local-trust-stag PROD=stag
 	@echo "✅ Local Trust services started successfully!"
 
-central-hub: create-networks
+central-hub: create-networks-centralhub
 	$(MAKE) -C flip-api up
 
 # Stop all containers
@@ -188,8 +188,10 @@ debug-off-all:
 	DEBUG=false $(DEBUG_OVERRIDE_COMPOSE_COMMAND) up --remove-orphans -d
 	$(MAKE) -C trust debug-off
 
-create-networks:
+create-networks-centralhub:
 	@{ docker network inspect central-hub-network >/dev/null 2>&1 || docker network create --driver bridge central-hub-network || true; }
+
+create-networks: create-networks-centralhub
 	$(MAKE) -C trust create-networks
 
 remove-networks:
