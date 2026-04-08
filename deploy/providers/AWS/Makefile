@@ -239,6 +239,10 @@ deploy-centralhub: ## Deploy FLIP containers to flip context with environment fr
 	@docker context use flip
 	@echo "🐳 Initialising Docker Swarm on CH EC2 (required for overlay networks)..."
 	@docker swarm init || echo "   Swarm already initialized"
+	@echo "🧹 Stopping old containers and removing unused images to free disk space..."
+	@docker stop $$(docker ps -aq) 2>/dev/null || true
+	@docker rm $$(docker ps -aq) 2>/dev/null || true
+	@docker image prune -af
 	@echo "🐳 Deploying containers..."
 	@$(MAKE) -C ../../../ up-centralhub-ec2 PROD=${PROD}
 	@echo "✅ Deployment complete!"
@@ -283,6 +287,10 @@ deploy-trust: update-env ## Deploy trust relationships after central hub is depl
 	docker swarm init || echo "   Swarm already initialized"
 	@echo "🔧 Creating Docker networks on Trust EC2..."
 	$(MAKE) -C ../../../ create-networks
+	@echo "🧹 Stopping old containers and removing unused images to free disk space..."
+	@docker stop $$(docker ps -aq) 2>/dev/null || true
+	@docker rm $$(docker ps -aq) 2>/dev/null || true
+	@docker image prune -af
 	@echo "🚀 Deploying Trust services..."
 	$(MAKE) -C ../../../ up-trust-ec2 PROD=${PROD}
 	@echo "✅ Trust deployment complete!"
