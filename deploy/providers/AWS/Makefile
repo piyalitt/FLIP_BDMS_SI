@@ -245,8 +245,8 @@ deploy-centralhub: ## Deploy FLIP containers to flip context with environment fr
 
 # Default SSH user for on-premises trust hosts (override with LOCAL_TRUST_SSH_USER=<user>)
 LOCAL_TRUST_SSH_USER ?= ubuntu
-# Trust kit number for the local (on-prem) trust FL client (default 2; EC2 trust uses 1)
-LOCAL_TRUST_NUMBER ?= 2
+# Trust kit for the local (on-prem) trust FL client (default Trust_2; EC2 trust uses Trust_1)
+LOCAL_TRUST_NAME ?= Trust_2
 
 .PHONY: deploy-trust
 deploy-trust: update-env ## Deploy trust relationships after central hub is deployed
@@ -334,28 +334,28 @@ add-local-trust: ## Provision an on-prem Trust host and register it with the Cen
 		PLAY_RC=$$?; \
 		exit $$PLAY_RC; \
 	fi
-	@echo "📦 Downloading Trust_$(LOCAL_TRUST_NUMBER) FL participant kit from S3..."
-	@LOCAL_TRUST_KIT_DIR=/tmp/Trust_$(LOCAL_TRUST_NUMBER)_kit && \
+	@echo "📦 Downloading $(LOCAL_TRUST_NAME) FL participant kit from S3..."
+	@LOCAL_TRUST_KIT_DIR=/tmp/$(LOCAL_TRUST_NAME)_kit && \
 	  rm -rf $$LOCAL_TRUST_KIT_DIR && mkdir -p $$LOCAL_TRUST_KIT_DIR && \
 	  AWS_PROFILE=$(AWS_PROFILE) aws s3 sync \
-	    s3://$(AICENTRE_BUCKET_NAME)/fl-flare-participant-kits/$(FL_KIT_DATE)/net-1/services/Trust_$(LOCAL_TRUST_NUMBER)/ \
+	    s3://$(AICENTRE_BUCKET_NAME)/fl-flare-participant-kits/$(FL_KIT_DATE)/net-1/services/$(LOCAL_TRUST_NAME)/ \
 	    $$LOCAL_TRUST_KIT_DIR && \
 	  if [ -n "$(LOCAL_TRUST_SSH_KEY)" ]; then \
 	    ssh -i $(LOCAL_TRUST_SSH_KEY) $(LOCAL_TRUST_SSH_USER)@$(LOCAL_TRUST_IP) \
-	      "mkdir -p /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/startup /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/local /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/transfer" && \
+	      "mkdir -p /opt/flip/services/Trust_$(LOCAL_TRUST_NAME)/startup /opt/flip/services/$(LOCAL_TRUST_NAME)/local /opt/flip/services/$(LOCAL_TRUST_NAME)/transfer" && \
 	    rsync -av --delete -e "ssh -i $(LOCAL_TRUST_SSH_KEY)" \
-	      $$LOCAL_TRUST_KIT_DIR/startup/ $(LOCAL_TRUST_SSH_USER)@$(LOCAL_TRUST_IP):/opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/startup/ && \
+	      $$LOCAL_TRUST_KIT_DIR/startup/ $(LOCAL_TRUST_SSH_USER)@$(LOCAL_TRUST_IP):/opt/flip/services/$(LOCAL_TRUST_NAME)/startup/ && \
 	    rsync -av --delete -e "ssh -i $(LOCAL_TRUST_SSH_KEY)" \
-	      $$LOCAL_TRUST_KIT_DIR/local/ $(LOCAL_TRUST_SSH_USER)@$(LOCAL_TRUST_IP):/opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/local/; \
+	      $$LOCAL_TRUST_KIT_DIR/local/ $(LOCAL_TRUST_SSH_USER)@$(LOCAL_TRUST_IP):/opt/flip/services/$(LOCAL_TRUST_NAME)/local/; \
 	  else \
 	    echo ""; \
-	    echo "  # 3. Deploy the Trust_$(LOCAL_TRUST_NUMBER) FL participant kit (kit staged at $$LOCAL_TRUST_KIT_DIR):"; \
-	    echo "  sudo mkdir -p /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/startup /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/local /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/transfer"; \
-	    echo "  sudo rsync -av --delete $$LOCAL_TRUST_KIT_DIR/startup/ /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/startup/"; \
-	    echo "  sudo rsync -av --delete $$LOCAL_TRUST_KIT_DIR/local/ /opt/flip/services/Trust_$(LOCAL_TRUST_NUMBER)/local/"; \
+	    echo "  # 3. Deploy the $(LOCAL_TRUST_NAME) FL participant kit (kit staged at $$LOCAL_TRUST_KIT_DIR):"; \
+	    echo "  sudo mkdir -p /opt/flip/services/$(LOCAL_TRUST_NAME)/startup /opt/flip/services/$(LOCAL_TRUST_NAME)/local /opt/flip/services/$(LOCAL_TRUST_NAME)/transfer"; \
+	    echo "  sudo rsync -av --delete $$LOCAL_TRUST_KIT_DIR/startup/ /opt/flip/services/$(LOCAL_TRUST_NAME)/startup/"; \
+	    echo "  sudo rsync -av --delete $$LOCAL_TRUST_KIT_DIR/local/ /opt/flip/services/$(LOCAL_TRUST_NAME)/local/"; \
 	  fi && \
 	  rm -rf $$LOCAL_TRUST_KIT_DIR && \
-	  echo "✅ Trust_$(LOCAL_TRUST_NUMBER) FL kit deployed"
+	  echo "✅ $(LOCAL_TRUST_NAME) FL kit deployed"
 	@echo "🔐 Updating AWS security group rules..."
 	@TF_VAR_local_trust_public_ip=$(LOCAL_TRUST_IP) terraform plan \
 		-target=aws_security_group_rule.local_trust_fl_server \
@@ -459,7 +459,7 @@ full-deploy-stag: ## Full staging deployment with on-prem local trust (requires 
 	## 5. ssh-config + ansible-init: configure SSH aliases, provision EC2s with Docker + FL kit
 	## 6. deploy-centralhub + deploy-trust: deploy Central Hub and cloud Trust containers
 	## 7. add-local-trust LOCAL_TRUST_IP=<ip>: configure UFW,
-	##    deploy local Trust_$(LOCAL_TRUST_NUMBER) FL kit, and update AWS security groups
+	##    deploy local $(LOCAL_TRUST_NAME) FL kit, and update AWS security groups
 	## 8. status: verify all services healthy
 	## NOTE: After this completes you must manually:
 	##   - Start local trust stack: cd ../../../trust && env PROD=stag make up-local-trust-stag
@@ -478,7 +478,7 @@ full-deploy-stag-hybrid: ## Full staging hybrid deployment including local trust
 	else \
 		LOCAL_TRUST_IP="$(LOCAL_TRUST_IP)"; \
 	fi && \
-	$(MAKE) full-deploy-stag LOCAL_TRUST_IP=$$LOCAL_TRUST_IP LOCAL_TRUST_SSH_KEY="$(LOCAL_TRUST_SSH_KEY)" LOCAL_TRUST_SSH_USER="$(LOCAL_TRUST_SSH_USER)" LOCAL_TRUST_NUMBER="$(LOCAL_TRUST_NUMBER)" && \
+	$(MAKE) full-deploy-stag LOCAL_TRUST_IP=$$LOCAL_TRUST_IP LOCAL_TRUST_SSH_KEY="$(LOCAL_TRUST_SSH_KEY)" LOCAL_TRUST_SSH_USER="$(LOCAL_TRUST_SSH_USER)" LOCAL_TRUST_NAME="$(LOCAL_TRUST_NAME)" && \
 	$(MAKE) deploy-centralhub PROD=stag && \
 	echo "" && \
 	echo "✅ Hybrid staging deployment complete." && \

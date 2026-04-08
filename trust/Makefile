@@ -64,7 +64,6 @@ PULL_ALWAYS_FLAG=
 endif
 
 TRUST_1_VARS = \
-	TRUST_NUMBER=1 \
 	BASE_IMAGES_DOWNLOAD_DIR=${BASE_IMAGES_DOWNLOAD_DIR_TRUST1} \
 	OMOP_DB_PORT=${OMOP_DB_PORT_TRUST_1} \
 	PACS_UI_PORT=${PACS_UI_PORT_TRUST_1} \
@@ -82,7 +81,6 @@ TRUST_1_VARS = \
 	TRUST_NAME=Trust_1 \
 	PRIVATE_API_KEY=$(shell cat trust-keys/Trust_1.key 2>/dev/null)
 TRUST_2_VARS = \
-	TRUST_NUMBER=2 \
 	BASE_IMAGES_DOWNLOAD_DIR=${BASE_IMAGES_DOWNLOAD_DIR_TRUST2} \
 	OMOP_DB_PORT=${OMOP_DB_PORT_TRUST_2} \
 	PACS_UI_PORT=${PACS_UI_PORT_TRUST_2} \
@@ -131,18 +129,16 @@ down-trust-1-ec2:
 	@echo "🛑 Stopping Trust 1 services..."
 	$(TRUST_1_VARS) ${DOCKER_COMPOSE_CMD} -p ${trust1} down --remove-orphans
 
-# LOCAL_TRUST_NUMBER controls which NVFlare participant kit the FL client mounts.
+# LOCAL_TRUST_NAME controls which NVFlare participant kit the FL client mounts.
 # Local (on-prem) trusts use Trust_2 kit; EC2 trusts use Trust_1 kit (default).
-LOCAL_TRUST_NUMBER ?= 2
-
 up-local-trust-stag:
-	## Starts Trust 1 compose stack with TRUST_NUMBER overridden for the local trust FL kit.
+	## Starts Trust 1 compose stack 
 	## Uses project name 'trust1' so trust-api, imaging-api, etc. keep their normal names,
-	## but overrides TRUST_NUMBER so the FL client mounts Trust_$(LOCAL_TRUST_NUMBER)/ kit dir.
-	@echo "🚢 Starting local Trust services (TRUST_NUMBER=$(LOCAL_TRUST_NUMBER))..."
+	## but overrides TRUST_NAME so the FL client mounts Trust_2/ kit dir.
+	@echo "🚢 Starting local Trust services (TRUST_NAME=$(LOCAL_TRUST_NAME))..."
 	@echo "⚙️ Using environment file ${MAIN_ENV_FILE}"
 	@echo "🧠 FL_BACKEND=$(FL_BACKEND) ($(FL_BACKEND_COMPOSE_FILE))"
-	$(TRUST_1_VARS) TRUST_NUMBER=$(LOCAL_TRUST_NUMBER) DEBUG=$(DEBUG) \
+	$(TRUST_1_VARS) TRUST_NAME=$(LOCAL_TRUST_NAME) DEBUG=$(DEBUG) \
 		$(DOCKER_COMPOSE_CMD) -p $(trust1) up -d --pull always
 
 # Uses --pull always to ensure the latest FL images and omop-db image are used
