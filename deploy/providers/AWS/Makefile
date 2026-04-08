@@ -237,8 +237,6 @@ deploy-centralhub: ## Deploy FLIP containers to flip context with environment fr
 	@# Switch to flip context
 	@echo "🔄 Switching to flip Docker context..."
 	@docker context use flip
-	@echo "🐳 Initialising Docker Swarm on CH EC2 (required for overlay networks)..."
-	@docker swarm init || echo "   Swarm already initialized"
 	@echo "🧹 Stopping old containers and removing unused images to free disk space..."
 	@docker stop $$(docker ps -aq) 2>/dev/null || true
 	@docker rm $$(docker ps -aq) 2>/dev/null || true
