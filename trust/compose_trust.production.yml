@@ -27,7 +27,7 @@ services:
       POSTGRES_PASSWORD: ${OMOP_POSTGRES_PASSWORD}
       POSTGRES_DB: ${OMOP_POSTGRES_DB}
     volumes:
-      - /opt/flip/volumes/${TRUST_NAME}/db_data:/var/lib/postgresql/data
+      - /opt/flip/omop/db_data:/var/lib/postgresql/data
 
   orthanc:
     image: ghcr.io/londonaicentre/orthanc:${DOCKER_TAG}

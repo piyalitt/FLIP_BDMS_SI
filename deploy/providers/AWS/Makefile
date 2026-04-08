@@ -208,7 +208,7 @@ ansible-init: ## Initialize Ansible configuration on EC2 instances (if failed tr
 	@test -n "$(FL_KIT_DATE)" || (echo "FL_KIT_DATE must be set in $(MAIN_ENV_FILE)"; exit 1)
 	@uv sync
 	@uv run ansible-galaxy install -r requirements.yml
-	@uv run ansible-playbook site.yml -e flip_aicentre_bucket=$(AICENTRE_BUCKET_NAME) -e fl_kit_date=$(FL_KIT_DATE)
+	@uv run ansible-playbook site.yml -e flip_aicentre_bucket=$(AICENTRE_BUCKET_NAME) -e fl_kit_date=$(FL_KIT_DATE) -e pgdata_archive=trust1_pgdata_20260106.tar.gz
 
 .PHONY: deploy-centralhub
 deploy-centralhub: ## Deploy FLIP containers to flip context with environment from Terraform
