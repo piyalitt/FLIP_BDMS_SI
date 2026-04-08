@@ -14,11 +14,15 @@
 
 The plaintext key is saved to ``deploy/keys/internal_service.key`` and the
 SHA-256 hash is written into ``INTERNAL_SERVICE_KEY_HASH`` in the env file.
-A new key is generated on every invocation (no skip logic).
+Existing keys are preserved unless ``--force`` is used.
+
+At runtime, fl-server reads the plaintext key from the key file (injected by
+the Makefile), while flip-api reads the hash from the environment.
 
 Usage:
     make generate-internal-service-key
     make generate-internal-service-key ENV_FILE=.env.stag
+    make generate-internal-service-key FORCE=1
 """
 
 import argparse
@@ -43,6 +47,11 @@ def main() -> None:
         default=REPO_ROOT / ".env.development",
         help="Path to the environment file to update (default: .env.development)",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenerate the key even if it already exists.",
+    )
     args = parser.parse_args()
     env_file: Path = args.env_file
 
@@ -50,23 +59,26 @@ def main() -> None:
         print(f"Error: {env_file} not found.")
         sys.exit(1)
 
+    key_dir = REPO_ROOT / "deploy" / "keys"
+    key_dir.mkdir(parents=True, exist_ok=True)
+    key_file = key_dir / "internal_service.key"
+
+    if key_file.exists() and not args.force:
+        print(f"Key already exists: {key_file} (use --force to regenerate)")
+        return
+
     # Generate key
     key = secrets.token_urlsafe(32)
     key_hash = hashlib.sha256(key.encode()).hexdigest()
 
     # Save plaintext to .key file (Central Hub scope, not trust-keys)
-    key_dir = REPO_ROOT / "deploy" / "keys"
-    key_dir.mkdir(parents=True, exist_ok=True)
-    key_file = key_dir / "internal_service.key"
     key_file.write_text(key)
 
-    # Update env file
+    # Update INTERNAL_SERVICE_KEY_HASH in env file
     lines = env_file.read_text().splitlines()
     new_lines: list[str] = []
     for line in lines:
-        if line.startswith("INTERNAL_SERVICE_KEY="):
-            new_lines.append(f"INTERNAL_SERVICE_KEY={key}")
-        elif line.startswith("INTERNAL_SERVICE_KEY_HASH="):
+        if line.startswith("INTERNAL_SERVICE_KEY_HASH="):
             new_lines.append(f"INTERNAL_SERVICE_KEY_HASH={key_hash}")
         else:
             new_lines.append(line)
@@ -74,7 +86,7 @@ def main() -> None:
 
     print("Generated internal service key:")
     print(f"  Key saved: {key_file}")
-    print(f"  INTERNAL_SERVICE_KEY and INTERNAL_SERVICE_KEY_HASH updated in {env_file.name}")
+    print(f"  INTERNAL_SERVICE_KEY_HASH updated in {env_file.name}")
 
 
 if __name__ == "__main__":
