@@ -431,7 +431,7 @@ help: ## Show this help message
 .PHONY: generate-keys
 generate-keys: ## Generate trust API keys for trusts that still have placeholder values
 	@echo "🔑 Generating trust API keys (skipping already-generated)..."
-	@$(MAKE) -C ../../../flip-api generate-trust-api-keys ENV_FILE=$(MAIN_ENV_FILE) $(if $(FORCE),FORCE=true)
+	@$(MAKE) -C ../../../flip-api generate-trust-api-keys ENV_FILE=$(abspath $(MAIN_ENV_FILE)) $(if $(FORCE),FORCE=true)
 
 .PHONY: full-deploy
 full-deploy: ## Full AWS deployment: provision infrastructure, deploy cloud Trust + Central Hub
