@@ -31,27 +31,8 @@ $(info Using MAIN_ENV_FILE: $(MAIN_ENV_FILE))
 # replace environment variables by the values from the .env files
 ifneq ("$(wildcard $(MAIN_ENV_FILE))","")
 include $(MAIN_ENV_FILE)
-# Export all variables except DOCKER_TAG (which we'll set dynamically below)
-# export $(shell sed 's/=.*//' $(MAIN_ENV_FILE) | grep -v '^DOCKER_TAG$$')
-# NOTE The above no longer works as CICD tags are not based on PR numbers anymore since github actions are run manually.
 export $(shell sed 's/=.*//' $(MAIN_ENV_FILE))
 endif
-
-# Override DOCKER_TAG with PR number if available (uses GitHub CLI)
-# Falls back to "stag" if no PR is found or gh CLI is not available
-# Using 'override' to ensure this takes precedence over the value from .env files
-ifeq ($(PROD),true)
-override DOCKER_TAG := prod
-else ifeq ($(PROD),stag)
-# Use branch number tag if on a feature branch (e.g. 157 for 157-feature-...), otherwise fall back to "stag"
-override DOCKER_TAG := $(shell git rev-parse --abbrev-ref HEAD | grep -oE '^[0-9]+' || echo "stag")
-else
-override DOCKER_TAG := $(shell gh pr view --json number -q '"pr-" + (.number | tostring)' 2>/dev/null || echo "stag")
-endif
-export DOCKER_TAG
-# NOTE The above no longer works as CICD tags are not based on PR numbers anymore since github actions are run manually.
-# override DOCKER_TAG := $(shell gh pr view --json number -q '"pr-" + (.number | tostring)' 2>/dev/null || echo "stag")
-# export DOCKER_TAG
 
 # ---- FL backend selection (flower | nvflare) ----
 FL_BACKEND ?= flower
