@@ -17,6 +17,10 @@ permissions:
 
 on:
   pull_request:
+    # Note: Do NOT add a `branches` filter here (e.g. `branches: [main]`).
+    # A branches filter would prevent the workflow from re-running when the
+    # PR target is changed away from main, leaving the old failure stuck.
+    # Instead, the target branch check is done at runtime in the step below.
     types: [opened, reopened, synchronize, edited]
 
 jobs:
