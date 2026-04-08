@@ -20,6 +20,7 @@ from sqlmodel import Session
 
 # Module to be tested
 from flip_api.auth.access_manager import (
+    _get_internal_service_key_hash,
     _get_trust_api_key_hashes,
     authenticate_internal_service,
     authenticate_trust,
@@ -43,6 +44,7 @@ PATCH_GET_SETTINGS = "flip_api.auth.access_manager.get_settings"
 
 PATCH_HASH_CACHE = "flip_api.auth.access_manager._trust_api_key_hashes_cache"
 PATCH_INTERNAL_KEY_HASH = "flip_api.auth.access_manager._get_internal_service_key_hash"
+PATCH_INTERNAL_KEY_HASH_CACHE = "flip_api.auth.access_manager._internal_service_key_hash_cache"
 
 
 @pytest.fixture
@@ -315,3 +317,33 @@ class TestGetTrustApiKeyHashes:
         ):
             result = _get_trust_api_key_hashes()
         assert result == {"Trust_1": "hash1"}
+
+
+class TestGetInternalServiceKeyHash:
+    def test_dev_returns_hash_from_settings(self):
+        """In dev, should return hash from INTERNAL_SERVICE_KEY_HASH setting."""
+        mock = MagicMock()
+        mock.ENV = "development"
+        mock.INTERNAL_SERVICE_KEY_HASH = INTERNAL_SERVICE_KEY_HASH
+        with patch(PATCH_GET_SETTINGS, return_value=mock), patch(PATCH_INTERNAL_KEY_HASH_CACHE, None):
+            result = _get_internal_service_key_hash()
+        assert result == INTERNAL_SERVICE_KEY_HASH
+
+    def test_production_retrieves_from_secrets_manager(self):
+        """In production, should load hash from AWS Secrets Manager."""
+        mock = MagicMock()
+        mock.ENV = "production"
+        with (
+            patch(PATCH_GET_SETTINGS, return_value=mock),
+            patch(PATCH_INTERNAL_KEY_HASH_CACHE, None),
+            patch("flip_api.auth.access_manager.get_secret", return_value="abc123hash"),
+        ):
+            result = _get_internal_service_key_hash()
+        assert result == "abc123hash"
+
+    def test_cached_value_is_returned(self):
+        """When cache is already populated, should return cached value without calling get_settings."""
+        with patch(PATCH_INTERNAL_KEY_HASH_CACHE, "cached_hash"), patch(PATCH_GET_SETTINGS) as mock_settings:
+            result = _get_internal_service_key_hash()
+        assert result == "cached_hash"
+        mock_settings.assert_not_called()

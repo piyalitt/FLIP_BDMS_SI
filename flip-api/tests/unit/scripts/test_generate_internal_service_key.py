@@ -110,3 +110,11 @@ class TestGenerateInternalServiceKey:
             main()
 
         assert list(tmp_path.rglob("*.key")) == []
+
+    def test_exits_when_env_file_missing(self, tmp_path: Path) -> None:
+        """Should exit with code 1 when env file does not exist."""
+        missing_file = tmp_path / ".env.nonexistent"
+        with patch("sys.argv", ["prog", "--env-file", str(missing_file)]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+        assert exc_info.value.code == 1
