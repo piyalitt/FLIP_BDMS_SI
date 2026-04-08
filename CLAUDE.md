@@ -227,7 +227,7 @@ When in doubt, update the docs. Outdated documentation is worse than no document
 - `FL_BACKEND` — `flower` (default) or `nvflare`
 - `PROD` — `true` (production), `stag` (staging), unset (development)
 - `AES_KEY_BASE64` — encryption key for trust communication
-- `PRIVATE_API_KEY` — per-trust API key for trust-to-hub auth (each trust gets a unique key)
+- `TRUST_API_KEYS` — JSON dict of per-trust plaintext API keys for trust-to-hub auth
 - `TRUST_API_KEY_HASHES` — hub-side JSON dict mapping trust names to SHA-256 hashes of their API keys
 - `INTERNAL_SERVICE_KEY_HEADER` — HTTP header name for internal service auth
 - `INTERNAL_SERVICE_KEY` — internal service key for fl-server-to-hub auth (Central Hub only)
@@ -355,7 +355,7 @@ When making infrastructure or deployment changes, **always think through both en
 3. **FL backend variants** — update both `flower` and `nvflare` compose files if adding services or ports.
 4. **Environment variables** — add to `.env.development.example` and document in `deploy/README.md`. Production uses AWS Secrets Manager instead of `.env` files, so also update `deploy/providers/AWS/services.tf` (the `FLIP_API` secret) if the variable is needed at runtime.
 5. **Terraform variables** — update `variables.tf` with descriptions and defaults; keep `main.tf` and `services.tf` in sync.
-6. **Ansible provisioning** — if production EC2 instances need new directories, files, packages, or data, add tasks to `deploy/providers/AWS/site.yml` (cloud) and `deploy/providers/local/site_local_trust.yml` (on-prem). Key host paths: `/opt/flip/` (app root), `/opt/flip/data/` (FL data), `/opt/flip/services/` (FL participant kits), `/opt/flip/omop/` (OMOP database data), `/opt/flip/volumes/` (observability data — Loki, Grafana).
+6. **Ansible provisioning** — if production EC2 instances need new directories, files, packages, or data, add tasks to `deploy/providers/AWS/site.yml` (cloud) and `deploy/providers/local/site_local_trust.yml` (on-prem). Key host paths: `/opt/flip/` (app root), `/opt/flip/data/` (FL data/images), `/opt/flip/services/` (FL participant kits), `/opt/flip/omop/` (OMOP database data), `/opt/flip/volumes/` (observability data — Loki, Grafana).
 7. **Trust changes** — update both cloud (`deploy/providers/AWS/`) and on-prem (`deploy/providers/local/`) Ansible playbooks so both deployment models stay consistent.
 
 ## Security Rules

@@ -147,11 +147,11 @@ FLIP uses two separate authentication mechanisms for service-to-hub communicatio
 
 ### Trust API Keys (trust-api → flip-api)
 
-Each trust has a unique API key (`PRIVATE_API_KEY`) sent in the `PRIVATE_API_KEY_HEADER` header. The hub stores only 
-SHA-256 hashes of these keys in `TRUST_API_KEY_HASHES`. Used for task polling, cohort result submission, and heartbeat 
-endpoints.
+Each trust has a unique API key stored in the `TRUST_API_KEYS` JSON dict and sent in the `TRUST_API_KEY_HEADER` header.
+The hub stores only SHA-256 hashes of these keys in `TRUST_API_KEY_HASHES`. Used for task polling, cohort result
+submission, and heartbeat endpoints.
 
-Generate keys with `make generate-dev-keys` (development) or via AWS Secrets Manager (production).
+Generate keys with `make generate-trust-api-keys` and `make generate-internal-service-key`.
 
 ### Internal Service Key (fl-server → flip-api)
 
@@ -164,8 +164,8 @@ FL clients relay metrics and exceptions to the fl-server, which forwards them to
 
 | Variable | Where used | Purpose |
 |---|---|---|
-| `PRIVATE_API_KEY_HEADER` | flip-api, trust-api | Header name for trust auth |
-| `PRIVATE_API_KEY_TRUST_<N>` | trust-api | Per-trust plaintext key |
+| `TRUST_API_KEY_HEADER` | flip-api, trust-api | Header name for trust auth |
+| `TRUST_API_KEYS` | trust-api | JSON dict of trust name → plaintext key |
 | `TRUST_API_KEY_HASHES` | flip-api | JSON dict of trust name → SHA-256 hash |
 | `INTERNAL_SERVICE_KEY_HEADER` | flip-api, fl-server | Header name for internal service auth |
 | `INTERNAL_SERVICE_KEY` | fl-server | Internal service plaintext key |

@@ -34,8 +34,8 @@ from trust_api.utils.logger import logger
 DATA_ACCESS_API_URL = get_settings().DATA_ACCESS_API_URL
 CENTRAL_HUB_API_URL = get_settings().CENTRAL_HUB_API_URL
 IMAGING_API_URL = get_settings().IMAGING_API_URL
-PRIVATE_API_KEY = get_settings().PRIVATE_API_KEY
-PRIVATE_API_KEY_HEADER = get_settings().PRIVATE_API_KEY_HEADER
+TRUST_API_KEY = get_settings().TRUST_API_KEY
+TRUST_API_KEY_HEADER = get_settings().TRUST_API_KEY_HEADER
 
 # Task type constants — must match TaskType enum in flip-api/src/flip_api/domain/schemas/status.py
 TASK_COHORT_QUERY = "cohort_query"
@@ -81,7 +81,7 @@ async def handle_cohort_query(payload: dict[str, Any]) -> dict[str, Any]:
             method="POST",
             url=f"{CENTRAL_HUB_API_URL}/cohort/results",
             json_body=response,
-            headers={PRIVATE_API_KEY_HEADER: PRIVATE_API_KEY},
+            headers={TRUST_API_KEY_HEADER: TRUST_API_KEY},
         )
 
         logger.info(f"Cohort query completed: query_id={payload.get('query_id')}")

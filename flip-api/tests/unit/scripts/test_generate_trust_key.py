@@ -17,69 +17,34 @@ from flip_api.scripts.generate_trust_key import generate_trust_key
 
 
 class TestGenerateTrustKey:
-    def test_returns_key_and_hash(self, tmp_path):
+    def test_returns_key_and_hash(self):
         """generate_trust_key should return a non-empty key and its SHA-256 hash."""
-        key, key_hash = generate_trust_key("Trust_Test", output_dir=tmp_path)
+        key, key_hash = generate_trust_key()
 
         assert isinstance(key, str)
         assert len(key) > 0
         assert isinstance(key_hash, str)
         assert len(key_hash) == 64  # SHA-256 hex digest length
 
-    def test_hash_matches_sha256_of_key(self, tmp_path):
+    def test_hash_matches_sha256_of_key(self):
         """The returned hash must equal hashlib.sha256(key.encode()).hexdigest()."""
-        key, key_hash = generate_trust_key("Trust_Hash", output_dir=tmp_path)
+        key, key_hash = generate_trust_key()
 
         expected_hash = hashlib.sha256(key.encode()).hexdigest()
         assert key_hash == expected_hash
 
-    def test_key_file_written_to_output_directory(self, tmp_path):
-        """The plaintext key should be written to <output_dir>/<trust_name>.key."""
-        trust_name = "Trust_FileWrite"
-        key, _ = generate_trust_key(trust_name, output_dir=tmp_path)
-
-        key_file = tmp_path / f"{trust_name}.key"
-        assert key_file.exists()
-        assert key_file.read_text() == key
-
-    def test_output_directory_created_if_missing(self, tmp_path):
-        """generate_trust_key should create the output directory when it does not exist."""
-        nested_dir = tmp_path / "nested" / "keys"
-        assert not nested_dir.exists()
-
-        key, _ = generate_trust_key("Trust_Nested", output_dir=nested_dir)
-
-        assert nested_dir.exists()
-        assert (nested_dir / "Trust_Nested.key").read_text() == key
-
-    def test_default_output_dir_when_none(self, tmp_path):
-        """generate_trust_key should use trust/trust-keys/ relative to repo root when output_dir is None."""
-        # Create a fake __file__ path so that parents[4] resolves to tmp_path
-        fake_file = tmp_path / "a" / "b" / "c" / "d" / "generate_trust_key.py"
-        fake_file.parent.mkdir(parents=True, exist_ok=True)
-        fake_file.touch()
-
-        import flip_api.scripts.generate_trust_key as mod
-
-        original_file = mod.__file__
-        try:
-            mod.__file__ = str(fake_file)
-            key, _ = generate_trust_key("Trust_Default", output_dir=None)
-
-            expected_dir = tmp_path / "trust" / "trust-keys"
-            assert expected_dir.exists()
-            assert (expected_dir / "Trust_Default.key").read_text() == key
-        finally:
-            mod.__file__ = original_file
+    def test_generates_unique_keys(self):
+        """Each call should produce a different key."""
+        key1, _ = generate_trust_key()
+        key2, _ = generate_trust_key()
+        assert key1 != key2
 
 
 class TestGenerateTrustKeyMain:
-    def test_main_prints_key_info(self, tmp_path, capsys):
-        """main() should print the trust name, key, hash, and key file path."""
-
+    def test_main_prints_key_info(self, capsys):
+        """main() should print the trust name, key, and hash."""
         with (
             patch("sys.argv", ["generate_trust_key", "--trust-name", "Trust_CLI"]),
-            patch("flip_api.scripts.generate_trust_key.Path.resolve", return_value=tmp_path / "fake"),
             patch(
                 "flip_api.scripts.generate_trust_key.generate_trust_key",
                 return_value=("test-key-abc", "test-hash-def"),
@@ -89,7 +54,7 @@ class TestGenerateTrustKeyMain:
 
             main()
 
-        mock_gen.assert_called_once_with("Trust_CLI")
+        mock_gen.assert_called_once_with()
         captured = capsys.readouterr()
         assert "Trust_CLI" in captured.out
         assert "test-key-abc" in captured.out

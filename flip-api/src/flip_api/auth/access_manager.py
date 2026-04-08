@@ -250,7 +250,7 @@ def can_access_cohort_query(user_id: UUID, query_id: UUID, db: Session) -> bool:
         return False
 
 
-API_KEY_HEADER_NAME = get_settings().PRIVATE_API_KEY_HEADER
+API_KEY_HEADER_NAME = get_settings().TRUST_API_KEY_HEADER
 api_key_header_scheme = APIKeyHeader(name=API_KEY_HEADER_NAME, auto_error=False)
 
 

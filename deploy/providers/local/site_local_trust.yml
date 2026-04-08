@@ -68,7 +68,7 @@
         mode: "0755"
       loop:
         - "{{ flip_dir }}"
-        - "{{ flip_dir }}/data/trust-1"
+        - "{{ flip_dir }}/data/images"
         # XNAT bind-mount directories (Docker Swarm does not auto-create them)
         - "{{ flip_dir }}/xnat"
         - "{{ flip_dir }}/xnat/xnat-data/tomcat_logs"

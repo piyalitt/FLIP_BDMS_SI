@@ -37,8 +37,8 @@ class Settings(BaseSettings):
     CENTRAL_HUB_API_URL: str
     DATA_ACCESS_API_URL: str
     IMAGING_API_URL: str
-    PRIVATE_API_KEY: str
-    PRIVATE_API_KEY_HEADER: str
+    TRUST_API_KEY: str
+    TRUST_API_KEY_HEADER: str
     AES_KEY_BASE64: str  # Shared key for decrypting task payloads from the hub
 
     # Polling configuration

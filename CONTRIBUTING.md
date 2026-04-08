@@ -134,17 +134,17 @@ Then generate per-trust API keys (must be done before `make up`):
 make generate-dev-keys
 ```
 
-This generates a unique key for each trust, updates `PRIVATE_API_KEY_TRUST_<N>` and `TRUST_API_KEY_HASHES` in
-`.env.development`, and saves plaintext keys to `trust/trust-keys/`. It also generates `INTERNAL_SERVICE_KEY` and
-`INTERNAL_SERVICE_KEY_HASH` for the fl-server's internal service authentication.
+This generates all API keys and writes them directly into `.env.development`: trust plaintext keys
+in `TRUST_API_KEYS` (JSON dict) with their hashes in `TRUST_API_KEY_HASHES`, and `INTERNAL_SERVICE_KEY`
+with `INTERNAL_SERVICE_KEY_HASH` for fl-server-to-hub authentication. No separate key files are used.
 
 Docker services receive these variables via the `env_file` directive in the
 compose file — avoid hardcoding values in Dockerfiles or compose files directly.
 
 **Authentication environment variables:**
 
-- `PRIVATE_API_KEY_HEADER` — HTTP header name for trust-to-hub authentication.
-- `PRIVATE_API_KEY_TRUST_<N>` — per-trust API key (each trust gets a unique key).
+- `TRUST_API_KEY_HEADER` — HTTP header name for trust-to-hub authentication.
+- `TRUST_API_KEYS` — JSON dict mapping trust names to their plaintext API keys.
 - `TRUST_API_KEY_HASHES` — hub-side JSON dict mapping trust names to SHA-256 hashes of their API keys.
 - `INTERNAL_SERVICE_KEY_HEADER` — HTTP header name for fl-server-to-hub authentication.
 - `INTERNAL_SERVICE_KEY` — internal service key used by the fl-server on the Central Hub.

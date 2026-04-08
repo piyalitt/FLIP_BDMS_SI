@@ -187,7 +187,7 @@
         - /opt/flip
         # Data directory for Trust 1 (where XNAT images will be downloaded for the FL client to use)
         # NOTE if this is not created here, it will be created later by Docker Compose but owned by root, and will cause permission issues
-        - /opt/flip/data/trust-1
+        - /opt/flip/data/images
         # XNAT bind-mount directories (Docker Swarm does not auto-create them)
         - /opt/flip/xnat
         - /opt/flip/xnat/xnat-data/tomcat_logs

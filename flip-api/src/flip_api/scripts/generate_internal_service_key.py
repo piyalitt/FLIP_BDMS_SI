@@ -12,12 +12,9 @@
 
 """Generate the internal service key used by fl-server to authenticate with flip-api.
 
-The plaintext key is saved to ``deploy/keys/internal_service.key`` and the
-SHA-256 hash is written into ``INTERNAL_SERVICE_KEY_HASH`` in the env file.
-Existing keys are preserved unless ``--force`` is used.
-
-At runtime, fl-server reads the plaintext key from the key file (injected by
-the Makefile), while flip-api reads the hash from the environment.
+Both ``INTERNAL_SERVICE_KEY`` (plaintext) and ``INTERNAL_SERVICE_KEY_HASH``
+(SHA-256 hex digest) are written into the environment file.  On subsequent
+runs the script checks that the two values are in sync and skips if they are.
 
 Usage:
     make generate-internal-service-key
@@ -30,6 +27,8 @@ import hashlib
 import secrets
 import sys
 from pathlib import Path
+
+from flip_api.scripts.env_utils import read_env_value, update_or_append
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
@@ -50,7 +49,7 @@ def main() -> None:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Regenerate the key even if it already exists.",
+        help="Regenerate the key even if it already exists and is in sync.",
     )
     args = parser.parse_args()
     env_file: Path = args.env_file
@@ -59,34 +58,32 @@ def main() -> None:
         print(f"Error: {env_file} not found.")
         sys.exit(1)
 
-    key_dir = REPO_ROOT / "deploy" / "keys"
-    key_dir.mkdir(parents=True, exist_ok=True)
-    key_file = key_dir / "internal_service.key"
+    lines = env_file.read_text().splitlines()
+    existing_key = read_env_value(lines, "INTERNAL_SERVICE_KEY")
+    existing_hash = read_env_value(lines, "INTERNAL_SERVICE_KEY_HASH")
 
-    if key_file.exists() and not args.force:
-        print(f"Key already exists: {key_file} (use --force to regenerate)")
+    if existing_key and not args.force:
+        expected_hash = hashlib.sha256(existing_key.encode()).hexdigest()
+        if existing_hash == expected_hash:
+            print(f"Internal service key already in sync in {env_file.name}")
+            return
+        # Key exists but hash is stale — re-sync the hash
+        print(f"Key exists but hash is out of sync — updating hash in {env_file.name}")
+        lines = update_or_append(lines, "INTERNAL_SERVICE_KEY_HASH", expected_hash)
+        env_file.write_text("\n".join(lines) + "\n")
+        print(f"  INTERNAL_SERVICE_KEY_HASH updated in {env_file.name}")
         return
 
-    # Generate key
+    # Generate a new key
     key = secrets.token_urlsafe(32)
     key_hash = hashlib.sha256(key.encode()).hexdigest()
 
-    # Save plaintext to .key file (Central Hub scope, not trust-keys)
-    key_file.write_text(key)
-
-    # Update INTERNAL_SERVICE_KEY_HASH in env file
-    lines = env_file.read_text().splitlines()
-    new_lines: list[str] = []
-    for line in lines:
-        if line.startswith("INTERNAL_SERVICE_KEY_HASH="):
-            new_lines.append(f"INTERNAL_SERVICE_KEY_HASH={key_hash}")
-        else:
-            new_lines.append(line)
-    env_file.write_text("\n".join(new_lines) + "\n")
+    lines = update_or_append(lines, "INTERNAL_SERVICE_KEY", key)
+    lines = update_or_append(lines, "INTERNAL_SERVICE_KEY_HASH", key_hash)
+    env_file.write_text("\n".join(lines) + "\n")
 
     print("Generated internal service key:")
-    print(f"  Key saved: {key_file}")
-    print(f"  INTERNAL_SERVICE_KEY_HASH updated in {env_file.name}")
+    print(f"  INTERNAL_SERVICE_KEY and INTERNAL_SERVICE_KEY_HASH updated in {env_file.name}")
 
 
 if __name__ == "__main__":

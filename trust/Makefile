@@ -50,6 +50,8 @@ network2 = deploy_trust-network-2
 trust1 = trust1
 trust2 = trust2
 
+get_json_value = $(shell python3 ../flip-api/src/flip_api/scripts/env_utils.py '$(1)' $(2))
+
 OMOP_DB_CMD=make -C ./omop-db
 DOCKER_COMPOSE_CMD=docker compose -f $(COMMON_COMPOSE_FILE) -f $(FL_BACKEND_COMPOSE_FILE)
 DEBUG_OVERRIDE_COMPOSE_COMMAND=docker compose -f $(COMMON_COMPOSE_FILE) -f $(FL_BACKEND_COMPOSE_FILE) -f compose_trust.debug.override.yml
@@ -79,7 +81,7 @@ TRUST_1_VARS = \
 	LOKI_PORT=${LOKI_PORT_TRUST_1} \
 	TRUST_NETWORK_NAME=${network1} \
 	TRUST_NAME=Trust_1 \
-	PRIVATE_API_KEY=$(shell cat trust-keys/Trust_1.key 2>/dev/null)
+	TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),Trust_1)
 TRUST_2_VARS = \
 	BASE_IMAGES_DOWNLOAD_DIR=${BASE_IMAGES_DOWNLOAD_DIR_TRUST2} \
 	OMOP_DB_PORT=${OMOP_DB_PORT_TRUST_2} \
@@ -95,7 +97,7 @@ TRUST_2_VARS = \
 	LOKI_PORT=${LOKI_PORT_TRUST_2} \
 	TRUST_NETWORK_NAME=${network2} \
 	TRUST_NAME=Trust_2 \
-	PRIVATE_API_KEY=$(shell cat trust-keys/Trust_2.key 2>/dev/null)
+	TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),Trust_2)
 
 build:
 	$(TRUST_1_VARS) ${DOCKER_COMPOSE_CMD} -p ${trust1} build --no-cache
@@ -131,14 +133,16 @@ down-trust-1-ec2:
 
 # LOCAL_TRUST_NAME controls which NVFlare participant kit the FL client mounts.
 # Local (on-prem) trusts use Trust_2 kit; EC2 trusts use Trust_1 kit (default).
+# LOCAL_TRUST_NAME is defined in deploy/providers/AWS/Makefile
 up-local-trust-stag:
-	## Starts Trust 1 compose stack 
+	## Starts Trust 1 compose stack
 	## Uses project name 'trust1' so trust-api, imaging-api, etc. keep their normal names,
 	## but overrides TRUST_NAME so the FL client mounts Trust_2/ kit dir.
 	@echo "🚢 Starting local Trust services (TRUST_NAME=$(LOCAL_TRUST_NAME))..."
 	@echo "⚙️ Using environment file ${MAIN_ENV_FILE}"
 	@echo "🧠 FL_BACKEND=$(FL_BACKEND) ($(FL_BACKEND_COMPOSE_FILE))"
-	$(TRUST_1_VARS) TRUST_NAME=$(LOCAL_TRUST_NAME) DEBUG=$(DEBUG) \
+	mkdir -p ${BASE_IMAGES_DOWNLOAD_DIR_TRUST1}
+	$(TRUST_1_VARS) TRUST_NAME=$(LOCAL_TRUST_NAME) TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),$(LOCAL_TRUST_NAME)) DEBUG=$(DEBUG) \
 		$(DOCKER_COMPOSE_CMD) -p $(trust1) up -d --pull always
 
 # Uses --pull always to ensure the latest FL images and omop-db image are used

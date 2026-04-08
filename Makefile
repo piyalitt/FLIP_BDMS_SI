@@ -50,10 +50,6 @@ FL_BACKEND_COMPOSE_FILE := deploy/compose.$(__DCKR_SUFFIX).$(FL_BACKEND).yml
 override FL_PROVISIONED_DIR := $(shell realpath $(dir $(lastword $(MAKEFILE_LIST)))/../flip-fl-base/workspace)
 export FL_PROVISIONED_DIR
 
-# Plaintext key read from file, injected into fl-server containers by docker compose
-INTERNAL_SERVICE_KEY := $(shell cat deploy/keys/internal_service.key 2>/dev/null)
-export INTERNAL_SERVICE_KEY
-
 # Service configuration
 define SERVICE_CONFIG
 data-access-api:trust

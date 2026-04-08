@@ -63,7 +63,7 @@ Key environment variables (set in [`.env.development.example`](../../.env.develo
 | `DATA_ACCESS_API_URL` | Internal URL of the data-access-api |
 | `IMAGING_API_URL` | Internal URL of the imaging-api |
 | `CENTRAL_HUB_API_URL` | URL of the Central Hub API (for task polling) |
-| `PRIVATE_API_KEY` | Per-trust API key for authenticating with the Central Hub. Each trust gets a unique key (e.g. `PRIVATE_API_KEY_TRUST_1`); generate with `make -C flip-api generate-trust-key TRUST_NAME=Trust_1` |
+| `TRUST_API_KEY` | Per-trust API key for authenticating with the Central Hub. Keys are stored in `TRUST_API_KEYS` JSON dict; generate with `make generate-trust-api-keys` |
 | `AES_KEY_BASE64` | Base64-encoded AES-256 key shared with the hub, used to decrypt encrypted task payloads |
 | `POLL_INTERVAL_SECONDS` | Polling frequency in seconds (default: 5) |
 

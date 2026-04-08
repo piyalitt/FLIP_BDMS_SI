@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     )
 
     # Per-trust API key header name (for authenticating requests from trusts to the FLIP API)
-    PRIVATE_API_KEY_HEADER: str
+    TRUST_API_KEY_HEADER: str
 
     # Internal service auth (fl-server on the Central Hub)
     INTERNAL_SERVICE_KEY_HEADER: str

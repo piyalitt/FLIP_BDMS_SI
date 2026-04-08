@@ -54,7 +54,7 @@ Before starting the platform, generate per-trust API keys:
 make generate-dev-keys   # from repo root
 ```
 
-This updates `PRIVATE_API_KEY_TRUST_<N>` and `TRUST_API_KEY_HASHES` in `.env.development` automatically.
+This updates `TRUST_API_KEYS` and `TRUST_API_KEY_HASHES` in `.env.development` automatically.
 See [`.env.development.example`](../.env.development.example) for the expected format.
 
 The API is served on the port defined by `API_PORT` in [`.env.development.example`](../.env.development.example)

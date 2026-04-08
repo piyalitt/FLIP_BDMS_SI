@@ -20,51 +20,49 @@ from flip_api.scripts.generate_trust_api_keys import main
 
 ENV_TEMPLATE = """\
 SOME_VAR=foo
-PRIVATE_API_KEY_HEADER=Authorization
+TRUST_API_KEY_HEADER=Authorization
 TRUST_NAMES=["Trust_1", "Trust_2"]
 TRUST_API_KEY_HASHES={{"Trust_1": "<hash1>", "Trust_2": "<hash2>"}}
 OTHER_VAR=bar
 """
 
 
+def _parse_env(content: str) -> dict[str, str]:
+    """Parse env file content into a dict."""
+    return {
+        line.split("=", 1)[0]: line.split("=", 1)[1]
+        for line in content.strip().splitlines()
+        if "=" in line and not line.startswith("#")
+    }
+
+
 class TestGenerateTrustApiKeys:
     def test_generates_keys_and_updates_hashes(self, tmp_path):
-        """main() should generate .key files and update TRUST_API_KEY_HASHES."""
+        """main() should write TRUST_API_KEYS and TRUST_API_KEY_HASHES as JSON dicts."""
         env_file = tmp_path / ".env.test"
         env_file.write_text(ENV_TEMPLATE)
 
-        with (
-            patch("flip_api.scripts.generate_trust_api_keys.REPO_ROOT", tmp_path),
-            patch("sys.argv", ["generate_trust_api_keys", "--env-file", str(env_file)]),
-        ):
+        with patch("sys.argv", ["generate_trust_api_keys", "--env-file", str(env_file)]):
             main()
 
-        content = env_file.read_text()
-        lines = content.splitlines()
+        env = _parse_env(env_file.read_text())
 
         # Unchanged lines preserved
-        assert "SOME_VAR=foo" in lines
-        assert "OTHER_VAR=bar" in lines
-        assert "PRIVATE_API_KEY_HEADER=Authorization" in lines
+        assert env["SOME_VAR"] == "foo"
+        assert env["OTHER_VAR"] == "bar"
+        assert env["TRUST_API_KEY_HEADER"] == "Authorization"
 
-        # Hashes line is valid JSON with canonical trust names
-        hashes_line = [line for line in lines if line.startswith("TRUST_API_KEY_HASHES=")][0]
-        hashes_json = hashes_line.split("=", 1)[1]
-        hashes = json.loads(hashes_json)
-        assert "Trust_1" in hashes
-        assert "Trust_2" in hashes
-        assert len(hashes["Trust_1"]) == 64
-        assert len(hashes["Trust_2"]) == 64
+        # TRUST_API_KEYS contains both trusts
+        keys = json.loads(env["TRUST_API_KEYS"])
+        assert "Trust_1" in keys
+        assert "Trust_2" in keys
+        assert len(keys["Trust_1"]) > 0
+        assert len(keys["Trust_2"]) > 0
 
-        # Key files written with canonical names
-        key_dir = tmp_path / "trust" / "trust-keys"
-        assert (key_dir / "Trust_1.key").exists()
-        assert (key_dir / "Trust_2.key").exists()
-
-        # Key file contents match hashes
-        for name in ("Trust_1", "Trust_2"):
-            key = (key_dir / f"{name}.key").read_text()
-            assert hashes[name] == hashlib.sha256(key.encode()).hexdigest()
+        # Hashes match keys
+        hashes = json.loads(env["TRUST_API_KEY_HASHES"])
+        assert hashes["Trust_1"] == hashlib.sha256(keys["Trust_1"].encode()).hexdigest()
+        assert hashes["Trust_2"] == hashlib.sha256(keys["Trust_2"].encode()).hexdigest()
 
     def test_exits_when_env_file_missing(self, tmp_path):
         """main() should exit with error when env file does not exist."""
@@ -87,52 +85,53 @@ class TestGenerateTrustApiKeys:
         ):
             main()
 
-    def test_skips_existing_key_files(self, tmp_path):
-        """main() should preserve existing .key files and not regenerate them."""
+    def test_skips_existing_keys_in_dict(self, tmp_path):
+        """main() should preserve existing keys in TRUST_API_KEYS and not regenerate them."""
         existing_key = "bLYIayFxl2m_lJ2oGU1ZWhQGSNz7qp41MH6_Ggk3f-o"
-        key_dir = tmp_path / "trust" / "trust-keys"
-        key_dir.mkdir(parents=True)
-        (key_dir / "Trust_1.key").write_text(existing_key)
-
         env_file = tmp_path / ".env.test"
-        env_file.write_text(ENV_TEMPLATE)
+        env_file.write_text(
+            ENV_TEMPLATE + f'TRUST_API_KEYS={{"Trust_1": "{existing_key}"}}\n'
+        )
 
-        with (
-            patch("flip_api.scripts.generate_trust_api_keys.REPO_ROOT", tmp_path),
-            patch("sys.argv", ["generate_trust_api_keys", "--env-file", str(env_file)]),
-        ):
+        with patch("sys.argv", ["generate_trust_api_keys", "--env-file", str(env_file)]):
             main()
 
-        # Trust_1 key file preserved
-        assert (key_dir / "Trust_1.key").read_text() == existing_key
+        env = _parse_env(env_file.read_text())
+        keys = json.loads(env["TRUST_API_KEYS"])
 
-        # Trust_2 key file generated
-        trust_2_key = (key_dir / "Trust_2.key").read_text()
-        assert trust_2_key
-        assert trust_2_key != existing_key
+        # Trust_1 key preserved
+        assert keys["Trust_1"] == existing_key
+
+        # Trust_2 key generated
+        assert "Trust_2" in keys
+        assert keys["Trust_2"] != existing_key
 
         # Hashes updated for both trusts
-        content = env_file.read_text()
-        hashes_line = [line for line in content.splitlines() if line.startswith("TRUST_API_KEY_HASHES=")][0]
-        hashes = json.loads(hashes_line.split("=", 1)[1])
+        hashes = json.loads(env["TRUST_API_KEY_HASHES"])
         assert len(hashes) == 2
         assert hashes["Trust_1"] == hashlib.sha256(existing_key.encode()).hexdigest()
 
     def test_force_regenerates_all_keys(self, tmp_path):
-        """--force should regenerate keys even when .key files already exist."""
+        """--force should regenerate keys even when TRUST_API_KEYS already has values."""
         existing_key = "bLYIayFxl2m_lJ2oGU1ZWhQGSNz7qp41MH6_Ggk3f-o"
-        key_dir = tmp_path / "trust" / "trust-keys"
-        key_dir.mkdir(parents=True)
-        (key_dir / "Trust_1.key").write_text(existing_key)
+        env_file = tmp_path / ".env.test"
+        env_file.write_text(
+            ENV_TEMPLATE + f'TRUST_API_KEYS={{"Trust_1": "{existing_key}"}}\n'
+        )
 
+        with patch("sys.argv", ["generate_trust_api_keys", "--env-file", str(env_file), "--force"]):
+            main()
+
+        env = _parse_env(env_file.read_text())
+        keys = json.loads(env["TRUST_API_KEYS"])
+        assert keys["Trust_1"] != existing_key
+
+    def test_does_not_write_key_files(self, tmp_path):
+        """main() must NOT create trust/trust-keys/*.key files."""
         env_file = tmp_path / ".env.test"
         env_file.write_text(ENV_TEMPLATE)
 
-        with (
-            patch("flip_api.scripts.generate_trust_api_keys.REPO_ROOT", tmp_path),
-            patch("sys.argv", ["generate_trust_api_keys", "--env-file", str(env_file), "--force"]),
-        ):
+        with patch("sys.argv", ["generate_trust_api_keys", "--env-file", str(env_file)]):
             main()
 
-        new_key = (key_dir / "Trust_1.key").read_text()
-        assert new_key != existing_key
+        assert list(tmp_path.rglob("*.key")) == []

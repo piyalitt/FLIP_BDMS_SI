@@ -29,15 +29,15 @@ from trust_api.utils.encryption import decrypt
 from trust_api.utils.logger import logger
 
 CENTRAL_HUB_API_URL = get_settings().CENTRAL_HUB_API_URL
-PRIVATE_API_KEY = get_settings().PRIVATE_API_KEY
-PRIVATE_API_KEY_HEADER = get_settings().PRIVATE_API_KEY_HEADER
+TRUST_API_KEY = get_settings().TRUST_API_KEY
+TRUST_API_KEY_HEADER = get_settings().TRUST_API_KEY_HEADER
 TRUST_NAME = get_settings().TRUST_NAME
 POLL_INTERVAL_SECONDS = get_settings().POLL_INTERVAL_SECONDS
 
 
 def _auth_headers() -> dict[str, str]:
     """Return authentication headers for hub API calls."""
-    return {PRIVATE_API_KEY_HEADER: PRIVATE_API_KEY}
+    return {TRUST_API_KEY_HEADER: TRUST_API_KEY}
 
 
 async def _poll_for_tasks(client: httpx.AsyncClient) -> list[dict]:

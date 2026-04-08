@@ -50,18 +50,17 @@ openssl rand -base64 32
 
 ---
 
-### 2. `PRIVATE_API_KEY`
+### 2. `TRUST_API_KEY`
 
 **Description**: Per-trust API key for authenticating trust-to-hub service calls. Each trust gets a unique key; the hub stores SHA-256 hashes in `TRUST_API_KEY_HASHES` and validates incoming keys with constant-time comparison.
 
 **How to generate**:
 
 ```bash
-# Generate a unique key for each trust
-make -C flip-api generate-trust-key TRUST_NAME=Trust_1
+make generate-trust-api-keys
 ```
 
-**Example value**: `test-private-api-key-for-ci`
+**Example value**: `test-trust-api-key-for-ci`
 
 **Used by** (trust-side CI only):
 
@@ -69,7 +68,7 @@ make -C flip-api generate-trust-key TRUST_NAME=Trust_1
 - `imaging_api.yml`
 - `data_access_api.yml`
 
-> **Note**: The central hub (`flip-api`) no longer uses a shared `PRIVATE_API_KEY`. It validates per-trust keys via `TRUST_API_KEY_HASHES`.
+> **Note**: The central hub (`flip-api`) validates per-trust keys via `TRUST_API_KEY_HASHES`. Plaintext keys are stored in `TRUST_API_KEYS` JSON dict in the env file.
 
 ---
 
@@ -86,7 +85,7 @@ These are set to static values in CI but could be made into secrets if needed:
 All secrets have fallback values that will be used if the secret is not configured:
 
 - `AES_KEY_BASE64`: Falls back to `dGVzdC1hZXMta2V5LWZvci1jaS10ZXN0aW5nLTMyYnl0ZXM=`
-- `PRIVATE_API_KEY`: Falls back to `test-private-api-key-for-ci` (trust-side CI workflows only)
+- `TRUST_API_KEY`: Falls back to `test-trust-api-key-for-ci` (trust-side CI workflows only)
 
 This ensures CI doesn't break if secrets are missing, but these fallback values should **never** be used in production.
 
@@ -100,8 +99,8 @@ Each CI workflow follows this pattern:
     cp .env.development.example .env.development
     # Override sensitive values with GitHub secrets
     echo "AES_KEY_BASE64=${{ secrets.AES_KEY_BASE64 }}" >> .env.development
-    # PRIVATE_API_KEY is only needed in trust-side workflows (trust-api, imaging-api, data-access-api)
-    echo "PRIVATE_API_KEY=${{ secrets.PRIVATE_API_KEY }}" >> .env.development
+    # TRUST_API_KEY is only needed in trust-side workflows (trust-api, imaging-api, data-access-api)
+    echo "TRUST_API_KEY=${{ secrets.TRUST_API_KEY }}" >> .env.development
     echo "DATA_ACCESS_POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> ../../.env.development
     echo "OMOP_POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> ../../.env.development
     echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> ../../.env.development
