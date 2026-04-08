@@ -12,6 +12,7 @@
 
 import hashlib
 import hmac
+import json
 from uuid import UUID
 
 from fastapi import HTTPException, Security, status
@@ -22,6 +23,7 @@ from flip_api.auth.auth_utils import has_permissions
 from flip_api.config import get_settings
 from flip_api.db.models.main_models import Model, Projects, ProjectUserAccess, Queries
 from flip_api.db.models.user_models import PermissionRef
+from flip_api.utils.get_secrets import get_secret
 from flip_api.utils.logger import logger
 
 
@@ -285,22 +287,39 @@ def _get_trust_api_key_hashes() -> dict[str, str]:
         return _trust_api_key_hashes_cache
 
     stt = get_settings()
-    if stt.TRUST_API_KEY_HASHES:
-        _trust_api_key_hashes_cache = stt.TRUST_API_KEY_HASHES
-    elif stt.ENV == "production":
-        import json
-
-        from flip_api.utils.get_secrets import get_secret
-
+    if stt.ENV == "production":
         _trust_api_key_hashes_cache = json.loads(get_secret("trust_api_key_hashes"))
     else:
-        _trust_api_key_hashes_cache = {}
+        _trust_api_key_hashes_cache = stt.TRUST_API_KEY_HASHES
 
     return _trust_api_key_hashes_cache
 
 
 INTERNAL_SERVICE_KEY_HEADER_NAME = get_settings().INTERNAL_SERVICE_KEY_HEADER
 internal_key_header_scheme = APIKeyHeader(name=INTERNAL_SERVICE_KEY_HEADER_NAME, auto_error=False)
+
+_internal_service_key_hash_cache: str | None = None
+
+
+def _get_internal_service_key_hash() -> str:
+    """Get internal service key hash from env var (dev) or AWS Secrets Manager (prod).
+
+    Cached after first call — the hash does not change during the lifetime of a process.
+
+    Returns:
+        str: SHA-256 hex digest of the internal service key, or empty string if not configured.
+    """
+    global _internal_service_key_hash_cache  # noqa: PLW0603
+    if _internal_service_key_hash_cache is not None:
+        return _internal_service_key_hash_cache
+
+    stt = get_settings()
+    if stt.ENV == "production":
+        _internal_service_key_hash_cache = get_secret("internal_service_key_hash")
+    else:
+        _internal_service_key_hash_cache = stt.INTERNAL_SERVICE_KEY_HASH
+
+    return _internal_service_key_hash_cache
 
 
 def authenticate_internal_service(api_key: str = Security(internal_key_header_scheme)) -> None:
@@ -322,7 +341,7 @@ def authenticate_internal_service(api_key: str = Security(internal_key_header_sc
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated: internal service key is missing.",
         )
-    expected_hash = get_settings().INTERNAL_SERVICE_KEY_HASH
+    expected_hash = _get_internal_service_key_hash()
     if not expected_hash:
         logger.warning("Internal service authentication failed: INTERNAL_SERVICE_KEY_HASH not configured.")
         raise HTTPException(

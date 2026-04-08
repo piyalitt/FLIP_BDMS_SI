@@ -61,6 +61,11 @@ variable "TRUST_API_KEY_HASHES" {
   type        = string
 }
 
+variable "INTERNAL_SERVICE_KEY_HASH" {
+  description = "SHA-256 hash of the internal service key used for fl-server-to-hub auth"
+  type        = string
+}
+
 variable "FLIP_BUCKET_NAME" {
   type = string
 }

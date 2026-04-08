@@ -28,14 +28,11 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Per-trust API key header name (for authenticating requests from trusts to the FLIP API)
     PRIVATE_API_KEY_HEADER: str
-
-    # Per-trust API key hashes: {"Trust_1": "sha256hex...", "Trust_2": "sha256hex..."}
-    TRUST_API_KEY_HASHES: dict[str, str]
 
     # Internal service auth (fl-server on the Central Hub)
     INTERNAL_SERVICE_KEY_HEADER: str
-    INTERNAL_SERVICE_KEY_HASH: str
 
     # AWS settings
     AWS_PROFILE: str | None = None
@@ -98,6 +95,9 @@ class DevSettings(Settings):
     POSTGRES_PASSWORD: str  # in dev, get DB password from env variable
 
     AES_KEY_BASE64: str  # in dev, get AES key from env variable
+
+    TRUST_API_KEY_HASHES: dict[str, str]  # in dev, get API key hashes for each trust from env variable
+    INTERNAL_SERVICE_KEY_HASH: str  # in dev, get internal service auth key hash from env variable
 
 
 class ProdSettings(Settings):

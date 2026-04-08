@@ -42,6 +42,7 @@ PATCH_GET_SETTINGS = "flip_api.auth.access_manager.get_settings"
 
 
 PATCH_HASH_CACHE = "flip_api.auth.access_manager._trust_api_key_hashes_cache"
+PATCH_INTERNAL_KEY_HASH = "flip_api.auth.access_manager._get_internal_service_key_hash"
 
 
 @pytest.fixture
@@ -102,9 +103,7 @@ class TestAuthenticateInternalService:
 
     def test_valid_key_succeeds(self):
         """Valid internal service key should not raise an exception."""
-        mock = MagicMock()
-        mock.INTERNAL_SERVICE_KEY_HASH = INTERNAL_SERVICE_KEY_HASH
-        with patch(PATCH_GET_SETTINGS, return_value=mock):
+        with patch(PATCH_INTERNAL_KEY_HASH, return_value=INTERNAL_SERVICE_KEY_HASH):
             result = authenticate_internal_service(api_key=INTERNAL_SERVICE_KEY)
         assert result is None
 
@@ -124,9 +123,7 @@ class TestAuthenticateInternalService:
 
     def test_invalid_key_returns_401(self):
         """Wrong key should raise 401."""
-        mock = MagicMock()
-        mock.INTERNAL_SERVICE_KEY_HASH = INTERNAL_SERVICE_KEY_HASH
-        with patch(PATCH_GET_SETTINGS, return_value=mock):
+        with patch(PATCH_INTERNAL_KEY_HASH, return_value=INTERNAL_SERVICE_KEY_HASH):
             with pytest.raises(HTTPException) as exc_info:
                 authenticate_internal_service(api_key=WRONG_TEST_KEY)
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
@@ -134,9 +131,7 @@ class TestAuthenticateInternalService:
 
     def test_unconfigured_hash_returns_401(self):
         """Empty INTERNAL_SERVICE_KEY_HASH should raise 401."""
-        mock = MagicMock()
-        mock.INTERNAL_SERVICE_KEY_HASH = ""
-        with patch(PATCH_GET_SETTINGS, return_value=mock):
+        with patch(PATCH_INTERNAL_KEY_HASH, return_value=""):
             with pytest.raises(HTTPException) as exc_info:
                 authenticate_internal_service(api_key=INTERNAL_SERVICE_KEY)
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
@@ -299,33 +294,24 @@ class TestVerifyTrustIdentity:
 
 
 class TestGetTrustApiKeyHashes:
-    def test_returns_hashes_from_settings(self):
-        """Should return hashes from TRUST_API_KEY_HASHES setting."""
+    def test_dev_returns_hashes_from_settings(self):
+        """In dev, should return hashes from TRUST_API_KEY_HASHES setting."""
         expected = {"Trust_1": "abc123"}
         mock = MagicMock()
+        mock.ENV = "development"
         mock.TRUST_API_KEY_HASHES = expected
         with patch(PATCH_GET_SETTINGS, return_value=mock), patch(PATCH_HASH_CACHE, None):
             result = _get_trust_api_key_hashes()
         assert result == expected
 
-    def test_returns_empty_dict_when_no_hashes_in_dev(self):
-        """Should return empty dict when no hashes configured in non-production env."""
+    def test_production_retrieves_from_secrets_manager(self):
+        """In production, should load hashes from AWS Secrets Manager."""
         mock = MagicMock()
-        mock.TRUST_API_KEY_HASHES = {}
-        mock.ENV = "development"
-        with patch(PATCH_GET_SETTINGS, return_value=mock), patch(PATCH_HASH_CACHE, None):
-            result = _get_trust_api_key_hashes()
-        assert result == {}
-
-    def test_production_falls_back_to_secrets_manager(self):
-        """Should load hashes from AWS Secrets Manager when in production with no env hashes."""
-        mock = MagicMock()
-        mock.TRUST_API_KEY_HASHES = {}
         mock.ENV = "production"
         with (
             patch(PATCH_GET_SETTINGS, return_value=mock),
             patch(PATCH_HASH_CACHE, None),
-            patch("flip_api.utils.get_secrets.get_secret", return_value='{"Trust_1": "hash1"}'),
+            patch("flip_api.auth.access_manager.get_secret", return_value='{"Trust_1": "hash1"}'),
         ):
             result = _get_trust_api_key_hashes()
         assert result == {"Trust_1": "hash1"}
