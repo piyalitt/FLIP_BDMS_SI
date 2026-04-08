@@ -38,7 +38,7 @@ up-test-omop-trust1:
 	BASE_IMAGES_DOWNLOAD_DIR=${BASE_IMAGES_DOWNLOAD_DIR_TRUST1} \
 	OMOP_DB_PORT=${OMOP_DB_PORT_TRUST_1} \
 	TRUST_NETWORK_NAME=${network1} \
-	TRUST_NAME=trust1 \
+	TRUST_NAME=Trust_1 \
 	$(docker_command) up $(service_name) --pull always
 
 down-test-omop-trust1:
@@ -46,7 +46,7 @@ down-test-omop-trust1:
 	BASE_IMAGES_DOWNLOAD_DIR=${BASE_IMAGES_DOWNLOAD_DIR_TRUST1} \
 	OMOP_DB_PORT=${OMOP_DB_PORT_TRUST_1} \
 	TRUST_NETWORK_NAME=${network1} \
-	TRUST_NAME=trust1 \
+	TRUST_NAME=Trust_1 \
 	$(docker_command) down --remove-orphans $(service_name) -v
 
 shell:
