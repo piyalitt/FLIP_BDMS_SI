@@ -200,7 +200,6 @@ module "ec2_role" {
     "arn:aws:iam::aws:policy/AmazonCognitoPowerUser", # TODO Restrict this policy to only what we need in production
     "arn:aws:iam::aws:policy/AmazonS3FullAccess",     # TODO Restrict this policy to only what we need in production
     "arn:aws:iam::aws:policy/AmazonSESFullAccess",    # TODO Restrict this policy to only what we need in production
-    "arn:aws:iam::aws:policy/SecretsManagerReadWrite" # TODO could create a read-only policy instead
   ]
   role_requires_mfa = "false"
 }

@@ -59,7 +59,7 @@ Managed policies that cover these requirements:
 - `ElasticLoadBalancingFullAccess`
 - `AmazonSESFullAccess` (optional)
 
-**Note**: The deployed EC2 instances use minimal IAM permissions (SSM and CloudWatch only) following the principle of least privilege.
+**Note**: The deployed EC2 instances use minimal IAM permissions (SSM, CloudWatch, and a scoped inline policy for `secretsmanager:GetSecretValue` on specific secrets) following the principle of least privilege.
 
 ## Deployment Workflow
 
