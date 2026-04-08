@@ -63,6 +63,8 @@ async def _poll_for_tasks(client: httpx.AsyncClient) -> list[dict]:
         if tasks:
             logger.info(f"Received {len(tasks)} pending tasks from hub")
         return tasks
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error(f"Error polling for tasks: {e}")
         return []
@@ -81,6 +83,8 @@ async def _send_heartbeat(client: httpx.AsyncClient) -> None:
             headers=_auth_headers(),
         )
         logger.debug("Heartbeat sent successfully")
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error(f"Error sending heartbeat: {e}")
 
@@ -125,6 +129,8 @@ async def _report_task_result(client: httpx.AsyncClient, task_id: str, result: d
                 f"Unexpected status {response.status_code} reporting result for task {task_id} "
                 f"(attempt {attempt + 1}/{_REPORT_MAX_RETRIES})"
             )
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.warning(
                 f"Error reporting result for task {task_id} "
@@ -192,12 +198,16 @@ async def run_poller() -> None:
                     try:
                         result = await _process_task(task)
                         await _report_task_result(client, task_id, result)
+                    except asyncio.CancelledError:
+                        raise
                     except Exception as e:
                         logger.error(f"Unhandled error processing task {task_id}: {e}")
                         await _report_task_result(
                             client, task_id, {"success": False, "error": str(e)}
                         )
 
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.error(f"Error in polling loop: {e}")
 
