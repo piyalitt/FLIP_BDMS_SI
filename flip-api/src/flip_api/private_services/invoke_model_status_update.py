@@ -39,7 +39,8 @@ def invoke_model_status_update_endpoint(
     """
     Invokes the internal process for updating a model's status.
 
-    This endpoint is internal-only: it accepts requests from the fl-server on the Central Hub, not from trusts.
+    This endpoint is internal-only: it accepts requests from the fl-server on the
+    Central Hub (authenticated via INTERNAL_SERVICE_KEY_HEADER).
 
     Args:
         model_id (UUID): The ID of the model whose status is to be updated.

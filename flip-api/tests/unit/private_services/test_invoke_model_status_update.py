@@ -117,12 +117,11 @@ class TestInvokeModelStatusUpdateEndpoint:
 
     def test_invoke_update_unauthorized(self, model_id: UUID, mock_db_session: MagicMock):
         # Arrange
-        # Override auth to simulate failure
         def mock_auth():
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
         test_app.dependency_overrides[authenticate_internal_service] = mock_auth
-        unauth_client = TestClient(test_app)  # Create client with this override
+        unauth_client = TestClient(test_app)
 
         model_status = ModelStatus.INITIATED.value
 

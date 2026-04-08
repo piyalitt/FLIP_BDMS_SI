@@ -10,7 +10,11 @@
 # limitations under the License.
 #
 
-"""Generate per-trust API keys and the internal service key, and write them into an environment file.
+"""Generate per-trust API keys and write hashes into an environment file.
+
+Trust names are read from the ``TRUST_NAMES`` env var (a JSON list).  Plaintext
+keys are stored in ``trust/trust-keys/<name>.key`` files, and only the hashes
+are written back into the environment file as ``TRUST_API_KEY_HASHES``.
 
 Usage:
     make generate-trust-api-keys
@@ -20,37 +24,38 @@ Usage:
 import argparse
 import hashlib
 import json
-import re
 import sys
 from pathlib import Path
 
 from flip_api.scripts.generate_trust_key import generate_trust_key
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-TRUST_KEY_PATTERN = re.compile(r"^PRIVATE_API_KEY_(TRUST_\d+)=(.*)$")
 
 
-def _is_placeholder(value: str) -> bool:
-    """Return True if the value is empty or looks like a template placeholder.
+def _parse_trust_names(lines: list[str]) -> list[str]:
+    """Extract trust names from the TRUST_NAMES env var line.
 
     Args:
-        value (str): The env var value to inspect.
+        lines (list[str]): Lines of the environment file.
 
     Returns:
-        bool: True if the value is empty or contains a '<' character.
+        list[str]: List of trust names, e.g. ``["Trust_1", "Trust_2"]``.
     """
-    return not value or "<" in value
+    for line in lines:
+        if line.startswith("TRUST_NAMES="):
+            return json.loads(line.split("=", 1)[1])
+    return []
 
 
 def main() -> None:
-    """Generate per-trust API keys and write them into the specified environment file.
+    """Generate per-trust API keys and write hashes into the specified environment file.
 
-    Reads the environment file to discover PRIVATE_API_KEY_TRUST_<N> entries,
-    generates a cryptographically secure key for each placeholder (or all if --force),
-    and updates the file in-place with the new keys and TRUST_API_KEY_HASHES.
+    Reads trust names from ``TRUST_NAMES``, generates a cryptographically secure
+    key for each trust that doesn't already have a ``.key`` file (or all if
+    ``--force``), and updates ``TRUST_API_KEY_HASHES`` in the env file.
 
     Raises:
-        SystemExit: If the env file is missing or contains no trust key entries.
+        SystemExit: If the env file is missing or contains no ``TRUST_NAMES`` entry.
     """
     parser = argparse.ArgumentParser(description="Generate per-trust API keys and update an environment file.")
     parser.add_argument(
@@ -63,7 +68,7 @@ def main() -> None:
         "--force",
         action="store_true",
         default=False,
-        help="Regenerate all keys even if they already have real values.",
+        help="Regenerate all keys even if they already have .key files.",
     )
     args = parser.parse_args()
     env_file: Path = args.env_file
@@ -74,80 +79,48 @@ def main() -> None:
 
     lines = env_file.read_text().splitlines()
 
-    # Discover trusts from PRIVATE_API_KEY_TRUST_<N> lines
-    trust_entries: dict[str, str] = {}
-    for line in lines:
-        match = TRUST_KEY_PATTERN.match(line)
-        if match:
-            trust_entries[match.group(1)] = match.group(2)
-
-    if not trust_entries:
-        print(f"Error: no PRIVATE_API_KEY_TRUST_<N> entries found in {env_file.name}.")
+    trust_names = _parse_trust_names(lines)
+    if not trust_names:
+        print(f"Error: no TRUST_NAMES entry found in {env_file.name}.")
         sys.exit(1)
 
-    # Generate keys only for placeholders (or all if --force)
-    trust_keys: dict[str, tuple[str, str]] = {}
+    # Generate keys — existing .key files are preserved unless --force
     key_dir = REPO_ROOT / "trust" / "trust-keys"
-    generated = 0
-    skipped = 0
-    for trust_name, existing_value in trust_entries.items():
-        if not args.force and not _is_placeholder(existing_value):
-            key_hash = hashlib.sha256(existing_value.encode()).hexdigest()
-            trust_keys[trust_name] = (existing_value, key_hash)
-            skipped += 1
+    trust_keys: dict[str, tuple[str, str]] = {}
+    actions: dict[str, str] = {}
+    for trust_name in trust_names:
+        key_file = key_dir / f"{trust_name}.key"
+        if not args.force and key_file.exists() and key_file.read_text().strip():
+            existing_key = key_file.read_text().strip()
+            key_hash = hashlib.sha256(existing_key.encode()).hexdigest()
+            trust_keys[trust_name] = (existing_key, key_hash)
+            actions[trust_name] = "skipped"
         else:
             key, key_hash = generate_trust_key(trust_name, output_dir=key_dir)
             trust_keys[trust_name] = (key, key_hash)
-            generated += 1
+            actions[trust_name] = "generated"
 
     # Build TRUST_API_KEY_HASHES value
-    hashes_dict = {name: trust_keys[name][1] for name in trust_entries}
+    hashes_dict = {name: trust_keys[name][1] for name in trust_names}
     hashes_json = json.dumps(hashes_dict)
-
-    # Generate internal service key (used by fl-server on the Central Hub)
-    internal_key: str | None = None
-    internal_key_hash: str | None = None
-    internal_key_generated = False
-    for line in lines:
-        if line.startswith("INTERNAL_SERVICE_KEY="):
-            existing = line.split("=", 1)[1]
-            if args.force or _is_placeholder(existing):
-                internal_key, internal_key_hash = generate_trust_key("FL_Server", output_dir=key_dir)
-                internal_key_generated = True
-            else:
-                internal_key = existing
-                internal_key_hash = hashlib.sha256(existing.encode()).hexdigest()
-            break
 
     # Rewrite lines
     new_lines: list[str] = []
     for line in lines:
-        match = TRUST_KEY_PATTERN.match(line)
-        if match:
-            trust_name = match.group(1)
-            new_lines.append(f"PRIVATE_API_KEY_{trust_name}={trust_keys[trust_name][0]}")
-        elif line.startswith("TRUST_API_KEY_HASHES="):
+        if line.startswith("TRUST_API_KEY_HASHES="):
             new_lines.append(f"TRUST_API_KEY_HASHES={hashes_json}")
-        elif line.startswith("INTERNAL_SERVICE_KEY=") and internal_key is not None:
-            new_lines.append(f"INTERNAL_SERVICE_KEY={internal_key}")
-        elif line.startswith("INTERNAL_SERVICE_KEY_HASH=") and internal_key_hash is not None:
-            new_lines.append(f"INTERNAL_SERVICE_KEY_HASH={internal_key_hash}")
         else:
             new_lines.append(line)
 
     env_file.write_text("\n".join(new_lines) + "\n")
 
+    generated = sum(1 for a in actions.values() if a == "generated")
+    skipped = sum(1 for a in actions.values() if a == "skipped")
     print(f"Updated {env_file.name}: {generated} trust keys generated, {skipped} skipped (already set).")
-    for name in trust_entries:
-        action = "generated" if args.force or _is_placeholder(trust_entries[name]) else "skipped"
+    for name, action in actions.items():
         print(f"  {name}: {action}")
     if generated:
-        print(f"  TRUST_API_KEY_HASHES updated with {len(trust_entries)} entries")
-    if internal_key_generated:
-        print("  INTERNAL_SERVICE_KEY: generated")
-        print("  INTERNAL_SERVICE_KEY_HASH: updated")
-    elif internal_key is not None:
-        print("  INTERNAL_SERVICE_KEY: skipped (already set)")
+        print(f"  TRUST_API_KEY_HASHES updated with {len(trust_names)} entries")
 
 
 if __name__ == "__main__":

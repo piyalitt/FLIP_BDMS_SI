@@ -36,7 +36,7 @@ def add_log_endpoint(
     Add a log entry to the database for a specific model.
 
     This endpoint is internal-only: it accepts requests from the fl-server on the
-    Central Hub (authenticated via INTERNAL_SERVICE_KEY_HEADER), not from trusts.
+    Central Hub (authenticated via INTERNAL_SERVICE_KEY_HEADER).
 
     Args:
         model_id (UUID): The ID of the model.

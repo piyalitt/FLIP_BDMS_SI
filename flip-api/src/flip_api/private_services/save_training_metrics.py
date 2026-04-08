@@ -43,7 +43,7 @@ def save_training_metrics_endpoint(
     Receives and saves training metrics for a given model ID and trust.
 
     This endpoint is internal-only: it accepts requests from the fl-server on the
-    Central Hub (authenticated via INTERNAL_SERVICE_KEY_HEADER), not from trusts.
+    Central Hub (authenticated via INTERNAL_SERVICE_KEY_HEADER).
 
     Args:
         model_id (UUID): The unique identifier for the model.
