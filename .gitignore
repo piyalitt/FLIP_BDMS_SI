@@ -336,8 +336,9 @@ flip-fl-api/transfer/*/*
 .env.stag
 .env.production
 
-# Per-trust API keys (plaintext — never commit)
+# API keys (plaintext — never commit)
 trust/trust-keys/
+deploy/keys/
 
 
 trust/terraform.tfstate
