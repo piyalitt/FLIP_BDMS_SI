@@ -232,7 +232,7 @@ resource "aws_cloudwatch_log_group" "flip_log_group" {
 # Key Pair for SSH access
 resource "aws_key_pair" "flip_keypair" {
   key_name   = "flip-keypair"
-  public_key = file("${var.flip_keypair}.pub")
+  public_key = file(pathexpand("${var.flip_keypair}.pub"))
 }
 
 # EC2 Instance
