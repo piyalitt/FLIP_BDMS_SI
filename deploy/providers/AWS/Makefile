@@ -194,13 +194,13 @@ ssh-config: ## Update local .ssh/config for flip contexts
 	@echo "⚙️  Configure .ssh/config for flip context..."
 	@set -x AWS_PROFILE ${AWS_PROFILE}
 	@terraform output
-	@python3 update_ssh_config.py --aws-profile ${AWS_PROFILE} || true
+	@uv run ./update_ssh_config.py --aws-profile ${AWS_PROFILE} || true
 	@echo "✅ .ssh/config updated!"
 
 .PHONY: update-env
 update-env: ## Update environment file with Terraform outputs
 	@echo "🔄 Updating environment file with infrastructure values..."
-	@python3 update_env.py $(MAIN_ENV_FILE)
+	@uv run ./update_env.py $(MAIN_ENV_FILE)
 
 .PHONY: ansible-init
 ansible-init: ## Initialize Ansible configuration on EC2 instances (if failed try again for 3 times)
@@ -271,7 +271,7 @@ deploy-trust: update-env ## Deploy trust relationships after central hub is depl
 	@echo "⚙️  Configure .ssh/config for flip context..."
 	@set -x AWS_PROFILE ${AWS_PROFILE}
 	@terraform output
-	@python3 update_ssh_config.py --aws-profile ${AWS_PROFILE} || true
+	@uv run ./update_ssh_config.py --aws-profile ${AWS_PROFILE} || true
 	@echo "✅ .ssh/config updated!"
 	@echo "🔑 Refreshing SSH host key for Trust EC2 (ensures Docker context SSH works after re-provisioning)..."
 	@TRUST_IP=$$(terraform output -raw TrustEc2PublicIp) && \
@@ -389,14 +389,14 @@ down:
 
 .PHONY: status
 status: ## Check deployment status
-	@python3 check_status.py
+	@uv run ./check_status.py
 
 check:
 	@echo "🔍 Checking Terraform state..."
 	@terraform state list
 	@echo ""
 	@terraform output
-	@python3 check_status.py || true
+	@uv run ./check_status.py || true
 
 
 .PHONY: backup-eips
