@@ -412,11 +412,17 @@ destroy: backup-eips ## Destroy ephemeral infrastructure (EC2, RDS, VPC) - prese
 	@echo "   ✓ S3 buckets (FLIP + AI Centre data)"
 	@echo "   ✓ ACM certificates and Route53 records"
 	@echo "   ✓ Elastic IPs (for Central Hub and Trust EC2)"
+ifeq ($(PROD),true)
+	@echo "   ✓ VPC (Transit Gateway attachment — production)"
+endif
 	@echo ""
 	@echo "🗑️  DESTROYING:"
 	@echo "   • EC2 instances (flip, trust) - instances only, EIPs preserved"
 	@echo "   • RDS database (PostgreSQL)"
-	@echo "   • VPC and security groups"
+	@echo "   • Security groups"
+ifneq ($(PROD),true)
+	@echo "   • VPC"
+endif
 	@echo "   • ALB/NLB load balancers"
 	@echo "   • IAM roles and policies"
 	@echo "   • CloudWatch logs"
