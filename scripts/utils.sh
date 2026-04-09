@@ -21,17 +21,17 @@ NC='\033[0m' # No Color
 
 # Helper functions
 log_info() {
-    printf '%b\n' "${BLUE}ℹ️  $*${NC}"
+    printf '%b\n' "${BLUE}$*${NC}"
 }
 
 log_success() {
-    printf '%b\n' "${GREEN}✅ $*${NC}"
+    printf '%b\n' "${GREEN}$*${NC}"
 }
 
 log_warn() {
-    printf '%b\n' "${YELLOW}⚠️  $*${NC}"
+    printf '%b\n' "${YELLOW}$*${NC}"
 }
 
 log_error() {
-    printf '%b\n' "${RED}❌ ERROR: $*${NC}"
+    printf '%b\n' "${RED}ERROR: $*${NC}"
 }
