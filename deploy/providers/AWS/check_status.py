@@ -900,7 +900,6 @@ def main(
         except (json.JSONDecodeError, ValueError):
             configured_net_numbers = [1]  # Default to net-1 only
         # Trust EC2 ports
-        TRUST_API_PORT = os.getenv("TRUST_API_PORT", "")
         XNAT_PORT = os.getenv("XNAT_PORT_TRUST_1", "")
         ORTHANC_PORT = os.getenv("PACS_UI_PORT_TRUST_1", "")
         # IMAGING_API_PORT = os.getenv("IMAGING_API_PORT", "")
@@ -996,9 +995,13 @@ def main(
         if trust_ip:
             print_status("INFO", "Checking Trust EC2 service endpoints...")
 
-            # Trust API health via SSH tunnel (trust API port is not exposed to the internet;
-            # all hub communication is outbound polling from the trust)
-            check_endpoint_over_ssh("flip-trust", f"http://localhost:{TRUST_API_PORT}/health", 200)
+            # Trust API uses outbound polling — no inbound port is exposed.
+            # Direct the operator to check trust-api logs for successful polling.
+            print_status(
+                "INFO",
+                "Trust API uses outbound polling. "
+                "Verify by checking trust-api logs for successful hub polling and heartbeats.",
+            )
 
             # Check XNAT is reachable
             check_http_endpoint(f"http://{trust_ip}:{XNAT_PORT}", "XNAT Service", 200)
