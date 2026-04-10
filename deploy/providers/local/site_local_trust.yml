@@ -15,7 +15,9 @@
 # site_local_trust.yml
 #
 # Provisions an on-premises Ubuntu host to run the FLIP Trust-API stack.
-# Trusts poll the Central Hub for tasks — all communication is outbound.
+# Trusts poll the Central Hub for tasks — all communication is outbound
+# except when FL_BACKEND=flower: the Hub FL API makes an inbound gRPC call
+# to each Trust's supernode health port (9098) to check client connectivity.
 #
 # Usage:
 #   ansible-playbook -i <trust-host-ip>, \
@@ -103,14 +105,6 @@
         port: "22"
         proto: tcp
         comment: SSH access
-
-    - name: Allow consolidated FL port 8002 from Central Hub
-      community.general.ufw:
-        rule: allow
-        src: "{{ ch_public_ip }}"
-        port: "8002"
-        proto: tcp
-        comment: "FL Server/Admin port from AWS CH"
 
     - name: Allow Flower supernode health port from Central Hub
       community.general.ufw:
