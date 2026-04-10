@@ -147,17 +147,6 @@ variable "FL_SERVER_PORT" {
   default     = 8002
 }
 
-variable "FLOWER_SUPERNODE_HEALTH_PORT" {
-  description = "Host port for the Flower supernode gRPC health endpoint"
-  type        = number
-  default     = 9098
-}
-
-variable "ENABLE_FLOWER_SUPERNODE_HEALTH" {
-  description = "Whether to expose Flower supernode health networking for remote Trust status checks"
-  type        = bool
-  default     = false
-}
 
 variable "flip_alb_subdomain" {
   description = "Subdomain for the FLIP ALB"

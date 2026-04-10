@@ -28,9 +28,6 @@ LOCK ?= true
 # Export PROD so child processes (e.g. check_status.py) can determine the environment
 export PROD
 
-ENABLE_FLOWER_SUPERNODE_HEALTH := $(if $(filter flower,$(FL_BACKEND)),true,false)
-export ENABLE_FLOWER_SUPERNODE_HEALTH
-
 # Resolve FL_KIT_DATE from the backend-specific kit date: FLARE_KIT_DATE or FLOWER_KIT_DATE
 FL_KIT_DATE := $(if $(filter nvflare,$(FL_BACKEND)),$(FLARE_KIT_DATE),$(FLOWER_KIT_DATE))
 $(if $(FL_KIT_DATE),,$(error 🧠 $(if $(filter nvflare,$(FL_BACKEND)),FLARE_KIT_DATE,FLOWER_KIT_DATE) must be set in the environment file for FL_BACKEND=$(FL_BACKEND)))
@@ -71,8 +68,6 @@ export TF_VAR_UI_PORT=${UI_PORT}
 export TF_VAR_API_PORT=${API_PORT}
 export TF_VAR_FL_API_PORT=${FL_API_PORT}
 export TF_VAR_FL_SERVER_PORT=${FL_SERVER_PORT}
-export TF_VAR_FLOWER_SUPERNODE_HEALTH_PORT=${FLOWER_SUPERNODE_HEALTH_PORT}
-export TF_VAR_ENABLE_FLOWER_SUPERNODE_HEALTH=${ENABLE_FLOWER_SUPERNODE_HEALTH}
 export TF_VAR_XNAT_PORT=${XNAT_PORT_TRUST_1}
 export TF_VAR_PACS_UI_PORT=${PACS_UI_PORT_TRUST_1}
 export TF_VAR_AWS_REGION=${AWS_REGION}
@@ -323,9 +318,7 @@ add-local-trust: ## Provision an on-prem Trust host and register it with the Cen
 			--private-key "$(LOCAL_TRUST_SSH_KEY)" \
 			../../../deploy/providers/local/site_local_trust.yml \
 			-e trust_public_ip=$(LOCAL_TRUST_IP) \
-			-e ch_public_ip="$$CH_IP" \
-			-e flower_supernode_health_port=$(FLOWER_SUPERNODE_HEALTH_PORT) \
-			-e enable_flower_supernode_health=$(ENABLE_FLOWER_SUPERNODE_HEALTH); \
+			-e ch_public_ip="$$CH_IP"; \
 	else \
 		echo "💻 Running locally (no SSH — operator machine is the trust host)..."; \
 		if [ -z "$$ANSIBLE_BECOME_PASS" ]; then \
@@ -351,9 +344,7 @@ add-local-trust: ## Provision an on-prem Trust host and register it with the Cen
 			-e ansible_python_interpreter=/usr/bin/python3 \
 			../../../deploy/providers/local/site_local_trust.yml \
 			-e trust_public_ip=$(LOCAL_TRUST_IP) \
-			-e ch_public_ip="$$CH_IP" \
-			-e flower_supernode_health_port=$(FLOWER_SUPERNODE_HEALTH_PORT) \
-			-e enable_flower_supernode_health=$(ENABLE_FLOWER_SUPERNODE_HEALTH); \
+			-e ch_public_ip="$$CH_IP"; \
 		PLAY_RC=$$?; \
 		exit $$PLAY_RC; \
 	fi

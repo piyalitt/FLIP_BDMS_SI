@@ -81,6 +81,7 @@ TRUST_1_VARS = \
 	LOKI_PORT=${LOKI_PORT_TRUST_1} \
 	TRUST_NETWORK_NAME=${network1} \
 	TRUST_NAME=Trust_1 \
+	TRUST_NUMBER=1 \
 	TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),Trust_1)
 TRUST_2_VARS = \
 	BASE_IMAGES_DOWNLOAD_DIR=${BASE_IMAGES_DOWNLOAD_DIR_TRUST2} \
@@ -97,6 +98,7 @@ TRUST_2_VARS = \
 	LOKI_PORT=${LOKI_PORT_TRUST_2} \
 	TRUST_NETWORK_NAME=${network2} \
 	TRUST_NAME=Trust_2 \
+	TRUST_NUMBER=2 \
 	TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),Trust_2)
 
 build:
@@ -142,7 +144,7 @@ up-local-trust-stag:
 	@echo "⚙️ Using environment file ${MAIN_ENV_FILE}"
 	@echo "🧠 FL_BACKEND=$(FL_BACKEND) ($(FL_BACKEND_COMPOSE_FILE))"
 	mkdir -p ${BASE_IMAGES_DOWNLOAD_DIR_TRUST1}
-	$(TRUST_1_VARS) TRUST_NAME=$(LOCAL_TRUST_NAME) TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),$(LOCAL_TRUST_NAME)) DEBUG=$(DEBUG) \
+	$(TRUST_1_VARS) TRUST_NAME=$(LOCAL_TRUST_NAME) TRUST_NUMBER=$(subst Trust_,,$(LOCAL_TRUST_NAME)) TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),$(LOCAL_TRUST_NAME)) DEBUG=$(DEBUG) \
 		$(DOCKER_COMPOSE_CMD) -p $(trust1) up -d --pull always
 
 # Uses --pull always to ensure the latest FL images and omop-db image are used

@@ -26,6 +26,7 @@ services:
       - SUPERLINK_ADDRESS=fl-server-net-1:9093
       - SUPERLINK_HEALTH_ADDRESS=fl-server-net-1:9097
       - SUPERLINK_ROOT_CERTIFICATES=/certs/ca.crt
+      - FLOWER_SRC_ROOT=/app
     ports:
       - "${FL_API_PORT}:8000"
       - "5679:5679"
@@ -46,6 +47,7 @@ services:
       - SUPERLINK_ADDRESS=fl-server-net-2:9093
       - SUPERLINK_HEALTH_ADDRESS=fl-server-net-2:9097
       - SUPERLINK_ROOT_CERTIFICATES=/certs/ca.crt
+      - FLOWER_SRC_ROOT=/app
     depends_on:
       - fl-server-net-2
     networks:
@@ -96,6 +98,8 @@ services:
     image: ${DOCKER_REGISTRY}${DOCKER_FL_SERVER_NAME}:${DOCKER_FL_TAG}
     environment:
       - SUPERLINK_ADDRESS=fl-server-net-1:9093
+      - FL_API_ADDRESS=http://flip-fl-api-net-1:8000
+      - TRUST_NAMES=${TRUST_NAMES}
     volumes:
       - ${FL_PROVISIONED_DIR}/net-1/certificates:/certs:ro
       - ${FL_PROVISIONED_DIR}/net-1/keys:/keys:ro
@@ -103,6 +107,7 @@ services:
     entrypoint: ["/bin/bash", "/scripts/register-supernode-keys.sh"]
     depends_on:
       - fl-server-net-1
+      - fl-api-net-1
     networks:
       - shared-net-1
 
@@ -147,11 +152,14 @@ services:
     image: ${DOCKER_REGISTRY}${DOCKER_FL_SERVER_NAME}:${DOCKER_FL_TAG}
     environment:
       - SUPERLINK_ADDRESS=fl-server-net-2:9093
+      - FL_API_ADDRESS=http://flip-fl-api-net-2:8000
+      - TRUST_NAMES=${TRUST_NAMES}
     volumes:
       - ${FL_PROVISIONED_DIR}/net-2/certificates:/certs:ro
       - ${FL_PROVISIONED_DIR}/net-2/keys:/keys:ro
     entrypoint: ["/bin/bash", "/scripts/register-supernode-keys.sh"]
     depends_on:
       - fl-server-net-2
+      - fl-api-net-2
     networks:
       - shared-net-2

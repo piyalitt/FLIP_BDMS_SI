@@ -230,7 +230,8 @@ def validate_client_availability(clients: list[str], endpoint: str) -> None:
     """
     Validate the availability of clients by checking their status.
     It sends a GET request to the FL API service to check the status of the clients.
-    If any client is unavailable, it raises a ValueError.
+    For NVFLARE, raises ValueError if any client is unavailable.
+    For Flower, logs a warning instead — Flower's SuperLink handles client selection at runtime.
 
     Args:
         clients (list[str]): A list of client names to check the availability of.
@@ -240,10 +241,15 @@ def validate_client_availability(clients: list[str], endpoint: str) -> None:
         None
 
     Raises:
-        ValueError: If any client is unavailable.
+        ValueError: If any client is unavailable (NVFLARE backend only).
     """
+    is_flower = get_settings().FL_BACKEND == "flower"
+
     client_statuses = check_client_status(endpoint)
     if not client_statuses:
+        if is_flower:
+            logger.warning(f"No client status response from FL API at {endpoint} — Flower will handle client selection")
+            return
         logger.error(f"No response from FL API for clients at endpoint {endpoint}")
         raise ValueError("Unable to fetch client statuses to validate client availability")
 
@@ -252,6 +258,9 @@ def validate_client_availability(clients: list[str], endpoint: str) -> None:
     unavailable = [client for client in clients if not is_client_available(client, client_statuses)]
 
     if unavailable:
+        if is_flower:
+            logger.warning(f"Clients unavailable: {', '.join(unavailable)} — Flower will handle client selection")
+            return
         raise ValueError(f"Clients unavailable: {', '.join(unavailable)}")
 
 
