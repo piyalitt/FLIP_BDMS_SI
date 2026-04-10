@@ -16,6 +16,9 @@ on:
         branches:
             - main
 
+permissions:
+  contents: read
+
 jobs:
     release:
         name: Tag and Create GitHub Release

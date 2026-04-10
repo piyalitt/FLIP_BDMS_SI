@@ -16,6 +16,9 @@ on:
     pull_request:
         types: [opened]
 
+permissions:
+  contents: read
+
 jobs:
     import-acceptance-criteria:
         runs-on: ubuntu-latest

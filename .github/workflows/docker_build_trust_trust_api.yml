@@ -21,6 +21,9 @@ on:
       - "trust/observability/log_config/**"
       - ".github/workflows/docker_build_trust_trust_api.yml"
 
+permissions:
+  contents: read
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
