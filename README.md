@@ -76,7 +76,6 @@ For example:
 | `make up-no-trust` | Run all services except the trust services related services |
 | `make up-trusts` | Run the trust services related services (uses Docker Swarm for XNAT) |
 | `make central-hub` | Run the central API service, including the database and UI |
-| `make central-fl` | Run the FL API service |
 | `make build` | Build all Docker images |
 | `make down` | Stop all services and remove the containers (including Swarm stacks) |
 | `make restart` | Stop and start all services |
@@ -135,6 +134,22 @@ make down        # Stop XNAT services
 make xnat-shell  # Get a shell in the XNAT container
 ```
 
+### Trust API Key Setup
+
+Before starting the platform, generate per-trust API keys and write them into `.env.development` using:
+
+```bash
+make generate-dev-keys
+```
+
+This generates a unique key for each trust found in `.env.development`, and writes both `TRUST_API_KEYS` and `TRUST_API_KEY_HASHES` (JSON dicts) directly into the env file.
+
+To generate a key for a single trust (e.g. when adding a new trust):
+
+```bash
+make -C flip-api generate-trust-key TRUST_NAME=Trust_1
+```
+
 ### Basic Usage
 
 To start the full platform locally:
@@ -162,7 +177,7 @@ docker compose -f deploy/compose.development.yml exec flip-ui /bin/sh
 This will give you a shell in the `flip-ui` container. You can run any command inside the container, including
 installing new packages, running tests, and debugging the code.
 
-Some aliases are defined in the Makefile to make this easier:
+To stop the services:
 
 ```bash
 make down
@@ -212,10 +227,11 @@ The repository is organised as follows:
 - `trust`: Contains the services that would be deployed in individual trust environments.
   - `data-access-api`: Contains the data access API service
   - `imaging-api`: Contains the imaging API service
+  - `nginx`: Contains the nginx/TLS reverse proxy configuration
+  - `observability`: Contains the observability stack (Grafana, Loki, Alloy)
   - `omop-db`: Contains a mocked OMOP database
   - `orthanc`: Contains a mocked PACS service (uses [Orthanc](https://www.orthanc-server.com/))
   - `trust-api`: Contains the trust API service
-  - `nginx`: Contains the nginx TLS termination proxy for trust HTTPS endpoints
   - `xnat`: Contains a mocked [XNAT](https://www.xnat.org/) service
 
 ### HTTPS / TLS
