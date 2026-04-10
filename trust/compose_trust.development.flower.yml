@@ -45,8 +45,6 @@ services:
       - /keys/supernode_credentials_${TRUST_NUMBER}
       - --clientappio-api-address
       - ${SUPERNODE_1_CLIENTAPPIO_API_ADDRESS:-127.0.0.1:9094}
-      - --health-server-address
-      - ${SUPERNODE_1_HEALTH_SERVER_BIND_ADDRESS:-0.0.0.0:9098}
     networks:
       - default
       - deploy_shared-net-1
@@ -83,8 +81,6 @@ services:
       - /keys/supernode_credentials_${TRUST_NUMBER}
       - --clientappio-api-address
       - ${SUPERNODE_2_CLIENTAPPIO_API_ADDRESS:-127.0.0.1:9095}
-      - --health-server-address
-      - ${SUPERNODE_2_HEALTH_SERVER_BIND_ADDRESS:-0.0.0.0:9098}
     networks:
       - default
       - deploy_shared-net-2

@@ -26,7 +26,6 @@ services:
       - SUPERLINK_ADDRESS=fl-server-net-1:9093
       - SUPERLINK_HEALTH_ADDRESS=fl-server-net-1:9097
       - SUPERLINK_ROOT_CERTIFICATES=/certs/ca.crt
-      - SUPERNODE_HEALTH_ADDRESSES=Trust_1=trust1-fl-client-net-1-1:9098,Trust_2=trust2-fl-client-net-1-1:9098
     ports:
       - "${FL_API_PORT}:8000"
       - "5679:5679"
@@ -47,7 +46,6 @@ services:
       - SUPERLINK_ADDRESS=fl-server-net-2:9093
       - SUPERLINK_HEALTH_ADDRESS=fl-server-net-2:9097
       - SUPERLINK_ROOT_CERTIFICATES=/certs/ca.crt
-      - SUPERNODE_HEALTH_ADDRESSES=Trust_1=trust1-fl-client-net-2-1:9098,Trust_2=trust2-fl-client-net-2-1:9098
     depends_on:
       - fl-server-net-2
     networks:
