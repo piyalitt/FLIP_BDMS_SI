@@ -13,7 +13,7 @@
 
 # FLIP Local (On-Premises) Trust Deployment
 
-Ansible playbook and supporting files to provision an on-premises Ubuntu host as a FLIP Trust node. The provisioned host polls the Central Hub (running in AWS) for tasks — all communication is outbound from the trust.
+Ansible playbook and supporting files to provision an on-premises Ubuntu host as a FLIP Trust node. The provisioned host polls the Central Hub (running in AWS) for tasks — all communication is outbound from the trust, except when `FL_BACKEND=flower` (the Hub FL API polls Trust supernode health on port `9098`).
 
 This is the **local provider** counterpart to the [AWS provider](../AWS/README.md), which manages the Central Hub and (optionally) cloud-hosted Trust instances. Together they form the hybrid deployment model described in [docs/hybrid-local-trust-https-plan.md](../../../docs/hybrid-local-trust-https-plan.md).
 
@@ -36,7 +36,7 @@ This is the **local provider** counterpart to the [AWS provider](../AWS/README.m
   │ (AWS EC2) │ │  (local)   │
   └──────────┘ └───────────┘
 
-  Trusts poll the hub (outbound only)
+  Trusts poll the hub (outbound only; port 9098 inbound when FL_BACKEND=flower)
 ```
 
 Each local Trust host runs:
@@ -46,7 +46,8 @@ Each local Trust host runs:
 | trust-api | 8000 | HTTP (polls hub outbound) |
 | imaging-api | 8000 | HTTP (internal) |
 | data-access-api | 8000 | HTTP (internal) |
-| fl-client | 8002 | TCP (FL server/admin, consolidated) |
+| fl-client | — | TCP outbound to Hub NLB (FL server) |
+| fl-client | 9098 | gRPC inbound from Hub (Flower supernode health, only when `FL_BACKEND=flower`) |
 
 ## Prerequisites
 
@@ -108,7 +109,7 @@ make add-local-trust LOCAL_TRUST_IP=<public-ip>
 
 1. Runs the Ansible playbook (`site_local_trust.yml`) which:
    - Installs Docker and required system packages
-   - Configures UFW firewall to allow FL port 8002 **only from the Central Hub IP**
+   - Configures UFW firewall (when `FL_BACKEND=flower`, allows supernode health port `9098` **only from the Central Hub IP**)
 2. Downloads the `Trust_2` FL participant kit from S3 and deploys it to `/opt/flip/services/Trust_2/{startup,local,transfer}` on the trust host.
 3. Runs a targeted `terraform apply` to:
    - Add security group rules allowing FL traffic from the local trust's public IP
@@ -126,7 +127,7 @@ make add-local-trust LOCAL_TRUST_IP=<public-ip>
 
 ## Communication Model
 
-Trusts poll the Central Hub for tasks over HTTPS — all communication is **outbound from the trust**. The hub never makes inbound requests to trusts. This simplifies networking: no inbound firewall rules or NAT port-forwarding are needed for the trust API port.
+Trusts poll the Central Hub for tasks over HTTPS — all communication is **outbound from the trust**. The one exception is when `FL_BACKEND=flower`: the Central Hub FL API makes an inbound gRPC call to each Trust's supernode health port (`9098`) to check client connectivity. No inbound firewall rules or NAT port-forwarding are needed for the trust API port.
 
 ## Ansible Playbook Details
 
@@ -181,11 +182,11 @@ uv run ansible-galaxy install -r deploy/providers/local/requirements.yml
 
 Since trusts poll the hub outbound, **no inbound port forwarding is needed for the trust API**.
 
-For federated learning, forward FL ports from the router to the trust host:
+When `FL_BACKEND=flower`, forward the supernode health port so the Central Hub FL API can check client connectivity:
 
 | External Port | Internal Port | Protocol | Purpose |
 | --- | --- | --- | --- |
-| `8002` | `8002` | TCP | FL Server/Admin |
+| `9098` | `9098` | TCP | Flower supernode health (only when `FL_BACKEND=flower`) |
 
 ### Static LAN IP
 
@@ -199,7 +200,7 @@ Some residential ISPs use Carrier-Grade NAT (CGNAT), which prevents inbound port
 curl ifconfig.me
 ```
 
-The returned IP should match the router's WAN IP. If they differ, contact the ISP to request a public IP or opt out of CGNAT. Note: CGNAT only affects FL port forwarding — trust API polling works regardless since it's outbound.
+The returned IP should match the router's WAN IP. If they differ, contact the ISP to request a public IP or opt out of CGNAT. Note: CGNAT only affects port `9098` forwarding (Flower supernode health) — trust API polling works regardless since it's outbound.
 
 ### Dynamic Public IP
 

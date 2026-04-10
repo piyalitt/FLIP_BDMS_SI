@@ -22,7 +22,7 @@ This provider manages the **Central Hub** (always in AWS) and, optionally, one o
 | **Cloud** | AWS EC2 (same account as Central Hub) | This provider (`deploy/providers/AWS/`) |
 | **Hybrid / On-Premises** | Any Ubuntu host (home lab, hospital server, etc.) | [`deploy/providers/local/`](../local/README.md) + selected targets in this Makefile |
 
-In both models, trusts poll the Central Hub for tasks over HTTPS — all communication is **outbound from the trust** to the hub. The hub never makes inbound requests to trusts.
+In both models, trusts poll the Central Hub for tasks over HTTPS — all communication is **outbound from the trust** to the hub. The one exception is when `FL_BACKEND=flower`: the Central Hub FL API makes an inbound gRPC call to each Trust's supernode health port (`9098`) to check client connectivity.
 
 ## Prerequisites
 
@@ -207,13 +207,12 @@ cd deploy/providers/AWS
 make full-deploy-stag-hybrid LOCAL_TRUST_IP=<public-ip> [LOCAL_TRUST_SSH_KEY=~/.ssh/trust_key]
 ```
 
-This wrapper target runs the full AWS deployment, provisions the local trust, updates `trust_endpoints["Trust_1"]` in `FLIP_API`, and redeploys the Central Hub so the new secret values are loaded.
+This wrapper target runs the full AWS deployment, provisions the local trust, and redeploys the Central Hub so the new secret values are loaded.
 You still need to:
 
-1. Configure router port forwarding (`TRUST_API_PORT/tcp` to the trust host LAN IP; if federated learning traffic must reach the host, also forward `FL_SERVER_PORT/tcp`, currently `8002`. When `FL_BACKEND=flower`, also forward `FLOWER_SUPERNODE_HEALTH_PORT/tcp`, default `9098`, so the FL API `check_client_status` endpoint can call the Trust supernode health endpoint)
+1. If `FL_BACKEND=flower` and the trust is behind NAT, forward `FLOWER_SUPERNODE_HEALTH_PORT/tcp` (default `9098`) from the router to the trust host LAN IP so the Central Hub FL API can reach the supernode health endpoint
 2. Start the trust stack on the host: `cd trust && env PROD=stag make up-local-trust-stag`
-3. Verify (CA-validated): `make test-local-trust LOCAL_TRUST_IP=<public-ip>`
-4. Optionally run a handshake-only diagnostic: `make test-local-trust-insecure LOCAL_TRUST_IP=<public-ip>`
+3. Verify the trust can poll the hub (check trust-api logs for successful task polling)
 
 Or run provisioning directly:
 
@@ -259,7 +258,7 @@ Review the output for failed checks and follow the specific troubleshooting step
 
 ### Services
 
-The platform supports a cloud-only setup (Central Hub + Trust on AWS) or a hybrid setup (Central Hub on AWS + Trust on-premises). Trusts poll the Central Hub for tasks — all communication is outbound from the trust.
+The platform supports a cloud-only setup (Central Hub + Trust on AWS) or a hybrid setup (Central Hub on AWS + Trust on-premises). Trusts poll the Central Hub for tasks — all communication is outbound from the trust, except when `FL_BACKEND=flower` (the Hub FL API polls Trust supernode health on port `9098`).
 
 1. **Central Hub EC2**: Hosts the main application services
    - flip-ui (Frontend)
@@ -346,7 +345,7 @@ The platform supports a cloud-only setup (Central Hub + Trust on AWS) or a hybri
 
 ### Trust Infrastructure
 
-Trust services can run on AWS EC2 or on-premises. Both models use the same Docker Compose stack. Trusts poll the Central Hub for tasks — all communication is outbound from the trust.
+Trust services can run on AWS EC2 or on-premises. Both models use the same Docker Compose stack. Trusts poll the Central Hub for tasks — all communication is outbound from the trust, except when `FL_BACKEND=flower` (the Hub FL API polls Trust supernode health on port `9098`).
 
 **Cloud Trust (AWS EC2)** — deployed using the `trust_ec2` Terraform module:
 
@@ -359,7 +358,7 @@ Trust services can run on AWS EC2 or on-premises. Both models use the same Docke
 
 - Same Docker Compose stack, running on a local Ubuntu host
 - UFW firewall allows FL ports from Central Hub IP only
-- No inbound port forwarding needed for the trust API (trusts poll outbound)
+- No inbound port forwarding needed for the trust API (trusts poll outbound). When `FL_BACKEND=flower`, port `9098` is the only inbound port (Hub → Trust)
 
 ### Port configuration
 
@@ -369,8 +368,8 @@ Trust services can run on AWS EC2 or on-premises. Both models use the same Docke
 | **80** | HTTP | 🟢 **OPEN** | ALB traffic |
 | **443** | HTTPS | 🟢 **OPEN** | ALB HTTPS entrypoint |
 | **3000** | FLIP UI | 🟢 **OPEN** | Frontend application |
-| **8000** | FLIP API | 🟢 **OPEN** | Backend API |
-| **8001** | FL API | 🟢 **OPEN** | Federated learning API |
+| **8080** | FLIP API | 🟢 **OPEN** | Backend API |
+| **8000** | FL API | 🟢 **OPEN** | Federated learning API |
 | **8002** | FL Server/Admin | 🟡 **CONDITIONAL** | Consolidated FL server/admin traffic (open to trust IPs only) |
 | **9098** | Flower Supernode Health | 🟡 **CONDITIONAL** | Used only when `FL_BACKEND=flower`; Central Hub FL API polls Trust supernode gRPC health, restricted to Central Hub IP only |
 | | | | Trust API: no inbound port needed (trusts poll the hub outbound) |

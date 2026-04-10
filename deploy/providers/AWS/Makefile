@@ -370,7 +370,8 @@ ifeq ($(FL_BACKEND),nvflare)
 	    rsync -av --delete -e "ssh -i $(LOCAL_TRUST_SSH_KEY)" \
 	      $$LOCAL_TRUST_KIT_DIR/startup/ $(LOCAL_TRUST_SSH_USER)@$(LOCAL_TRUST_IP):/opt/flip/services/$(LOCAL_TRUST_NAME)/startup/ && \
 	    rsync -av --delete -e "ssh -i $(LOCAL_TRUST_SSH_KEY)" \
-	      $$LOCAL_TRUST_KIT_DIR/local/ $(LOCAL_TRUST_SSH_USER)@$(LOCAL_TRUST_IP):/opt/flip/services/$(LOCAL_TRUST_NAME)/local/; \
+	      $$LOCAL_TRUST_KIT_DIR/local/ $(LOCAL_TRUST_SSH_USER)@$(LOCAL_TRUST_IP):/opt/flip/services/$(LOCAL_TRUST_NAME)/local/ && \
+	    rm -rf $$LOCAL_TRUST_KIT_DIR; \
 	  else \
 	    echo ""; \
 	    echo "  # 3. Deploy the $(LOCAL_TRUST_NAME) NVFLARE participant kit (kit staged at $$LOCAL_TRUST_KIT_DIR):"; \
@@ -378,7 +379,6 @@ ifeq ($(FL_BACKEND),nvflare)
 	    echo "  sudo rsync -av --delete $$LOCAL_TRUST_KIT_DIR/startup/ /opt/flip/services/$(LOCAL_TRUST_NAME)/startup/"; \
 	    echo "  sudo rsync -av --delete $$LOCAL_TRUST_KIT_DIR/local/ /opt/flip/services/$(LOCAL_TRUST_NAME)/local/"; \
 	  fi && \
-	  rm -rf $$LOCAL_TRUST_KIT_DIR && \
 	  echo "✅ $(LOCAL_TRUST_NAME) NVFLARE kit deployed"
 else
 	@LOCAL_TRUST_KIT_DIR=/tmp/$(LOCAL_TRUST_NAME)_kit && \
@@ -390,14 +390,14 @@ else
 	    ssh -i $(LOCAL_TRUST_SSH_KEY) $(LOCAL_TRUST_SSH_USER)@$(LOCAL_TRUST_IP) \
 	      "mkdir -p /opt/flip/services/net-1" && \
 	    rsync -av --delete -e "ssh -i $(LOCAL_TRUST_SSH_KEY)" \
-	      $$LOCAL_TRUST_KIT_DIR/net-1/ $(LOCAL_TRUST_SSH_USER)@$(LOCAL_TRUST_IP):/opt/flip/services/net-1/; \
+	      $$LOCAL_TRUST_KIT_DIR/net-1/ $(LOCAL_TRUST_SSH_USER)@$(LOCAL_TRUST_IP):/opt/flip/services/net-1/ && \
+	    rm -rf $$LOCAL_TRUST_KIT_DIR; \
 	  else \
 	    echo ""; \
 	    echo "  # 3. Deploy the Flower participant kit (kit staged at $$LOCAL_TRUST_KIT_DIR):"; \
 	    echo "  sudo mkdir -p /opt/flip/services/net-1"; \
 	    echo "  sudo rsync -av --delete $$LOCAL_TRUST_KIT_DIR/net-1/ /opt/flip/services/net-1/"; \
 	  fi && \
-	  rm -rf $$LOCAL_TRUST_KIT_DIR && \
 	  echo "✅ $(LOCAL_TRUST_NAME) Flower kit deployed"
 endif
 	@echo "🔐 Updating AWS security group rules..."
