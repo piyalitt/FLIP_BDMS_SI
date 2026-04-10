@@ -51,7 +51,6 @@
           - openssl
           - ufw
           - curl
-          - python3-cryptography  # required by community.crypto
         state: present
         update_cache: yes
 
