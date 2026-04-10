@@ -145,7 +145,7 @@ module "flip_db" {
   identifier                 = "flip-database"
   engine                     = "postgres"
   engine_version             = var.postgres_version
-  auto_minor_version_upgrade = false
+  auto_minor_version_upgrade = true
   instance_class             = "db.t3.micro"
   allocated_storage          = 20
   username                   = var.POSTGRES_USER
