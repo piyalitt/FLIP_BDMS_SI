@@ -83,13 +83,11 @@ This command executes the following steps in order:
 5. **`plan`**: Generate and review the initial Terraform execution plan
 6. **`apply`**: Apply infrastructure changes
 7. **`update-env`**: Refresh the root environment file with Terraform outputs
-8. **`gen-trust-ec2-certs`**: Generate TLS certificates for the cloud Trust EC2 using its assigned public IP
-9. **`plan` + `apply`**: Write the generated Trust CA certificate into Secrets Manager
-10. **`ssh-config`**: Update `~/.ssh/config` with EC2 instance IPs
-11. **`ansible-init`**: Configure EC2 instances with Docker, CloudWatch, and FL assets
-12. **`deploy-centralhub`**: Deploy Central Hub services via Docker Compose
-13. **`deploy-trust`**: Deploy Trust services via Docker Compose
-14. **`status`**: Run comprehensive health checks
+8. **`ssh-config`**: Update `~/.ssh/config` with EC2 instance IPs
+9. **`ansible-init`**: Configure EC2 instances with Docker, CloudWatch, and FL assets
+10. **`deploy-centralhub`**: Deploy Central Hub services via Docker Compose
+11. **`deploy-trust`**: Deploy Trust services via Docker Compose
+12. **`status`**: Run comprehensive health checks
 
 ### Manual Step-by-Step Deployment
 
@@ -114,25 +112,20 @@ make import-persistent
 make plan
 make apply
 
-# 5. Refresh environment values and generate Trust EC2 certs
+# 5. Refresh environment values
 make update-env
-make gen-trust-ec2-certs
 
-# 6. Plan and apply again so the generated Trust CA is stored in Secrets Manager
-make plan
-make apply
-
-# 7. Configure SSH access
+# 6. Configure SSH access
 make ssh-config
 
-# 8. Setup EC2 instances with Ansible
+# 7. Setup EC2 instances with Ansible
 make ansible-init
 
-# 9. Deploy services
+# 8. Deploy services
 make deploy-centralhub
 make deploy-trust
 
-# 10. Check status
+# 9. Check status
 make status
 ```
 
