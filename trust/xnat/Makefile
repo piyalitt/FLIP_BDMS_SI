@@ -184,14 +184,20 @@ xnat-reset:
 # Finds the container ID by name and runs the configuration scripts inside it
 xnat-configure-trust-1:
 	@echo "⏳ Waiting for ${project1}_xnat-web container to be ready..."
-	@timeout 120 bash -c 'until [ "$$(docker ps --filter "name=${project1}_xnat-web" -q)" != "" ]; do echo "  Waiting for container..."; sleep 5; done' || { echo "❌ ERROR: ${project1}_xnat-web container never started"; exit 1; }
+	@elapsed=0; while [ "$$(docker ps --filter "name=${project1}_xnat-web" -q)" = "" ]; do \
+		if [ $$elapsed -ge 120 ]; then echo "❌ ERROR: ${project1}_xnat-web container never started"; exit 1; fi; \
+		echo "  Waiting for container..."; sleep 5; elapsed=$$((elapsed + 5)); \
+	done
 	CONTAINER=$$(docker ps --filter "name=${project1}_xnat-web" -q); \
 	docker exec $$CONTAINER bash -c 'cd /data/xnat/config && LOG_FILE="configure-xnat-${project1}.log" && bash configure-xnat.sh 2>&1 | tee "$$LOG_FILE"'; \
 	docker exec $$CONTAINER bash -c 'cd /data/xnat/config && LOG_FILE="configure-dcm2niix-${project1}.log" && bash configure-dcm2niix.sh 2>&1 | tee "$$LOG_FILE"'
 
 xnat-configure-trust-2:
 	@echo "⏳ Waiting for ${project2}_xnat-web container to be ready..."
-	@timeout 120 bash -c 'until [ "$$(docker ps --filter "name=${project2}_xnat-web" -q)" != "" ]; do echo "  Waiting for container..."; sleep 5; done' || { echo "❌ ERROR: ${project2}_xnat-web container never started"; exit 1; }
+	@elapsed=0; while [ "$$(docker ps --filter "name=${project2}_xnat-web" -q)" = "" ]; do \
+		if [ $$elapsed -ge 120 ]; then echo "❌ ERROR: ${project2}_xnat-web container never started"; exit 1; fi; \
+		echo "  Waiting for container..."; sleep 5; elapsed=$$((elapsed + 5)); \
+	done
 	CONTAINER=$$(docker ps --filter "name=${project2}_xnat-web" -q); \
 	docker exec $$CONTAINER bash -c 'cd /data/xnat/config && LOG_FILE="configure-xnat-${project2}.log" && bash configure-xnat.sh 2>&1 | tee "$$LOG_FILE"'; \
 	docker exec $$CONTAINER bash -c 'cd /data/xnat/config && LOG_FILE="configure-dcm2niix-${project2}.log" && bash configure-dcm2niix.sh 2>&1 | tee "$$LOG_FILE"'

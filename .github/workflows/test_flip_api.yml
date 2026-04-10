@@ -72,7 +72,6 @@ jobs:
         run: |
           cp ../.env.development.example ../.env.development
           # Override sensitive values with GitHub secrets
-          echo "PRIVATE_API_KEY=${{ secrets.PRIVATE_API_KEY }}" >> ../.env.development
           echo "AES_KEY_BASE64=${{ secrets.AES_KEY_BASE64 }}" >> ../.env.development
           echo "DATA_ACCESS_POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> ../../.env.development
           echo "OMOP_POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> ../../.env.development
