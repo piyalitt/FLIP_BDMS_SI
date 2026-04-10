@@ -21,7 +21,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from flip_api.domain.schemas.status import ModelStatus
 from flip_api.private_services.invoke_model_status_update import (
-    check_authorization_token,
+    authenticate_internal_service,
     get_session,
 )
 from flip_api.private_services.invoke_model_status_update import router as invoke_model_status_update_router
@@ -34,14 +34,9 @@ MOCKED_ADD_LOG_PATH = "flip_api.private_services.invoke_model_status_update.add_
 
 
 @pytest.fixture
-def mock_auth_token():
-    return "valid_test_token"
-
-
-@pytest.fixture
-def client(mock_db_session: MagicMock, mock_auth_token: str):
+def client(mock_db_session: MagicMock):
     test_app.dependency_overrides[get_session] = lambda: mock_db_session
-    test_app.dependency_overrides[check_authorization_token] = lambda: mock_auth_token
+    test_app.dependency_overrides[authenticate_internal_service] = lambda: None
     return TestClient(test_app)
 
 
@@ -133,9 +128,10 @@ class TestInvokeModelStatusUpdateEndpoint:
         assert "Unexpected error" in response.json()["detail"]
 
     def test_invoke_update_unauthorized(self, model_id: UUID, mock_db_session: MagicMock):
-        test_app.dependency_overrides[check_authorization_token] = lambda: (_ for _ in ()).throw(
-            HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-        )
+        def mock_auth():
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+        test_app.dependency_overrides[authenticate_internal_service] = mock_auth
         unauth_client = TestClient(test_app)
 
         response = unauth_client.put(f"/api/model/{model_id}/status/{ModelStatus.INITIATED.value}")
@@ -143,4 +139,5 @@ class TestInvokeModelStatusUpdateEndpoint:
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         assert response.json() == {"detail": "Not authenticated"}
 
-        test_app.dependency_overrides.pop(check_authorization_token)
+        # Clean up dependency override
+        test_app.dependency_overrides.pop(authenticate_internal_service)

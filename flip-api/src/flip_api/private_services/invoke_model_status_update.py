@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
-from flip_api.auth.access_manager import check_authorization_token
+from flip_api.auth.access_manager import authenticate_internal_service
 from flip_api.db.database import get_session
 from flip_api.domain.schemas.status import ModelStatus
 from flip_api.model_services.services.model_service import add_log, update_model_status
@@ -34,16 +34,18 @@ def invoke_model_status_update_endpoint(
     model_id: UUID,
     model_status: ModelStatus = Path(..., title="New model status"),
     db: Session = Depends(get_session),
-    token: str = Depends(check_authorization_token),
+    _: None = Depends(authenticate_internal_service),
 ) -> dict[str, str]:
     """
-    Update a model's status. Restricted to internal FL services via private API key authentication.
+    Update a model's status. Restricted to internal FL services via internal service key authentication.
+
+    This endpoint is internal-only: it accepts requests from the fl-server on the
+    Central Hub (authenticated via INTERNAL_SERVICE_KEY_HEADER).
 
     Args:
         model_id (UUID): The ID of the model whose status is to be updated.
         model_status (ModelStatus): The new status to set for the model.
         db (Session): The database session, provided by dependency injection.
-        token (str): The authorization token, validated by the dependency.
 
     Returns:
         dict[str, str]: A dictionary containing the result of the status update operation.
@@ -51,7 +53,6 @@ def invoke_model_status_update_endpoint(
     Raises:
         HTTPException: If the model does not exist or there is a database/server error.
     """
-    del token  # Token is validated by the dependency
     logger.info(f"Received internal request to update model {model_id} to status '{model_status}'")
 
     try:
