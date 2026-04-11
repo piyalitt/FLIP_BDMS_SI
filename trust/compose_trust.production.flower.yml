@@ -40,7 +40,7 @@ services:
       - --root-certificates
       - /certs/ca.crt
       - --superlink
-      - ${NLB_SUBDOMAIN}:9092
+      - ${NLB_SUBDOMAIN}:${FL_SERVER_PORT}
       - --auth-supernode-private-key
       - /keys/supernode_credentials_1
       - --clientappio-api-address
