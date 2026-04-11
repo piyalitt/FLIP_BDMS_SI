@@ -134,6 +134,8 @@ down-trust-1-ec2:
 # LOCAL_TRUST_NAME controls which NVFlare participant kit the FL client mounts.
 # Local (on-prem) trusts use Trust_2 kit; EC2 trusts use Trust_1 kit (default).
 # LOCAL_TRUST_NAME is defined in deploy/providers/AWS/Makefile
+# OMOP_DATA_DIR: local trust mounts the existing dev OMOP data dir so we don't
+# duplicate the database. On EC2 this defaults to /opt/flip/omop/db_data.
 up-local-trust:
 	## Starts local trust compose stack with TRUST_NAME=$(LOCAL_TRUST_NAME).
 	## Uses project name 'trust1' so trust-api, imaging-api, etc. keep their normal names.
@@ -141,7 +143,9 @@ up-local-trust:
 	@echo "⚙️ Using environment file ${MAIN_ENV_FILE}"
 	@echo "🧠 FL_BACKEND=$(FL_BACKEND) ($(FL_BACKEND_COMPOSE_FILE))"
 	mkdir -p ${BASE_IMAGES_DOWNLOAD_DIR_TRUST1}
-	$(TRUST_1_VARS) TRUST_NAME=$(LOCAL_TRUST_NAME) TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),$(LOCAL_TRUST_NAME)) DEBUG=$(DEBUG) \
+	$(TRUST_1_VARS) TRUST_NAME=$(LOCAL_TRUST_NAME) TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),$(LOCAL_TRUST_NAME)) \
+		OMOP_DATA_DIR=./omop-db/volumes/$(LOCAL_TRUST_NAME)/db_data \
+		DEBUG=$(DEBUG) \
 		$(DOCKER_COMPOSE_CMD) -p $(trust1) up -d --pull always
 
 # Uses --pull always to ensure the latest FL images and omop-db image are used
