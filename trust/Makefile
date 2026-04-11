@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-.PHONY: build dev prod clean stop up down up-trust-1 up-trust-2 down-trust-1 down-trust-2 up-local-trust create-networks remove-networks recreate-networks tests
+.PHONY: build dev prod clean stop up down up-trust-1 up-trust-2 down-trust-1 down-trust-2 up-local-trust down-local-trust create-networks remove-networks recreate-networks tests
 # if tag PROD=true is passed, set PROD=true
 ifeq ($(PROD),true)
 MAIN_ENV_FILE=../.env.production
@@ -49,6 +49,7 @@ network1 = deploy_trust-network-1
 network2 = deploy_trust-network-2
 trust1 = trust1
 trust2 = trust2
+trust_local = trust-local
 
 get_json_value = $(shell python3 ../flip-api/src/flip_api/scripts/env_utils.py '$(1)' $(2))
 
@@ -138,7 +139,7 @@ down-trust-1-ec2:
 # duplicate the database. On EC2 this defaults to /opt/flip/omop/db_data.
 up-local-trust:
 	## Starts local trust compose stack with TRUST_NAME=$(LOCAL_TRUST_NAME).
-	## Uses project name 'trust1' so trust-api, imaging-api, etc. keep their normal names.
+	## Uses project name 'trust-local' to avoid collisions with dev trust1/trust2.
 	@echo "🚢 Starting local Trust services (TRUST_NAME=$(LOCAL_TRUST_NAME))..."
 	@echo "⚙️ Using environment file ${MAIN_ENV_FILE}"
 	@echo "🧠 FL_BACKEND=$(FL_BACKEND) ($(FL_BACKEND_COMPOSE_FILE))"
@@ -146,7 +147,13 @@ up-local-trust:
 	$(TRUST_1_VARS) TRUST_NAME=$(LOCAL_TRUST_NAME) TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),$(LOCAL_TRUST_NAME)) \
 		OMOP_DATA_DIR=./omop-db/volumes/$(LOCAL_TRUST_NAME)/db_data \
 		DEBUG=$(DEBUG) \
-		$(DOCKER_COMPOSE_CMD) -p $(trust1) up -d --pull always
+		$(DOCKER_COMPOSE_CMD) -p $(trust_local) up -d --pull always
+
+down-local-trust:
+	@echo "🛑 Stopping local Trust services..."
+	$(TRUST_1_VARS) TRUST_NAME=$(LOCAL_TRUST_NAME) \
+		OMOP_DATA_DIR=./omop-db/volumes/$(LOCAL_TRUST_NAME)/db_data \
+		$(DOCKER_COMPOSE_CMD) -p $(trust_local) down --remove-orphans
 
 # Uses --pull always to ensure the latest FL images and omop-db image are used
 # ensure omop data is up to date before bringing up trust 2
