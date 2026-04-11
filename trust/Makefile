@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-.PHONY: build dev prod clean stop up down up-trust-1 up-trust-2 down-trust-1 down-trust-2 up-local-trust-stag create-networks remove-networks recreate-networks tests
+.PHONY: build dev prod clean stop up down up-trust-1 up-trust-2 down-trust-1 down-trust-2 up-local-trust create-networks remove-networks recreate-networks tests
 # if tag PROD=true is passed, set PROD=true
 ifeq ($(PROD),true)
 MAIN_ENV_FILE=../.env.production
@@ -134,7 +134,7 @@ down-trust-1-ec2:
 # LOCAL_TRUST_NAME controls which NVFlare participant kit the FL client mounts.
 # Local (on-prem) trusts use Trust_2 kit; EC2 trusts use Trust_1 kit (default).
 # LOCAL_TRUST_NAME is defined in deploy/providers/AWS/Makefile
-up-local-trust-stag:
+up-local-trust:
 	## Starts Trust 1 compose stack
 	## Uses project name 'trust1' so trust-api, imaging-api, etc. keep their normal names,
 	## but overrides TRUST_NAME so the FL client mounts Trust_2/ kit dir.

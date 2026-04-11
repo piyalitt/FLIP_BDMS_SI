@@ -21,8 +21,7 @@
 #   ansible-playbook -i <trust-host-ip>, \
 #     -u ubuntu --private-key ~/.ssh/trust_key \
 #     deploy/providers/local/site_local_trust.yml \
-#     -e trust_public_ip=<public-ip-or-hostname> \
-#     -e ch_public_ip=<aws-nat-gateway-public-ip>
+#     -e trust_public_ip=<public-ip-or-hostname>
 
 ---
 - name: Configure on-premises Trust host
@@ -36,8 +35,7 @@
       assert:
         that:
           - trust_public_ip is defined and trust_public_ip | length > 0
-          - ch_public_ip is defined and ch_public_ip | length > 0
-        fail_msg: "trust_public_ip and ch_public_ip must be provided via -e"
+        fail_msg: "trust_public_ip must be provided via -e"
 
   tasks:
     # ── System packages ──────────────────────────────────────────────────────
@@ -45,7 +43,6 @@
       apt:
         name:
           - openssl
-          - ufw
           - curl
           - python3-cryptography  # required by community.crypto
         state: present
@@ -90,44 +87,4 @@
         - "/opt/flip/services/Trust_2/local"
         - "/opt/flip/services/Trust_2/transfer"
 
-    # ── Firewall ─────────────────────────────────────────────────────────────
-    # Add all allow rules BEFORE enabling UFW with default-deny to avoid
-    # locking out the operator on a remote host mid-playbook.
-
-    - name: Allow SSH (prevent operator lockout)
-      community.general.ufw:
-        rule: allow
-        port: "22"
-        proto: tcp
-        comment: SSH access
-
-    - name: Allow FL Server port 8002 from Central Hub
-      community.general.ufw:
-        rule: allow
-        src: "{{ ch_public_ip }}"
-        port: "8002"
-        proto: tcp
-        comment: "FL Server port from AWS CH"
-
-    - name: Allow SSH from Central Hub IP
-      community.general.ufw:
-        rule: allow
-        src: "{{ ch_public_ip }}"
-        port: "22"
-        proto: tcp
-        comment: "SSH from AWS CH for remote provisioning"
-
-    - name: Set UFW default policy — deny incoming
-      community.general.ufw:
-        policy: deny
-        direction: incoming
-
-    - name: Set UFW default policy — allow outgoing
-      community.general.ufw:
-        policy: allow
-        direction: outgoing
-
-    - name: Enable UFW
-      community.general.ufw:
-        state: enabled
 

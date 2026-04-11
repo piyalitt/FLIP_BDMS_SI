@@ -213,7 +213,7 @@ make add-local-trust LOCAL_TRUST_IP=<public-ip>
 
 After provisioning, complete the manual steps printed by the target:
 
-1. Start the trust stack on the host: `cd trust && env PROD=stag make up-local-trust-stag`
+1. Start the trust stack on the host: `cd trust && env PROD=stag make up-local-trust`
 2. Verify the trust can poll the hub (check trust-api logs for successful task polling)
 
 Full details are in the [local provider README](../local/README.md).
@@ -344,8 +344,7 @@ Trust services can run on AWS EC2 or on-premises. Both models use the same Docke
 **On-Premises Trust** — provisioned via `make add-local-trust` and the Ansible playbook in [`deploy/providers/local/`](../local/README.md):
 
 - Same Docker Compose stack, running on a local Ubuntu host
-- UFW firewall allows FL ports from Central Hub IP only
-- No inbound port forwarding needed for the trust API (trusts poll outbound)
+- No inbound port forwarding or firewall rules needed — all trust communication is outbound
 
 ### Port configuration
 

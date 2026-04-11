@@ -288,16 +288,14 @@ add-local-trust: ## Provision an on-prem Trust host and register it with the Cen
 	@echo "🔧 Provisioning on-premises Trust host at $(LOCAL_TRUST_IP)..."
 	@uv sync
 	@uv run ansible-galaxy install -r ../../../deploy/providers/local/requirements.yml
-	@CH_IP="$$(terraform output -raw NatGatewayPublicIp)" && \
-	if [ -n "$(LOCAL_TRUST_SSH_KEY)" ]; then \
+	@if [ -n "$(LOCAL_TRUST_SSH_KEY)" ]; then \
 		echo "📡 Connecting via SSH (key: $(LOCAL_TRUST_SSH_KEY))..."; \
 		uv run ansible-playbook \
 			-i "$(LOCAL_TRUST_IP)," \
 			-u "$(LOCAL_TRUST_SSH_USER)" \
 			--private-key "$(LOCAL_TRUST_SSH_KEY)" \
 			../../../deploy/providers/local/site_local_trust.yml \
-			-e trust_public_ip=$(LOCAL_TRUST_IP) \
-			-e ch_public_ip="$$CH_IP"; \
+			-e trust_public_ip=$(LOCAL_TRUST_IP); \
 	else \
 		echo "💻 Running locally (no SSH — operator machine is the trust host)..."; \
 		if [ -z "$$ANSIBLE_BECOME_PASS" ]; then \
@@ -322,8 +320,7 @@ add-local-trust: ## Provision an on-prem Trust host and register it with the Cen
 			-e ansible_connection=local \
 			-e ansible_python_interpreter=/usr/bin/python3 \
 			../../../deploy/providers/local/site_local_trust.yml \
-			-e trust_public_ip=$(LOCAL_TRUST_IP) \
-			-e ch_public_ip="$$CH_IP"; \
+			-e trust_public_ip=$(LOCAL_TRUST_IP); \
 		PLAY_RC=$$?; \
 		exit $$PLAY_RC; \
 	fi
@@ -359,7 +356,7 @@ add-local-trust: ## Provision an on-prem Trust host and register it with the Cen
 	@echo "✅ On-premises Trust host provisioned!"
 	@echo ""
 	@echo "⚠️  REMAINING MANUAL STEPS:"
-	@echo "   1. On the trust host — start the trust stack: cd trust && PROD=$(PROD) make up-local-trust-stag"
+	@echo "   1. On the trust host — start the trust stack: cd trust && PROD=$(PROD) make up-local-trust"
 	@echo "   2. Verify the trust can poll the hub (check trust-api logs for successful task polling)"
 
 .PHONY: down
@@ -460,7 +457,7 @@ full-deploy-stag: ## Full staging deployment with on-prem local trust (requires 
 	##    deploy local $(LOCAL_TRUST_NAME) FL kit, and update AWS security groups
 	## 8. status: verify all services healthy
 	## NOTE: After this completes you must manually:
-	##   - Start local trust stack: cd ../../../trust && env PROD=stag make up-local-trust-stag
+	##   - Start local trust stack: cd ../../../trust && env PROD=stag make up-local-trust
 	@[ -n "$(LOCAL_TRUST_IP)" ] || (echo ""; echo "❌  ERROR: LOCAL_TRUST_IP is required."; echo "   Usage: make full-deploy-stag LOCAL_TRUST_IP=<public-ip>"; echo ""; exit 1)
 full-deploy-stag: github-login aws-login init import-persistent generate-keys generate-internal-service-key plan apply update-env ssh-config ansible-init deploy-centralhub deploy-trust add-local-trust status
 
@@ -481,4 +478,4 @@ full-deploy-stag-hybrid: ## Full staging hybrid deployment including local trust
 	echo "" && \
 	echo "✅ Hybrid staging deployment complete." && \
 	echo "➡️  Final manual step: start the local trust stack on the trust host:" && \
-	echo "   cd ../../../trust && env PROD=stag make up-local-trust-stag"
+	echo "   cd ../../../trust && env PROD=stag make up-local-trust"

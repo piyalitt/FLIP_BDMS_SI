@@ -82,7 +82,7 @@ For example:
 | `make restart-no-trust` | Stop and start all services except the trust services related services |
 | `make clean` | Remove all stopped containers, networks, and images |
 | `make ci` | Run the CI pipeline locally using `act` |
-| `make up-local-trust-stag` | Run a local (on-premises) trust in staging mode (HTTPS via nginx-tls) |
+| `make up-local-trust` | Run a local (on-premises) trust (set `PROD=true` or `PROD=stag` for environment) |
 | `make unit_test` | Run the tests for all services |
 
 You can add new commands to the Makefile to create smaller deployments for testing and development.

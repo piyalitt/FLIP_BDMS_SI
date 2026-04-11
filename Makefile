@@ -12,7 +12,7 @@
 
 .PHONY: build dev prod clean stop up down up-no-trust up-trusts central-fl central-hub \
 		restart restart-no-trust ci tests debug create-networks remove-networks recreate-networks consolidate-deps \
-		check-aws-access up-local-trust-stag generate-trust-api-keys generate-internal-service-key
+		check-aws-access up-local-trust generate-trust-api-keys generate-internal-service-key
 
 ifeq ($(PROD),true)
 MAIN_ENV_FILE=.env.production
@@ -135,10 +135,12 @@ up-trust-ec2: create-networks
 	$(MAKE) -e DEBUG=$(DEBUG) -C trust/xnat up-xnat-1 PROD=${PROD}
 	@echo "✅ Trust services started successfully!"
 
-up-local-trust-stag: create-networks
+LOCAL_TRUST_NAME ?= Trust_2
+
+up-local-trust: create-networks
 	docker context use default
-	@echo "🚢 Starting local on-prem Trust services for staging..."
-	$(MAKE) -e DEBUG=$(DEBUG) -C trust up-local-trust-stag PROD=stag
+	@echo "🚢 Starting local on-prem Trust services (PROD=$(PROD), TRUST_NAME=$(LOCAL_TRUST_NAME))..."
+	$(MAKE) -e DEBUG=$(DEBUG) -C trust up-local-trust PROD=$(PROD) LOCAL_TRUST_NAME=$(LOCAL_TRUST_NAME)
 	@echo "✅ Local Trust services started successfully!"
 
 central-hub: create-networks-centralhub
