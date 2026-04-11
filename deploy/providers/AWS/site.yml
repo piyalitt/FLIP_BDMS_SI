@@ -179,6 +179,7 @@
   become: true
   vars:
     central_services_dir: "/opt/flip/services"
+    central_s3_source: "s3://{{ flip_aicentre_bucket }}/fl-flower-participant-kits/{{ fl_kit_date }}/net-1/"
   tasks:
     - name: ensure central services directory exists
       file:
@@ -194,7 +195,7 @@
         set -euo pipefail
         mkdir -p "{{ central_services_dir }}/net-1"
         aws s3 sync \
-          "s3://{{ flip_aicentre_bucket }}/fl-flower-participant-kits/{{ fl_kit_date }}/net-1/" \
+          "{{ central_s3_source }}" \
           "{{ central_services_dir }}/net-1/"
       args:
         executable: /bin/bash
@@ -242,11 +243,12 @@
         group: "472"
         mode: "0755"
 
-- name: download participant kit services to Trust EC2
+- name: download NVFLARE participant kit services to Trust EC2
   hosts: trust_ec2
   become: true
   vars:
     trust_services_dir: "/opt/flip/services"
+    trust_s3_source: "s3://{{ flip_aicentre_bucket }}/fl-flare-participant-kits/{{ fl_kit_date }}/net-1/services/Trust_1/"
   tasks:
     - name: ensure trust services directory exists
       file:
@@ -263,7 +265,7 @@
         dest="{{ trust_services_dir }}/Trust_1"
         mkdir -p "$dest"
         aws s3 sync \
-          "s3://{{ flip_aicentre_bucket }}/fl-flare-participant-kits/{{ fl_kit_date }}/net-1/services/Trust_1/" \
+          "{{ trust_s3_source }}" \
           "$dest"
       args:
         executable: /bin/bash
@@ -276,6 +278,7 @@
   become: true
   vars:
     trust_services_dir: "/opt/flip/services"
+    trust_s3_source: "s3://{{ flip_aicentre_bucket }}/fl-flower-participant-kits/{{ fl_kit_date }}/net-1/"
   tasks:
     - name: ensure trust services directory exists
       file:
@@ -291,7 +294,7 @@
         set -euo pipefail
         mkdir -p "{{ trust_services_dir }}/net-1"
         aws s3 sync \
-          "s3://{{ flip_aicentre_bucket }}/fl-flower-participant-kits/{{ fl_kit_date }}/net-1/" \
+          "{{ trust_s3_source }}/" \
           "{{ trust_services_dir }}/net-1/"
       args:
         executable: /bin/bash

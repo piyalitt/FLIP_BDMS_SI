@@ -21,8 +21,8 @@ services:
       # Mount the base images download directory to share images downloaded from XNAT with FL clients
       - ${BASE_IMAGES_DOWNLOAD_DIR}:/app/data/images
       # Provisioned Flower secrets (certificates, keys)
-      - /opt/flip/services/certificates:/certs:ro
-      - /opt/flip/services/keys:/keys:ro
+      - /opt/flip/services/net-1/certificates:/certs:ro
+      - /opt/flip/services/net-1/keys:/keys:ro
     environment:
       - NET_ID=net-1
       - SUPERNODE_NAME=${TRUST_NAME}
