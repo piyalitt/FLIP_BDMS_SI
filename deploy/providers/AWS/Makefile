@@ -72,12 +72,6 @@ export TF_VAR_ADMIN_USER_PASSWORD=${ADMIN_USER_PASSWORD}
 export TF_VAR_SES_VERIFIED_EMAIL=${SES_VERIFIED_EMAIL}
 export TF_VAR_flip_alb_subdomain=${ALB_SUBDOMAIN}
 export TF_VAR_flip_nlb_subdomain=${NLB_SUBDOMAIN}
-ifeq ($(strip $(CREATE_CENTRAL_HUB_ELASTIC_IP)),)
-export TF_VAR_create_central_hub_elastic_ip=true
-else
-export TF_VAR_create_central_hub_elastic_ip=${CREATE_CENTRAL_HUB_ELASTIC_IP}
-endif
-
 CENTRALHUB_IMAGES = \
 	$(DOCKER_REGISTRY)flip-ui:$(DOCKER_TAG) \
 	$(DOCKER_REGISTRY)flip-api:$(DOCKER_TAG)
@@ -228,10 +222,6 @@ deploy-centralhub: ## Deploy FLIP containers to flip context with environment fr
 	  echo "   ✅ All central hub images found."; \
 	fi
 	@echo "📋 Loading environment variables from Terraform outputs..."
-	@echo "🔑 Refreshing SSH host key for CH EC2 (ensures Docker context SSH works after re-provisioning)..."
-	@CH_IP=$$(terraform output -raw Ec2PublicIp) && \
-	  ssh-keygen -R "$$CH_IP" 2>/dev/null || true && \
-	  ssh-keyscan -H "$$CH_IP" >> ~/.ssh/known_hosts
 	@echo "👷 Create docker context if not exists, pointing to flip to ssh://flip"
 	@docker context create flip --docker "host=ssh://flip" || echo "   Context 'flip' already exists"
 	@# Switch to flip context
@@ -302,7 +292,7 @@ add-local-trust: ## Provision an on-prem Trust host and register it with the Cen
 	@echo "🔧 Provisioning on-premises Trust host at $(LOCAL_TRUST_IP)..."
 	@uv sync
 	@uv run ansible-galaxy install -r ../../../deploy/providers/local/requirements.yml
-	@CH_IP="$$(terraform output -raw Ec2PublicIp)" && \
+	@CH_IP="$$(terraform output -raw NatGatewayPublicIp)" && \
 	if [ -n "$(LOCAL_TRUST_SSH_KEY)" ]; then \
 		echo "📡 Connecting via SSH (key: $(LOCAL_TRUST_SSH_KEY))..."; \
 		uv run ansible-playbook \
@@ -365,8 +355,7 @@ add-local-trust: ## Provision an on-prem Trust host and register it with the Cen
 	  echo "✅ $(LOCAL_TRUST_NAME) FL kit deployed"
 	@echo "🔐 Updating AWS security group rules..."
 	@TF_VAR_local_trust_public_ip=$(LOCAL_TRUST_IP) terraform plan \
-		-target=aws_security_group_rule.local_trust_fl_server \
-		-target=aws_security_group_rule.local_trust_fl_admin \
+		-target=aws_security_group_rule.local_trust_fl_server_nlb \
 		-out=local-trust.tfplan
 	@TF_VAR_local_trust_public_ip=$(LOCAL_TRUST_IP) terraform apply local-trust.tfplan
 	@rm -f local-trust.tfplan
@@ -411,13 +400,13 @@ destroy: backup-eips ## Destroy ephemeral infrastructure (EC2, RDS, VPC) - prese
 	@echo "   ✓ AWS Secrets Manager (FLIP_API secret)"
 	@echo "   ✓ S3 buckets (FLIP + AI Centre data)"
 	@echo "   ✓ ACM certificates and Route53 records"
-	@echo "   ✓ Elastic IPs (for Central Hub and Trust EC2)"
+	@echo "   ✓ Elastic IP (Trust EC2)"
 ifeq ($(PROD),true)
 	@echo "   ✓ VPC (Transit Gateway attachment — production)"
 endif
 	@echo ""
 	@echo "🗑️  DESTROYING:"
-	@echo "   • EC2 instances (flip, trust) - instances only, EIPs preserved"
+	@echo "   • EC2 instances (flip, trust)"
 	@echo "   • RDS database (PostgreSQL)"
 	@echo "   • Security groups"
 ifneq ($(PROD),true)

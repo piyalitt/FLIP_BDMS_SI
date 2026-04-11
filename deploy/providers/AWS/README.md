@@ -357,7 +357,6 @@ Trust services can run on AWS EC2 or on-premises. Both models use the same Docke
 | **8000** | FLIP API | 🟢 **OPEN** | Backend API |
 | **8001** | FL API | 🟢 **OPEN** | Federated learning API |
 | **8002** | FL Server | 🟡 **CONDITIONAL** | gRPC (open to trust IPs only) |
-| **8003** | FL Admin | 🟡 **CONDITIONAL** | Admin (open to trust IPs only) |
 | | | | Trust API: no inbound port needed (trusts poll the hub outbound) |
 
 ---

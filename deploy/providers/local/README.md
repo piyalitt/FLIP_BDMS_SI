@@ -46,7 +46,7 @@ Each local Trust host runs:
 | trust-api | 8000 | HTTP (polls hub outbound) |
 | imaging-api | 8000 | HTTP (internal) |
 | data-access-api | 8000 | HTTP (internal) |
-| fl-client | 8002, 8003 | TCP (FL server/admin) |
+| fl-client | 8002 | TCP (FL server) |
 
 ## Prerequisites
 
@@ -108,7 +108,7 @@ make add-local-trust LOCAL_TRUST_IP=<public-ip>
 
 1. Runs the Ansible playbook (`site_local_trust.yml`) which:
    - Installs Docker and required system packages
-   - Configures UFW firewall to allow FL ports 8002, 8003 **only from the Central Hub IP**
+   - Configures UFW firewall to allow FL port 8002 **only from the Central Hub NAT Gateway IP**
 2. Downloads the `Trust_2` FL participant kit from S3 and deploys it to `/opt/flip/services/Trust_2/{startup,local,transfer}` on the trust host.
 3. Runs a targeted `terraform apply` to:
    - Add security group rules allowing FL traffic from the local trust's public IP
@@ -186,7 +186,6 @@ For federated learning, forward FL ports from the router to the trust host:
 | External Port | Internal Port | Protocol | Purpose |
 | --- | --- | --- | --- |
 | `8002` | `8002` | TCP | FL Server gRPC |
-| `8003` | `8003` | TCP | FL Admin |
 
 ### Static LAN IP
 

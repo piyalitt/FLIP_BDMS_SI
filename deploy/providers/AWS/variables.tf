@@ -175,13 +175,7 @@ variable "PACS_UI_PORT" {
 }
 
 variable "local_trust_public_ip" {
-  description = "Public IP of an on-premises Trust host. When non-empty, AWS security group rules are created to allow FL communication on ports 8002 and 8003 from this IP to the Central Hub."
+  description = "Public IP of an on-premises Trust host. When non-empty, an AWS security group rule is created to allow FL communication from this IP to the Central Hub NLB."
   type        = string
   default     = ""
-}
-
-variable "create_central_hub_elastic_ip" {
-  description = "Whether to create an Elastic IP for the Central Hub EC2 instance. When true, ensures a persistent IP address across instance restarts and redeployments."
-  type        = bool
-  default     = true
 }

@@ -191,13 +191,13 @@ def run_ssh_command(ssh_key: str, host: str, command: str, timeout: int = 10) ->
     """Run a command via SSH.
 
     Args:
-        ssh_key: Path to SSH key
-        host: Host address (user@ip)
-        command: Command to run
-        timeout: Command timeout in seconds
+        ssh_key (str): Path to SSH key, or empty string to use SSH config defaults
+        host (str): Host address (user@ip) or SSH config alias (e.g. 'flip')
+        command (str): Command to run
+        timeout (int): Command timeout in seconds
 
     Returns:
-        Tuple of (success, output)
+        tuple[bool, str]: (success, output)
     """
     try:
         cmd = ["ssh"]
@@ -224,61 +224,21 @@ def run_ssh_command(ssh_key: str, host: str, command: str, timeout: int = 10) ->
 
 
 def check_elastic_ip_stability(
-    central_hub_id: str,
-    central_hub_eip: str,
     trust_id: str | None,
     trust_eip: str | None,
 ) -> bool:
-    """Verify Elastic IP stability and correct instance association.
+    """Verify Trust EC2 Elastic IP stability and correct instance association.
 
-    Tests that:
-    1. Central Hub Elastic IP is allocated and stable
-    2. Central Hub EIP is associated with the correct EC2 instance
-    3. Trust EC2 Elastic IP is allocated and stable (if Trust is deployed)
-    4. Trust EC2 EIP is associated with the correct EC2 instance
+    Args:
+        trust_id (str | None): Trust EC2 instance ID
+        trust_eip (str | None): Trust EC2 Elastic IP
 
-    This ensures that outbound calls from Central Hub to Trust API will use a stable IP.
+    Returns:
+        bool: True if all checks pass, False otherwise
     """
     print_section("Elastic IP Stability Check")
 
     failures = 0
-
-    # Check Central Hub EIP
-    if not central_hub_eip:
-        print_status("FAIL", "Central Hub Elastic IP is not allocated (check Ec2ElasticIp output)")
-        failures += 1
-    else:
-        print_status("PASS", f"Central Hub Elastic IP allocated: {central_hub_eip}")
-
-        # Verify EIP is associated with the correct instance in AWS
-        success, output = run_aws_command([
-            "ec2",
-            "describe-addresses",
-            "--region",
-            os.getenv("AWS_REGION", "eu-west-2"),
-            "--public-ips",
-            central_hub_eip,
-            "--query",
-            "Addresses[0].[InstanceId, AllocationId]",
-            "--output",
-            "text",
-        ])
-
-        if success and output:
-            instance_id, allocation_id = output.split()
-            if instance_id == central_hub_id:
-                print_status(
-                    "PASS",
-                    f"Central Hub EIP {central_hub_eip} correctly associated with {instance_id} (allocation: {allocation_id[:12]}...)",
-                )
-            else:
-                print_status(
-                    "FAIL",
-                    f"Central Hub EIP {central_hub_eip} associated with wrong instance: {instance_id} (expected {central_hub_id})",
-                )
-                failures += 1
-        else:
-            print_status("WARN", f"Could not verify Central Hub EIP association in AWS: {output}")
 
     # Check Trust EC2 EIP if deployed
     if trust_id:
@@ -472,7 +432,7 @@ def check_endpoint_blocked_from_ssh(
     Args:
         host: SSH host alias (from ~/.ssh/config)
         endpoint: URL to attempt from the remote host
-        allowed_source_ip: The IP the UFW allowlist permits (typically the Central Hub EIP).
+        allowed_source_ip (str): The IP the UFW allowlist permits (typically the Central Hub NAT Gateway IP).
             If the remote host's outbound IP matches this, the check is inconclusive.
         connect_timeout: curl --connect-timeout value in seconds
 
@@ -607,9 +567,8 @@ def main(
     print_section("Fetching Terraform Outputs")
 
     # Get Terraform outputs
-    central_hub_ip = get_terraform_output("Ec2PublicIp")
+    central_hub_ip = get_terraform_output("Ec2PrivateIp")
     central_hub_id = get_terraform_output("Ec2InstanceId")
-    central_hub_eip = get_terraform_output("Ec2ElasticIp")
     ssh_key = get_terraform_output("Keypair")
 
     trust_ip = get_terraform_output("TrustEc2PublicIp")
@@ -617,13 +576,11 @@ def main(
     trust_eip = get_terraform_output("TrustEc2ElasticIp")
 
     if not central_hub_ip:
-        print_status("FAIL", "Could not retrieve Central Hub EC2 IP from Terraform outputs")
+        print_status("FAIL", "Could not retrieve Central Hub EC2 Private IP from Terraform outputs")
         sys.exit(1)
 
-    print_status("PASS", f"Central Hub EC2 IP: {central_hub_ip}")
+    print_status("PASS", f"Central Hub EC2 Private IP: {central_hub_ip}")
     print_status("PASS", f"Central Hub EC2 ID: {central_hub_id}")
-    if central_hub_eip:
-        print_status("PASS", f"Central Hub Elastic IP: {central_hub_eip}")
 
     if trust_ip:
         print_status("PASS", f"Trust EC2 IP: {trust_ip}")
@@ -633,8 +590,8 @@ def main(
     else:
         print_status("INFO", "Trust EC2 not found in outputs (may not be deployed)")
 
-    # Check Elastic IP stability (central hub outbound connectivity uses stable EIP)
-    check_elastic_ip_stability(central_hub_id, central_hub_eip, trust_id, trust_eip)
+    # Check Elastic IP stability (Trust EC2 uses stable EIP for outbound connectivity)
+    check_elastic_ip_stability(trust_id, trust_eip)
 
     # Check AWS resources
     print_section("Checking AWS Resources")
@@ -844,26 +801,25 @@ def main(
     if not skip_network:
         print_section("Network Connectivity")
 
-        # SSH connectivity check
+        # SSH connectivity check — Central Hub uses 'flip' SSH alias (SSM ProxyCommand)
+        print_status("INFO", "Testing SSH connectivity to Central Hub (via SSM)...")
+        success, _ = run_ssh_command(
+            "",
+            "flip",
+            "echo 'SSH connection successful'",
+            timeout=10,
+        )
+        if success:
+            print_status("PASS", "SSH connection to Central Hub successful (via SSM)")
+        else:
+            print_status(
+                "FAIL",
+                "Cannot SSH to Central Hub via SSM (check SSM agent, IAM role, and SSH config)",
+            )
+
+        # Check Trust EC2 SSH connectivity
         if ssh_key and Path(ssh_key).expanduser().exists():
             ssh_key_path = str(Path(ssh_key).expanduser())
-
-            print_status("INFO", "Testing SSH connectivity to Central Hub...")
-            success, _ = run_ssh_command(
-                ssh_key_path,
-                f"ubuntu@{central_hub_ip}",
-                "echo 'SSH connection successful'",
-                timeout=5,
-            )
-            if success:
-                print_status("PASS", "SSH connection to Central Hub successful")
-            else:
-                print_status(
-                    "FAIL",
-                    "Cannot SSH to Central Hub (check key permissions and security groups)",
-                )
-
-            # Check Trust EC2 SSH connectivity
             if trust_ip:
                 print_status("INFO", "Testing SSH connectivity to Trust EC2...")
                 success, _ = run_ssh_command(
@@ -882,6 +838,15 @@ def main(
         else:
             print_status("WARN", f"SSH key not found at {ssh_key}, skipping SSH tests")
 
+    # Parse NET_ENDPOINTS to determine which FL networks are configured (used by both endpoint and Docker checks)
+    NET_ENDPOINTS = os.getenv("NET_ENDPOINTS", "{}")
+    try:
+        net_endpoints = json.loads(NET_ENDPOINTS.replace("'", '"'))
+        configured_nets = list(net_endpoints.keys())
+        configured_net_numbers = [int(net.split("-")[-1]) for net in configured_nets if net.startswith("net-")]
+    except (json.JSONDecodeError, ValueError):
+        configured_net_numbers = [1]  # Default to net-1 only
+
     # HTTP/HTTPS endpoint checks
     if not skip_endpoints:
         print_section("Application Endpoint Checks")
@@ -890,15 +855,6 @@ def main(
         UI_PORT = os.getenv("UI_PORT", "")
         API_PORT = os.getenv("API_PORT", "")
         FL_API_PORT = os.getenv("FL_API_PORT", "")
-        # Parse NET_ENDPOINTS to determine which FL networks are configured
-        NET_ENDPOINTS = os.getenv("NET_ENDPOINTS", "{}")
-        try:
-            net_endpoints = json.loads(NET_ENDPOINTS.replace("'", '"'))
-            configured_nets = list(net_endpoints.keys())
-            # Extract numbers from net names (e.g., 'net-1' -> 1)
-            configured_net_numbers = [int(net.split("-")[-1]) for net in configured_nets if net.startswith("net-")]
-        except (json.JSONDecodeError, ValueError):
-            configured_net_numbers = [1]  # Default to net-1 only
         # Trust EC2 ports
         XNAT_PORT = os.getenv("XNAT_PORT_TRUST_1", "")
         ORTHANC_PORT = os.getenv("PACS_UI_PORT_TRUST_1", "")
@@ -929,8 +885,8 @@ def main(
             )
 
             success, output = run_ssh_command(
-                ssh_key=ssh_key_path,
-                host=f"ubuntu@{central_hub_ip}",
+                ssh_key="",
+                host="flip",
                 command=(command),
             )
             if success and output.strip() == "200":
@@ -942,8 +898,8 @@ def main(
         for net_num in configured_net_numbers:
             container = f"flip-fl-api-net-{net_num}"
             success, output = run_ssh_command(
-                ssh_key=ssh_key_path,
-                host=f"ubuntu@{central_hub_ip}",
+                ssh_key="",
+                host="flip",
                 command=(
                     f"docker exec {container} python -c "
                     f"\"import urllib.request; r=urllib.request.urlopen('http://localhost:8000/docs', timeout=5); print(r.status)\""
@@ -961,8 +917,8 @@ def main(
         # Use urllib.request (stdlib) for consistency — works even if httpx is absent.
         for nets in configured_net_numbers:
             success, message = run_ssh_command(
-                ssh_key=ssh_key_path,
-                host=f"ubuntu@{central_hub_ip}",
+                ssh_key="",
+                host="flip",
                 command=(
                     f"docker exec flip-api python -c "
                     f"\"import urllib.request; r=urllib.request.urlopen('http://fl-api-net-{nets}:8000/check_client_status', timeout=5); import sys; sys.stdout.write(r.read().decode())\""
@@ -1048,12 +1004,10 @@ def main(
         else:
             print_status("INFO", "LOCAL_TRUST_IP not set — skipping local Trust checks")
 
-    # Docker container checks (via SSH)
-    if not skip_docker and ssh_key and Path(ssh_key).expanduser().exists():
-        ssh_key_path = str(Path(ssh_key).expanduser())
-
+    # Docker container checks (via SSH — Central Hub uses 'flip' alias with SSM)
+    if not skip_docker:
         # Test SSH connectivity first
-        success, _ = run_ssh_command(ssh_key_path, f"ubuntu@{central_hub_ip}", "true", timeout=5)
+        success, _ = run_ssh_command("", "flip", "true", timeout=10)
 
         if success:
             print_section("Docker Container Status (Central Hub)")
@@ -1062,8 +1016,8 @@ def main(
 
             # Get container status
             success, containers = run_ssh_command(
-                ssh_key_path,
-                f"ubuntu@{central_hub_ip}",
+                "",
+                "flip",
                 "docker ps --format '{{.Names}}:{{.Status}}'",
             )
 
@@ -1093,8 +1047,8 @@ def main(
 
                 # Check for any exited containers
                 success, exited = run_ssh_command(
-                    ssh_key_path,
-                    f"ubuntu@{central_hub_ip}",
+                    "",
+                    "flip",
                     "docker ps -a --filter 'status=exited' --format '{{.Names}}' 2>/dev/null",
                 )
                 if success and exited:
@@ -1103,8 +1057,8 @@ def main(
             # Check Docker networks
             print_status("INFO", "Checking Docker networks...")
             success, networks = run_ssh_command(
-                ssh_key_path,
-                f"ubuntu@{central_hub_ip}",
+                "",
+                "flip",
                 "docker network ls --format '{{.Name}}' 2>/dev/null",
             )
             if success and "central-hub-trust-apis-network" in networks:
@@ -1115,8 +1069,8 @@ def main(
             # Check disk space
             print_status("INFO", "Checking disk space...")
             success, disk_output = run_ssh_command(
-                ssh_key_path,
-                f"ubuntu@{central_hub_ip}",
+                "",
+                "flip",
                 "df -h / | tail -1 | awk '{print $5}'",
             )
             if success and disk_output:
@@ -1129,8 +1083,8 @@ def main(
             # Check memory usage
             print_status("INFO", "Checking memory usage...")
             success, mem_output = run_ssh_command(
-                ssh_key_path,
-                f"ubuntu@{central_hub_ip}",
+                "",
+                "flip",
                 "free | grep Mem | awk '{printf(\"%.0f\", $3/$2 * 100)}'",
             )
             if success and mem_output:
@@ -1143,8 +1097,16 @@ def main(
                 except ValueError:
                     print_status("WARN", "Could not parse memory usage")
 
-        # Trust EC2 checks
-        if trust_ip:
+        else:
+            print_status(
+                "FAIL",
+                "Cannot SSH to Central Hub via SSM — skipping Docker container checks. "
+                "Verify SSM agent, IAM role, and SSH config.",
+            )
+
+        # Trust EC2 checks (requires SSH key for direct connection)
+        if trust_ip and ssh_key and Path(ssh_key).expanduser().exists():
+            ssh_key_path = str(Path(ssh_key).expanduser())
             success, _ = run_ssh_command(ssh_key_path, f"ubuntu@{trust_ip}", "true", timeout=5)
 
             if success:

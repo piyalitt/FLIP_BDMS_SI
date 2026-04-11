@@ -22,7 +22,7 @@
 #     -u ubuntu --private-key ~/.ssh/trust_key \
 #     deploy/providers/local/site_local_trust.yml \
 #     -e trust_public_ip=<public-ip-or-hostname> \
-#     -e ch_public_ip=<aws-ec2-public-ip>
+#     -e ch_public_ip=<aws-nat-gateway-public-ip>
 
 ---
 - name: Configure on-premises Trust host
@@ -108,14 +108,6 @@
         port: "8002"
         proto: tcp
         comment: "FL Server port from AWS CH"
-
-    - name: Allow FL Admin port 8003 from Central Hub
-      community.general.ufw:
-        rule: allow
-        src: "{{ ch_public_ip }}"
-        port: "8003"
-        proto: tcp
-        comment: "FL Admin port from AWS CH"
 
     - name: Allow SSH from Central Hub IP
       community.general.ufw:

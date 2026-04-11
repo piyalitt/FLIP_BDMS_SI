@@ -93,11 +93,10 @@ log_info "🔒 Re-enabling prevent_destroy in EIP resources..."
 mv main.tf.backup main.tf
 mv modules/trust_ec2/main.tf.backup modules/trust_ec2/main.tf
 
-log_success "✅ Infrastructure destroyed! EIPs preserved and protect_destroy re-enabled."
+log_success "✅ Infrastructure destroyed! Trust EC2 EIP preserved and protect_destroy re-enabled."
 log_info ""
-log_info "✓ Elastic IPs remain allocated:"
-log_info "  - Central Hub EIP: $(terraform output -raw CentralHubEip 2>/dev/null || echo 'N/A')"
-log_info "  - Trust EC2 EIP: $(terraform output -raw TrustEc2Eip 2>/dev/null || echo 'N/A')"
+log_info "✓ Trust EC2 Elastic IP remains allocated:"
+log_info "  - Trust EC2 EIP: $(terraform output -raw TrustEc2ElasticIp 2>/dev/null || echo 'N/A')"
 if [ "$PROD" = "true" ]; then
   log_info ""
   log_info "✓ VPC preserved (Transit Gateway attachment)"

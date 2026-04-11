@@ -58,20 +58,19 @@ module "ec2_security_group" {
   description = "Security group for FLIP Central Hub EC2 instance"
   ingress_rules = [
     {
-      port        = var.UI_PORT
-      description = "FLIP UI"
+      port                     = var.UI_PORT
+      description              = "FLIP UI from ALB"
+      source_security_group_id = module.alb_security_group.security_group.id
     },
     {
-      port        = var.API_PORT
-      description = "FLIP API"
+      port                     = var.API_PORT
+      description              = "FLIP API from ALB"
+      source_security_group_id = module.alb_security_group.security_group.id
     },
     {
-      port        = var.FL_API_PORT
-      description = "FLIP FL API"
-    },
-    {
-      port        = 22
-      description = "SSH access"
+      port                     = var.FL_API_PORT
+      description              = "FLIP FL API from ALB"
+      source_security_group_id = module.alb_security_group.security_group.id
     }
   ]
 }
@@ -243,8 +242,8 @@ resource "aws_instance" "ec2_instance" {
   tags = {
     Name = "Ec2Instance"
   }
-  subnet_id                   = module.flip_vpc.public_subnets[0]
-  associate_public_ip_address = true
+  subnet_id                   = module.flip_vpc.private_subnets[0]
+  associate_public_ip_address = false
   instance_type               = "t3.medium"
   ami                         = data.aws_ssm_parameter.ubuntu.value
   vpc_security_group_ids      = [module.ec2_security_group.security_group.id]
@@ -255,30 +254,6 @@ resource "aws_instance" "ec2_instance" {
     volume_type           = "gp3"
     delete_on_termination = true
   }
-}
-
-# Elastic IP for Central Hub EC2 instance
-# Provides a static IP address that persists across instance restarts and redeployments
-resource "aws_eip" "central_hub_eip" {
-  count = var.create_central_hub_elastic_ip ? 1 : 0
-  # Allocate EIP only if enabled
-  domain = "vpc"
-
-  tags = {
-    Name = "central-hub-eip"
-  }
-
-  # Prevent accidental destruction - this EIP is precious infrastructure
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-resource "aws_eip_association" "central_hub_eip_assoc" {
-  count         = var.create_central_hub_elastic_ip ? 1 : 0
-  instance_id   = aws_instance.ec2_instance.id
-  allocation_id = aws_eip.central_hub_eip[0].id
-  depends_on    = [aws_instance.ec2_instance]
 }
 
 # Application Load Balancer
@@ -488,28 +463,6 @@ resource "aws_lb_listener_rule" "api_routing" {
 # TF_VAR_local_trust_public_ip when running `make add-local-trust`.
 ############################
 
-resource "aws_security_group_rule" "local_trust_fl_server" {
-  count             = var.local_trust_public_ip != "" ? 1 : 0
-  type              = "ingress"
-  from_port         = 8002
-  to_port           = 8002
-  protocol          = "tcp"
-  cidr_blocks       = ["${var.local_trust_public_ip}/32"]
-  security_group_id = module.ec2_security_group.security_group.id
-  description       = "FL Server from on-prem Trust"
-}
-
-resource "aws_security_group_rule" "local_trust_fl_admin" {
-  count             = var.local_trust_public_ip != "" ? 1 : 0
-  type              = "ingress"
-  from_port         = 8003
-  to_port           = 8003
-  protocol          = "tcp"
-  cidr_blocks       = ["${var.local_trust_public_ip}/32"]
-  security_group_id = module.ec2_security_group.security_group.id
-  description       = "FL Admin from on-prem Trust"
-}
-
 # Allow the local (on-prem) trust FL client to reach the FL server via the NLB.
 # Without this rule the NLB security group drops the connection before it reaches the EC2.
 resource "aws_security_group_rule" "local_trust_fl_server_nlb" {
@@ -533,19 +486,19 @@ output "Ec2InstanceId" {
   value       = aws_instance.ec2_instance.id
 }
 
-output "Ec2PublicIp" {
-  description = "EC2 Instance Public IP"
-  value       = aws_instance.ec2_instance.public_ip
+output "Ec2PrivateIp" {
+  description = "Central Hub EC2 Private IP (private subnet)"
+  value       = aws_instance.ec2_instance.private_ip
 }
 
-output "Ec2ElasticIp" {
-  description = "EC2 Instance Elastic IP (static IP address, allocated when create_central_hub_elastic_ip is true)"
-  value       = try(aws_eip.central_hub_eip[0].public_ip, null)
+output "SsmCommand" {
+  description = "SSM Session Manager command to connect to the Central Hub"
+  value       = "aws ssm start-session --target ${aws_instance.ec2_instance.id}"
 }
 
-output "SshCommand" {
-  description = "SSH command to connect to the instance"
-  value       = "ssh -i ${var.flip_keypair} ubuntu@${aws_instance.ec2_instance.public_ip}"
+output "NatGatewayPublicIp" {
+  description = "NAT Gateway public IP (Central Hub outbound traffic source)"
+  value       = module.flip_vpc.nat_public_ips[0]
 }
 
 output "TrustEc2InstanceId" {
