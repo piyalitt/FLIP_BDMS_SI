@@ -135,9 +135,8 @@ down-trust-1-ec2:
 # Local (on-prem) trusts use Trust_2 kit; EC2 trusts use Trust_1 kit (default).
 # LOCAL_TRUST_NAME is defined in deploy/providers/AWS/Makefile
 up-local-trust:
-	## Starts Trust 1 compose stack
-	## Uses project name 'trust1' so trust-api, imaging-api, etc. keep their normal names,
-	## but overrides TRUST_NAME so the FL client mounts Trust_2/ kit dir.
+	## Starts local trust compose stack with TRUST_NAME=$(LOCAL_TRUST_NAME).
+	## Uses project name 'trust1' so trust-api, imaging-api, etc. keep their normal names.
 	@echo "🚢 Starting local Trust services (TRUST_NAME=$(LOCAL_TRUST_NAME))..."
 	@echo "⚙️ Using environment file ${MAIN_ENV_FILE}"
 	@echo "🧠 FL_BACKEND=$(FL_BACKEND) ($(FL_BACKEND_COMPOSE_FILE))"

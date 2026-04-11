@@ -61,9 +61,7 @@ Each local Trust host runs:
    - SSH access from the operator workstation (if remote), or local access
    - Internet connectivity (to pull Docker images and packages)
 
-3. **AWS Central Hub deployed** — The Central Hub must be running in AWS so that Terraform can provide the CH public IP for firewall rules. See [`deploy/providers/AWS/`](../AWS/README.md).
-
-4. **Home network access** — The ability to configure port forwarding on the border router.
+3. **AWS Central Hub deployed** — The Central Hub must be running in AWS (required for Terraform outputs, FL participant kits in S3, and NLB security group configuration). See [`deploy/providers/AWS/`](../AWS/README.md).
 
 ## Quick Start
 
@@ -197,34 +195,25 @@ uv run ansible-galaxy install -r deploy/providers/local/requirements.yml
 
 **No inbound port forwarding is needed.** Trusts poll the hub outbound for tasks, and FL clients connect outbound to the FL server via the NLB. All communication is trust-initiated.
 
-### ISP / CGNAT Check
-
-Some residential ISPs use Carrier-Grade NAT (CGNAT), which prevents inbound port forwarding. To check:
-
-```bash
-curl ifconfig.me
-```
-
-The returned IP should match the router's WAN IP. If they differ, contact the ISP to request a public IP or opt out of CGNAT. Note: CGNAT only affects FL port forwarding — trust API polling works regardless since it's outbound.
-
 ### Dynamic Public IP
 
-If the public IP changes (common with residential broadband):
+The NLB security group allowlists the trust's public IP for FL traffic. If the public IP changes (common with residential broadband), update it:
 
-1. Update the Terraform security group for FL ports: `TF_VAR_local_trust_public_ip=<new-ip> make -C deploy/providers/AWS plan apply`
+```bash
+TF_VAR_local_trust_public_ip=<new-ip> make -C deploy/providers/AWS plan apply
+```
 
 ## Troubleshooting
 
 | Symptom | Check |
 | --- | --- |
 | Trust not polling hub | Trust stack running? (`docker ps` on trust host). Check trust-api logs for polling errors. |
-| `Connection timed out` (FL) | Router port forwarding configured for FL ports? ISP blocking? |
+| `Connection timed out` (FL) | Trust's public IP changed? Update NLB security group. Host/router firewall blocking outbound on port 8002? |
 | Firewall blocking outbound | Check host/router firewall allows outbound HTTPS (443) and gRPC (8002) |
 | Ansible `Permission denied` | SSH key correct? User has sudo? `ANSIBLE_BECOME_PASS` set for local mode? |
 
 ## Related Documentation
 
 - [AWS Provider README](../AWS/README.md) — Central Hub and cloud Trust deployment
-- [Hybrid HTTPS Deployment Guide](../../../docs/hybrid-local-trust-https-plan.md) — Full architecture and design rationale
-- [Trust README](../../../trust/README.md) — Trust service stack details and TLS cert generation
+- [Trust README](../../../trust/README.md) — Trust service stack details
 - [Deploy README](../../README.md) — General deployment prerequisites (AWS CLI, SSH keys, GHCR login)

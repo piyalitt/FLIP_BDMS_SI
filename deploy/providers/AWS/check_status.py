@@ -298,7 +298,7 @@ def check_http_endpoint(
         url: URL to check
         name: Endpoint name for logging
         expected_status: Expected HTTP status code(s). Can be a single int or list of ints.
-        cafile: Optional path to a CA bundle for verifying self-signed HTTPS certs.
+        cafile: Optional path to a custom CA bundle for HTTPS verification.
 
     Returns:
         True if endpoint is accessible, False otherwise
@@ -308,8 +308,7 @@ def check_http_endpoint(
     # Convert single int to list for uniform handling
     valid_statuses = [expected_status] if isinstance(expected_status, int) else expected_status
 
-    # Build SSL context: use provided CA bundle, or a permissive ctx for https:// URLs
-    # where no cafile is given (e.g. self-signed certs accessed directly).
+    # Build SSL context: use provided CA bundle, or system defaults for HTTPS URLs.
     ssl_ctx: ssl.SSLContext | None = None
     if url.startswith("https://"):
         if cafile and Path(cafile).exists():

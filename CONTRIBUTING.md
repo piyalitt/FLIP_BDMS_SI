@@ -59,7 +59,6 @@ FLIP/
 └── trust/              # Services deployed in individual trust environments
     ├── data-access-api/    # Data access API
     ├── imaging-api/        # Imaging API
-    ├── nginx/              # nginx TLS termination proxy
     ├── observability/      # Observability stack (Grafana, Loki, Alloy)
     ├── omop-db/            # Mocked OMOP database
     ├── orthanc/            # Mocked PACS service (Orthanc)
