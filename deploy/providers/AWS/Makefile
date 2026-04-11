@@ -263,10 +263,6 @@ deploy-trust: update-env ## Deploy trust relationships after central hub is depl
 	@terraform output
 	@uv run ./update_ssh_config.py --aws-profile ${AWS_PROFILE} || true
 	@echo "✅ .ssh/config updated!"
-	@echo "🔑 Refreshing SSH host key for Trust EC2 (ensures Docker context SSH works after re-provisioning)..."
-	@TRUST_IP=$$(terraform output -raw TrustEc2PublicIp) && \
-	  ssh-keygen -R "$$TRUST_IP" 2>/dev/null || true && \
-	  ssh-keyscan -H "$$TRUST_IP" >> ~/.ssh/known_hosts
 	@echo "👷 Create docker context if not exists, pointing to flip-trust to ssh://flip-trust"
 	@docker context create flip-trust --docker "host=ssh://flip-trust" || echo "   Context 'flip-trust' already exists"
 	@echo "🔄 Switching to flip-trust Docker context..."

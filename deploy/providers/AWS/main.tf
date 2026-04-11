@@ -94,10 +94,6 @@ module "trust_security_group" {
       port        = var.PACS_UI_PORT
       description = "Orthanc PACS UI access"
     },
-    {
-      port        = 22
-      description = "SSH access"
-    }
   ]
 }
 
@@ -516,9 +512,9 @@ output "TrustEc2ElasticIp" {
   value       = module.trust_ec2.elastic_ip
 }
 
-output "TrustSshCommand" {
-  description = "SSH command to connect to the Trust EC2 instance"
-  value       = "ssh -i ${var.flip_keypair} ubuntu@${module.trust_ec2.public_ip}"
+output "TrustSsmCommand" {
+  description = "SSM Session Manager command to connect to the Trust EC2"
+  value       = "aws ssm start-session --target ${module.trust_ec2.instance_id}"
 }
 
 output "DbEndpoint" {

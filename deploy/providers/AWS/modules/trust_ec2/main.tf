@@ -23,15 +23,6 @@ resource "aws_security_group" "trust_host_sg" {
   vpc_id      = data.aws_subnet.selected.vpc_id
 }
 
-resource "aws_vpc_security_group_ingress_rule" "ssh" {
-  count             = length(var.security_group_ids) == 0 ? 1 : 0
-  security_group_id = aws_security_group.trust_host_sg[0].id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 22
-  ip_protocol       = "tcp"
-  to_port           = 22
-}
-
 # NOTE This is opening XNAT for the whole internet. Since these are 'open' trusts for testing, we can leave them as is.
 # TODO Restrict these to the trust's IP ranges in the future.
 resource "aws_vpc_security_group_ingress_rule" "xnat" {

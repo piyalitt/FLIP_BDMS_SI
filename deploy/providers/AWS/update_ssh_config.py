@@ -15,9 +15,8 @@
 """Update SSH config with EC2 connection details from Terraform.
 
 This script updates the ~/.ssh/config file with current EC2 connection details
-from Terraform outputs. The "Host flip" entry uses SSM Session Manager
-(ProxyCommand) to reach the Central Hub in a private subnet; "Host flip-trust"
-uses a direct public IP connection.
+from Terraform outputs. Both "Host flip" (Central Hub) and "Host flip-trust"
+(Trust EC2) use SSM Session Manager (ProxyCommand) for SSH access.
 """
 
 import os
@@ -197,44 +196,6 @@ def update_hostname_in_section(section: str, new_hostname: str) -> str:
     return new_section
 
 
-def add_ssh_host_key(hostname: str) -> bool:
-    """Refresh SSH host key in known_hosts (remove stale entry, then add current key).
-
-    Called after every Terraform apply that may have replaced an EC2 instance.
-    Removing before scanning prevents host-key-changed errors when the same IP
-    is reused by a freshly provisioned instance.
-
-    Args:
-        hostname: Hostname or IP address
-
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        known_hosts = Path.home() / ".ssh" / "known_hosts"
-        # Remove any existing entries for this host so a re-provisioned instance
-        # (same IP, new host key) does not trigger a host-key-changed error.
-        subprocess.run(
-            ["ssh-keygen", "-R", hostname],
-            capture_output=True,
-            check=False,  # non-fatal if host was not in known_hosts
-        )
-        result = subprocess.run(
-            ["ssh-keyscan", "-H", hostname],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=10,
-        )
-        if result.stdout:
-            with open(known_hosts, "a") as f:
-                f.write(result.stdout)
-            return True
-        return False
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, IOError):
-        return False
-
-
 def verify_instance_is_running(instance_id_or_ip: str) -> bool:
     """Verify if an EC2 instance is running using its instance ID or public IP.
 
@@ -305,8 +266,8 @@ def main(
 ) -> None:
     """Update SSH config with EC2 connection details from Terraform outputs.
 
-    Updates "Host flip" (SSM ProxyCommand to private-subnet Central Hub) and
-    "Host flip-trust" (direct public IP) entries in ~/.ssh/config.
+    Updates "Host flip" and "Host flip-trust" entries in ~/.ssh/config with
+    SSM Session Manager ProxyCommand for SSH access.
     """
     # Set AWS_PROFILE environment variable
     os.environ["AWS_PROFILE"] = aws_profile
@@ -332,26 +293,17 @@ def main(
         print_status("FAIL", f"SSH config file not found at {ssh_config}")
         sys.exit(1)
 
-    # SSM hosts use ProxyCommand to reach EC2 in a private subnet.
-    # Direct hosts connect via public IP.
+    # All hosts use SSM ProxyCommand for SSH access
     SSM_HOSTS: dict[str, str] = {
         "flip": "Ec2InstanceId",
-    }
-    DIRECT_HOSTS: dict[str, str] = {
-        "flip-trust": "TrustEc2PublicIp",
+        "flip-trust": "TrustEc2InstanceId",
     }
     SSM_PROXY_COMMAND = (
         "ProxyCommand aws ssm start-session --target %h "
         "--document-name AWS-StartSSHSession --parameters 'portNumber=%p'"
     )
 
-    all_hosts: list[tuple[str, str, bool]] = []
-    for name, output in SSM_HOSTS.items():
-        all_hosts.append((name, output, True))
-    for name, output in DIRECT_HOSTS.items():
-        all_hosts.append((name, output, False))
-
-    for service_name, tf_output_name, is_ssm in all_hosts:
+    for service_name, tf_output_name in SSM_HOSTS.items():
         try:
             host_value = get_terraform_output(tf_output_name)
         except SystemExit:
@@ -378,9 +330,8 @@ def main(
                 "    User ubuntu\n"
                 "    IdentitiesOnly yes\n"
                 "    IdentityFile ~/.ssh/host-aws\n"
+                f"    {SSM_PROXY_COMMAND}\n"
             )
-            if is_ssm:
-                new_section_content += f"    {SSM_PROXY_COMMAND}\n"
             new_content += new_section_content
             print_status("PASS", f"'{service_name}' section will be added to SSH config: {ssh_config}")
             changes_made = True
@@ -395,8 +346,8 @@ def main(
                 else:
                     section_content = content[start:end]
                     updated_section = update_hostname_in_section(section_content, host_value)
-                    # Ensure ProxyCommand is present for SSM hosts
-                    if is_ssm and "ProxyCommand" not in updated_section:
+                    # Ensure ProxyCommand is present
+                    if "ProxyCommand" not in updated_section:
                         updated_section = updated_section.rstrip("\n") + f"\n    {SSM_PROXY_COMMAND}\n"
                     new_content = new_content[:start] + updated_section + new_content[end:]
                     print_status("INFO", f"Updating '{service_name}' HostName from {current_hostname} to {host_value}")
@@ -405,7 +356,7 @@ def main(
                 print_status("WARN", f"HostName not found in 'Host {service_name}' section, adding it")
                 section_content = content[start:end]
                 updated_section = update_hostname_in_section(section_content, host_value)
-                if is_ssm and "ProxyCommand" not in updated_section:
+                if "ProxyCommand" not in updated_section:
                     updated_section = updated_section.rstrip("\n") + f"\n    {SSM_PROXY_COMMAND}\n"
                 new_content = new_content[:start] + updated_section + new_content[end:]
                 changes_made = True
@@ -438,16 +389,11 @@ def main(
                     print_status("FAIL", f"Could not write SSH config: {e}")
                     sys.exit(1)
 
-        # Only refresh host keys for direct hosts — SSM handles transport trust
-        if not is_ssm:
-            if not add_ssh_host_key(host_value):
-                print_status("WARN", f"Could not add SSH host key for {host_value} — you may need to run: ssh-keyscan -H {host_value} >> ~/.ssh/known_hosts")
-
     # Summary
     click.echo()
     click.echo(f"{Colors.GREEN}✓ SSH config update complete!{Colors.NC}")
     click.echo(f"{Colors.BLUE}You can now connect with:{Colors.NC}")
-    for service_name, _, _ in all_hosts:
+    for service_name in SSM_HOSTS:
         click.echo(f"  ssh {service_name}")
     click.echo()
 
