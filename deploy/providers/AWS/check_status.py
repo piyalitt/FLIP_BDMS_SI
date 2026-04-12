@@ -811,11 +811,11 @@ def main(
             for name, url, expected in trust_endpoints:
                 cmd = f"curl -s -o /dev/null -w '%{{http_code}}' --connect-timeout 10 {url}"
                 success, output = run_ssh_command("", "flip-trust", cmd, timeout=20)
-                code = output.strip()
+                code = output.strip() if success else "timeout/error"
                 if success and code in expected:
                     print_status("PASS", f"{name} responding (HTTP {code}) — {url}")
                 else:
-                    print_status("FAIL", f"{name} not responding (HTTP {code or 'no-response'}) — {url}")
+                    print_status("FAIL", f"{name} not responding ({code}) — {url}")
 
             print_status(
                 "INFO",
