@@ -800,13 +800,16 @@ def main(
             # from inside the Trust EC2 itself via the 'flip-trust' SSH alias (SSM).
             # For browser access, operators use `make forward-trust` to tunnel these ports.
             print_status("INFO", "Checking Trust EC2 service endpoints (via SSM)...")
+            # Use 127.0.0.1 instead of 'localhost' — Docker Swarm's ingress routing
+            # mesh (used by XNAT) binds IPv4 only; 'localhost' resolves to ::1 first
+            # on this host and hangs the TCP connection.
             trust_endpoints = [
-                ("XNAT", "http://localhost:8104/", ["200", "302"]),
-                ("Orthanc", "http://localhost:8042/", ["200", "401"]),
-                ("trust-api", "http://localhost:8020/docs", ["200"]),
-                ("imaging-api", "http://localhost:8001/docs", ["200"]),
-                ("data-access-api", "http://localhost:8010/docs", ["200"]),
-                ("Grafana", "http://localhost:3000/", ["200", "302"]),
+                ("XNAT", "http://127.0.0.1:8104/", ["200", "302"]),
+                ("Orthanc", "http://127.0.0.1:8042/", ["200", "401"]),
+                ("trust-api", "http://127.0.0.1:8020/docs", ["200"]),
+                ("imaging-api", "http://127.0.0.1:8001/docs", ["200"]),
+                ("data-access-api", "http://127.0.0.1:8010/docs", ["200"]),
+                ("Grafana", "http://127.0.0.1:3000/", ["200", "302"]),
             ]
             for name, url, expected in trust_endpoints:
                 cmd = f"curl -s -o /dev/null -w '%{{http_code}}' --connect-timeout 10 {url}"
