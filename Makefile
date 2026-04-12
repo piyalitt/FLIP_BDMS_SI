@@ -141,6 +141,8 @@ up-local-trust: create-networks
 	docker context use default
 	@echo "🚢 Starting local on-prem Trust services (PROD=$(PROD), TRUST_NAME=$(LOCAL_TRUST_NAME))..."
 	$(MAKE) -e DEBUG=$(DEBUG) -C trust up-local-trust PROD=$(PROD) LOCAL_TRUST_NAME=$(LOCAL_TRUST_NAME)
+	@echo "🚢 Starting XNAT services..."
+	$(MAKE) -e DEBUG=$(DEBUG) -C trust/xnat up-xnat-local PROD=$(PROD)
 	@echo "✅ Local Trust services started successfully!"
 
 central-hub: create-networks-centralhub

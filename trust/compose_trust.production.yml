@@ -112,8 +112,8 @@ services:
     ports:
       - "${LOKI_PORT}:3100"
     volumes:
-      - /opt/flip/config/observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
-      - /opt/flip/volumes/loki:/loki
+      - ${OBSERVABILITY_CONFIG_DIR:-/opt/flip/config/observability}/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - ${LOKI_DATA_VOLUME:-/opt/flip/volumes/loki}:/loki
 
   alloy:
     image: grafana/alloy:v1.9.0
@@ -123,7 +123,7 @@ services:
       - --server.http.listen-addr=0.0.0.0:12345
       - /etc/alloy/config.alloy
     volumes:
-      - /opt/flip/config/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ${OBSERVABILITY_CONFIG_DIR:-/opt/flip/config/observability}/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - loki
@@ -136,8 +136,8 @@ services:
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
     volumes:
-      - /opt/flip/volumes/grafana:/var/lib/grafana
-      - /opt/flip/config/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ${GRAFANA_DATA_VOLUME:-/opt/flip/volumes/grafana}:/var/lib/grafana
+      - ${OBSERVABILITY_CONFIG_DIR:-/opt/flip/config/observability}/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - loki
 
