@@ -151,12 +151,6 @@ The `full-deploy-stag` / `full-deploy-stag-hybrid` targets handle key generation
 
 The main playbook. It can be run standalone or via the `add-local-trust` Makefile target.
 
-**Required variables** (passed with `-e`):
-
-| Variable | Description | Example |
-| --- | --- | --- |
-| `trust_public_ip` | Public IP (or hostname) of the trust host | `82.1.2.3` |
-
 **Optional variables:**
 
 | Variable | Default | Description |
@@ -173,8 +167,7 @@ uv run ansible-playbook \
   -i <trust-host-ip>, \
   -u ubuntu \
   --private-key ~/.ssh/trust_key \
-  ../../../deploy/providers/local/site_local_trust.yml \
-  -e trust_public_ip=<public-ip>
+  ../../../deploy/providers/local/site_local_trust.yml
 ```
 
 ### `requirements.yml`

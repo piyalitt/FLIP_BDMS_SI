@@ -290,8 +290,7 @@ add-local-trust: ## Provision an on-prem Trust host and register it with the Cen
 			-i "$(LOCAL_TRUST_IP)," \
 			-u "$(LOCAL_TRUST_SSH_USER)" \
 			--private-key "$(LOCAL_TRUST_SSH_KEY)" \
-			../../../deploy/providers/local/site_local_trust.yml \
-			-e trust_public_ip=$(LOCAL_TRUST_IP); \
+			../../../deploy/providers/local/site_local_trust.yml; \
 	else \
 		echo "💻 Running locally (no SSH — operator machine is the trust host)..."; \
 		if [ -z "$$ANSIBLE_BECOME_PASS" ]; then \
@@ -315,8 +314,7 @@ add-local-trust: ## Provision an on-prem Trust host and register it with the Cen
 			-i "localhost," \
 			-e ansible_connection=local \
 			-e ansible_python_interpreter=/usr/bin/python3 \
-			../../../deploy/providers/local/site_local_trust.yml \
-			-e trust_public_ip=$(LOCAL_TRUST_IP); \
+			../../../deploy/providers/local/site_local_trust.yml; \
 		PLAY_RC=$$?; \
 		exit $$PLAY_RC; \
 	fi
