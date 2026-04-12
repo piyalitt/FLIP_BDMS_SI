@@ -3,7 +3,7 @@
 # (Cognito, Secrets Manager, S3 buckets, ACM certificates, Route53 records,
 # and — in production — the VPC with its Transit Gateway attachment).
 
-set -e
+set -eo pipefail
 source "$(dirname "$0")/utils.sh"
 
 if [ "$PROD" = "true" ]; then

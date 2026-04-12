@@ -364,9 +364,9 @@ Each Trust environment (cloud or on-prem) runs:
 
 | Service | Port | Purpose |
 | --------- | ------ | --------- |
-| trust-api | 8000 | Trust API gateway (polls hub for tasks) |
-| imaging-api | 8000 | DICOM image retrieval |
-| data-access-api | 8000 | OMOP database queries |
+| trust-api | 8020 | Trust API gateway (polls hub for tasks) |
+| imaging-api | 8001 | DICOM image retrieval |
+| data-access-api | 8010 | OMOP database queries |
 | fl-client | — | Federated learning client (connects outbound to FL server via NLB) |
 | XNAT | 8104 | Neuroimaging platform |
 | Orthanc | 4242 | DICOM server |

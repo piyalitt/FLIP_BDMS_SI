@@ -800,9 +800,9 @@ def main(
             # from inside the Trust EC2 itself via the 'flip-trust' SSH alias (SSM).
             # For browser access, operators use `make forward-trust` to tunnel these ports.
             print_status("INFO", "Checking Trust EC2 service endpoints (via SSM)...")
-            # Use 127.0.0.1 instead of 'localhost' — Docker Swarm's ingress routing
-            # mesh (used by XNAT) binds IPv4 only; 'localhost' resolves to ::1 first
-            # on this host and hangs the TCP connection.
+            # Use 127.0.0.1 instead of 'localhost' — Docker port publishing (including
+            # Swarm ingress for XNAT) binds to 0.0.0.0 (IPv4); 'localhost' may resolve
+            # to ::1 first on this host and hang the TCP connection.
             trust_endpoints = [
                 ("XNAT", "http://127.0.0.1:8104/", ["200", "302"]),
                 ("Orthanc", "http://127.0.0.1:8042/", ["200", "401"]),
@@ -812,13 +812,18 @@ def main(
                 ("Grafana", "http://127.0.0.1:3000/", ["200", "302"]),
             ]
             for name, url, expected in trust_endpoints:
-                cmd = f"curl -s -o /dev/null -w '%{{http_code}}' --connect-timeout 10 {url}"
-                success, output = run_ssh_command("", "flip-trust", cmd, timeout=20)
-                code = output.strip() if success else "timeout/error"
-                if success and code in expected:
+                cmd = f"curl -s -o /dev/null -w '%{{http_code}}' --connect-timeout 10 --max-time 15 {url}"
+                success, output = run_ssh_command("", "flip-trust", cmd, timeout=25)
+                if not success:
+                    print_status("FAIL", f"{name}: SSM/SSH transport failed — {output} — {url}")
+                    continue
+                code = output.strip()
+                if code in expected:
                     print_status("PASS", f"{name} responding (HTTP {code}) — {url}")
+                elif code == "000":
+                    print_status("FAIL", f"{name}: connection refused / service not listening — check `docker ps` on Trust EC2 — {url}")
                 else:
-                    print_status("FAIL", f"{name} not responding ({code}) — {url}")
+                    print_status("FAIL", f"{name}: unexpected HTTP {code} (expected {expected}) — service responding but unhealthy — {url}")
 
             print_status(
                 "INFO",

@@ -15,7 +15,7 @@
 
 Ansible playbook and supporting files to provision an on-premises Ubuntu host as a FLIP Trust node. The provisioned host polls the Central Hub (running in AWS) for tasks — all communication is outbound from the trust.
 
-This is the **local provider** counterpart to the [AWS provider](../AWS/README.md), which manages the Central Hub and (optionally) cloud-hosted Trust instances. Together they form the hybrid deployment model described in [docs/hybrid-local-trust-https-plan.md](../../../docs/hybrid-local-trust-https-plan.md).
+This is the **local provider** counterpart to the [AWS provider](../AWS/README.md), which manages the Central Hub and (optionally) cloud-hosted Trust instances. Together they form the hybrid deployment model described in the project's [CLAUDE.md](../../../CLAUDE.md#deployment-models).
 
 ## Architecture
 

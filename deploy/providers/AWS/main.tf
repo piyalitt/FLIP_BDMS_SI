@@ -572,9 +572,6 @@ module "trust_ec2" {
   # use the trust SG, not the central EC2 SG
   security_group_ids = [module.trust_security_group.security_group.id]
 
-  XNAT_PORT    = var.XNAT_PORT
-  PACS_UI_PORT = var.PACS_UI_PORT
-
   # attaches the same ec2-role-profile instance profile to the Trust instance
   iam_instance_profile_name = aws_iam_instance_profile.ec2_profile.name
 }

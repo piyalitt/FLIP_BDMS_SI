@@ -356,7 +356,7 @@ The platform supports a cloud-only setup (Central Hub + Trust on AWS) or a hybri
   - Deployed using custom Terraform module (`modules/trust_ec2`)
   - Automatic Docker and Docker Compose installation via user_data
   - Automatic Docker network creation for inter-service communication
-  - No inbound ports open — access via SSM (`ssh flip-trust`) and SSM port forwarding for XNAT/Orthanc debugging (`make forward-trust` / `make forward-trust-orthanc`)
+  - No inbound ports open — access via SSM (`ssh flip-trust`) and SSM port forwarding for XNAT/Orthanc debugging (`make forward-trust`)
 - **ALB**: Application Load Balancer for traffic routing
 - **RDS**: PostgreSQL 15 managed database (EOL: October 2027)
 - **CloudWatch**: Logging and monitoring for both EC2 instances

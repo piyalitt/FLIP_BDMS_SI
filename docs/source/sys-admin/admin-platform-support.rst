@@ -84,7 +84,7 @@ Trusts authenticate to the Central Hub using per-trust API keys. Each trust is i
 
 All trust communication is **outbound** — trusts poll the Central Hub for tasks over HTTPS (via the ALB). The hub never makes inbound connections to trusts. FL clients connect outbound to the FL server via the NLB. No inbound firewall rules or port forwarding are required on trust hosts.
 
-Both the Central Hub and Trust EC2 instances run in private subnets with no open inbound ports. Operator access is via AWS Systems Manager Session Manager (SSH-over-SSM). XNAT and Orthanc on the Trust EC2 are accessible via SSM port forwarding only (``make forward-trust`` and ``make forward-trust-orthanc``).
+Both the Central Hub and Trust EC2 instances run in private subnets with no open inbound ports. Operator access is via AWS Systems Manager Session Manager (SSH-over-SSM). XNAT, Orthanc, and the Trust API swagger docs are accessible via SSM port forwarding only (``make forward-trust``).
 
 See the `Local Deployment Guide <../../../deploy/providers/local/README.md>`_ for details on trust provisioning and authentication setup.
 
