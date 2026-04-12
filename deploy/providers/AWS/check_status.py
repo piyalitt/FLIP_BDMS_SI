@@ -796,17 +796,27 @@ def main(
 
         # Trust EC2 endpoint checks
         if trust_id:
-            print_status("INFO", "Checking Trust EC2 service endpoints...")
+            # Trust EC2 is in a private subnet — check each service's HTTP endpoint
+            # from inside the Trust EC2 itself via the 'flip-trust' SSH alias (SSM).
+            # For browser access, operators use `make forward-trust` to tunnel these ports.
+            print_status("INFO", "Checking Trust EC2 service endpoints (via SSM)...")
+            trust_endpoints = [
+                ("XNAT", "http://localhost:8104/", ["200", "302"]),
+                ("Orthanc", "http://localhost:8042/", ["200", "401"]),
+                ("trust-api", "http://localhost:8020/docs", ["200"]),
+                ("imaging-api", "http://localhost:8001/docs", ["200"]),
+                ("data-access-api", "http://localhost:8010/docs", ["200"]),
+                ("Grafana", "http://localhost:3000/", ["200", "302"]),
+            ]
+            for name, url, expected in trust_endpoints:
+                cmd = f"curl -s -o /dev/null -w '%{{http_code}}' --connect-timeout 10 {url}"
+                success, output = run_ssh_command("", "flip-trust", cmd, timeout=20)
+                code = output.strip()
+                if success and code in expected:
+                    print_status("PASS", f"{name} responding (HTTP {code}) — {url}")
+                else:
+                    print_status("FAIL", f"{name} not responding (HTTP {code or 'no-response'}) — {url}")
 
-            # Trust EC2 is in a private subnet with no inbound ports. All trust
-            # services (trust-api, imaging-api, data-access-api, XNAT, Orthanc)
-            # are only reachable via SSM port forwarding:
-            #   make -C deploy/providers/AWS forward-trust           # XNAT :8104
-            #   make -C deploy/providers/AWS forward-trust-orthanc   # Orthanc :8042
-            print_status(
-                "INFO",
-                "Trust EC2 is in a private subnet — XNAT/Orthanc are accessible via SSM port forwarding only.",
-            )
             print_status(
                 "INFO",
                 "Trust API uses outbound polling. "
