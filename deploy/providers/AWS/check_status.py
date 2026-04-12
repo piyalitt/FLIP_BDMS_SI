@@ -224,68 +224,6 @@ def run_ssh_command(ssh_key: str, host: str, command: str, timeout: int = 10) ->
         return False, str(e)
 
 
-def check_elastic_ip_stability(
-    trust_id: str | None,
-    trust_eip: str | None,
-) -> bool:
-    """Verify Trust EC2 Elastic IP stability and correct instance association.
-
-    Args:
-        trust_id (str | None): Trust EC2 instance ID
-        trust_eip (str | None): Trust EC2 Elastic IP
-
-    Returns:
-        bool: True if all checks pass, False otherwise
-    """
-    print_section("Elastic IP Stability Check")
-
-    failures = 0
-
-    # Check Trust EC2 EIP if deployed
-    if trust_id:
-        if not trust_eip:
-            print_status("WARN", "Trust EC2 deployed but Elastic IP is not allocated (check TrustEc2ElasticIp output)")
-        else:
-            print_status("PASS", f"Trust EC2 Elastic IP allocated: {trust_eip}")
-
-            # Verify EIP is associated with the correct instance in AWS
-            success, output = run_aws_command([
-                "ec2",
-                "describe-addresses",
-                "--region",
-                os.getenv("AWS_REGION", "eu-west-2"),
-                "--public-ips",
-                trust_eip,
-                "--query",
-                "Addresses[0].[InstanceId, AllocationId]",
-                "--output",
-                "text",
-            ])
-
-            if success and output:
-                instance_id, allocation_id = output.split()
-                if instance_id == trust_id:
-                    print_status(
-                        "PASS",
-                        f"Trust EC2 EIP {trust_eip} correctly associated with {instance_id} (allocation: {allocation_id[:12]}...)",
-                    )
-                else:
-                    print_status(
-                        "FAIL",
-                        f"Trust EC2 EIP {trust_eip} associated with wrong instance: {instance_id} (expected {trust_id})",
-                    )
-                    failures += 1
-            else:
-                print_status("WARN", f"Could not verify Trust EC2 EIP association in AWS: {output}")
-
-    if failures > 0:
-        print_status("FAIL", f"EIP stability check failed with {failures} issue(s)")
-        return False
-    else:
-        print_status("PASS", "All EIP checks passed - stable IPs confirmed for outbound connectivity")
-        return True
-
-
 def check_http_endpoint(
     url: str,
     name: str,
@@ -497,9 +435,7 @@ def main(
     central_hub_ip = get_terraform_output("Ec2PrivateIp")
     central_hub_id = get_terraform_output("Ec2InstanceId")
 
-    trust_ip = get_terraform_output("TrustEc2PublicIp")
     trust_id = get_terraform_output("TrustEc2InstanceId")
-    trust_eip = get_terraform_output("TrustEc2ElasticIp")
 
     if not central_hub_ip:
         print_status("FAIL", "Could not retrieve Central Hub EC2 Private IP from Terraform outputs")
@@ -508,16 +444,10 @@ def main(
     print_status("PASS", f"Central Hub EC2 Private IP: {central_hub_ip}")
     print_status("PASS", f"Central Hub EC2 ID: {central_hub_id}")
 
-    if trust_ip:
-        print_status("PASS", f"Trust EC2 IP: {trust_ip}")
+    if trust_id:
         print_status("PASS", f"Trust EC2 ID: {trust_id}")
-        if trust_eip:
-            print_status("PASS", f"Trust EC2 Elastic IP: {trust_eip}")
     else:
         print_status("INFO", "Trust EC2 not found in outputs (may not be deployed)")
-
-    # Check Elastic IP stability (Trust EC2 uses stable EIP for outbound connectivity)
-    check_elastic_ip_stability(trust_id, trust_eip)
 
     # Check AWS resources
     print_section("Checking AWS Resources")
@@ -744,7 +674,7 @@ def main(
             )
 
         # Check Trust EC2 SSH connectivity (via SSM)
-        if trust_ip:
+        if trust_id:
             print_status("INFO", "Testing SSH connectivity to Trust EC2 (via SSM)...")
             success, _ = run_ssh_command(
                 "",
@@ -777,11 +707,6 @@ def main(
         UI_PORT = os.getenv("UI_PORT", "")
         API_PORT = os.getenv("API_PORT", "")
         FL_API_PORT = os.getenv("FL_API_PORT", "")
-        # Trust EC2 ports
-        XNAT_PORT = os.getenv("XNAT_PORT_TRUST_1", "")
-        ORTHANC_PORT = os.getenv("PACS_UI_PORT_TRUST_1", "")
-        # IMAGING_API_PORT = os.getenv("IMAGING_API_PORT", "")
-        # DATA_ACCESS_API_PORT = os.getenv("DATA_ACCESS_API_PORT", "")
 
         # Check UI via HTTPS domain alias
         check_http_endpoint(f"https://{alb_subdomain}", "FLIP UI", 200)
@@ -870,46 +795,23 @@ def main(
                 )
 
         # Trust EC2 endpoint checks
-        if trust_ip:
+        if trust_id:
             print_status("INFO", "Checking Trust EC2 service endpoints...")
 
-            # Trust API uses outbound polling — no inbound port is exposed.
-            # Direct the operator to check trust-api logs for successful polling.
+            # Trust EC2 is in a private subnet with no inbound ports. All trust
+            # services (trust-api, imaging-api, data-access-api, XNAT, Orthanc)
+            # are only reachable via SSM port forwarding:
+            #   make -C deploy/providers/AWS forward-trust           # XNAT :8104
+            #   make -C deploy/providers/AWS forward-trust-orthanc   # Orthanc :8042
+            print_status(
+                "INFO",
+                "Trust EC2 is in a private subnet — XNAT/Orthanc are accessible via SSM port forwarding only.",
+            )
             print_status(
                 "INFO",
                 "Trust API uses outbound polling. "
                 "Verify by checking trust-api logs for successful hub polling and heartbeats.",
             )
-
-            # Check XNAT is reachable
-            check_http_endpoint(f"http://{trust_ip}:{XNAT_PORT}", "XNAT Service", 200)
-
-            # Check Orthanc PACS is reachable (401 is expected - requires authentication)
-            check_http_endpoint(f"http://{trust_ip}:{ORTHANC_PORT}", "Orthanc PACS Service", [200, 401])
-
-        #     # Check Imaging API health endpoint
-        #     check_http_endpoint(
-        #         f"http://{trust_ip}:{imaging_API_PORT}/health",
-        #         "Imaging API Health",
-        #         200,
-        #     )
-
-        #     # Check Imaging API docs endpoint
-        #     check_http_endpoint(f"http://{trust_ip}:{imaging_API_PORT}/docs", "Imaging API Docs", 200)
-
-        #     # Check Data Access API health endpoint
-        #     check_http_endpoint(
-        #         f"http://{trust_ip}:{data_access_API_PORT}/health",
-        #         "Data Access API Health",
-        #         200,
-        #     )
-
-        #     # Check Data Access API docs endpoint
-        #     check_http_endpoint(
-        #         f"http://{trust_ip}:{data_access_API_PORT}/docs",
-        #         "Data Access API Docs",
-        #         200,
-        #     )
 
         # Local (on-premises) Trust checks
         # In the outbound-only polling model, the local trust polls the hub —
@@ -1027,7 +929,7 @@ def main(
             )
 
         # Trust EC2 checks (via SSM)
-        if trust_ip:
+        if trust_id:
             success, _ = run_ssh_command("", "flip-trust", "true", timeout=10)
 
             if success:
@@ -1202,7 +1104,7 @@ def main(
         print_status("WARN", "Central Hub CloudWatch log group not found")
 
     # Check Trust EC2 CloudWatch logs if it exists
-    if trust_ip:
+    if trust_id:
         print_status("INFO", "Checking Trust EC2 CloudWatch log groups...")
         trust_log_group = "/aws/ec2/flipst"
         success, output = run_aws_command([

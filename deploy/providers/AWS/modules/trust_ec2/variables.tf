@@ -41,11 +41,6 @@ variable "security_group_ids" {
   default = []
 }
 
-variable "create_elastic_ip" {
-  type    = bool
-  default = false
-}
-
 variable "XNAT_PORT" {
   type = number
 }

@@ -83,18 +83,9 @@ module "trust_security_group" {
   source      = "./modules/secgroup"
   name        = "trust-security-group"
   vpc_id      = module.flip_vpc.vpc_id
-  description = "Security group for FLIP Trust EC2 instance"
+  description = "Security group for FLIP Trust EC2 instance (no inbound - access via SSM Session Manager and SSM port forwarding)"
 
-  ingress_rules = [
-    {
-      port        = var.XNAT_PORT
-      description = "XNAT access"
-    },
-    {
-      port        = var.PACS_UI_PORT
-      description = "Orthanc PACS UI access"
-    },
-  ]
+  ingress_rules = []
 }
 
 # Only allow FL server traffic that arrives through the NLB, not direct client or VPC access.
@@ -365,7 +356,7 @@ module "fl_server_nlb" {
       ip_protocol = "tcp"
       from_port   = tostring(var.FL_SERVER_PORT)
       to_port     = tostring(var.FL_SERVER_PORT)
-      cidr_ipv4   = "${module.trust_ec2.public_ip}/32"
+      cidr_ipv4   = "${module.flip_vpc.nat_public_ips[0]}/32"
     }
   }
 
@@ -502,16 +493,6 @@ output "TrustEc2InstanceId" {
   value       = module.trust_ec2.instance_id
 }
 
-output "TrustEc2PublicIp" {
-  description = "Trust EC2 Instance Public IP"
-  value       = module.trust_ec2.public_ip
-}
-
-output "TrustEc2ElasticIp" {
-  description = "Trust EC2 Instance Elastic IP (static IP address, always allocated)"
-  value       = module.trust_ec2.elastic_ip
-}
-
 output "TrustSsmCommand" {
   description = "SSM Session Manager command to connect to the Trust EC2"
   value       = "aws ssm start-session --target ${module.trust_ec2.instance_id}"
@@ -586,7 +567,7 @@ module "trust_ec2" {
   name_prefix   = "trust"
   instance_type = "t3.xlarge"
   key_name      = aws_key_pair.host_key.key_name
-  subnet_id     = element(module.flip_vpc.public_subnets, 0)
+  subnet_id     = element(module.flip_vpc.private_subnets, 0)
 
   # use the trust SG, not the central EC2 SG
   security_group_ids = [module.trust_security_group.security_group.id]
@@ -594,8 +575,6 @@ module "trust_ec2" {
   XNAT_PORT    = var.XNAT_PORT
   PACS_UI_PORT = var.PACS_UI_PORT
 
-  # pass the compose file content and env file content from the repo
-  create_elastic_ip = true
   # attaches the same ec2-role-profile instance profile to the Trust instance
   iam_instance_profile_name = aws_iam_instance_profile.ec2_profile.name
 }

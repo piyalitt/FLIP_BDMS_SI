@@ -1,5 +1,7 @@
 #!/bin/bash
-# Temporarily disable prevent_destroy on EIPs, perform destroy, then re-enable
+# Selectively destroy FLIP infrastructure while preserving persistent resources
+# (Cognito, Secrets Manager, S3 buckets, ACM certificates, Route53 records,
+# and — in production — the VPC with its Transit Gateway attachment).
 
 set -e
 source "$(dirname "$0")/utils.sh"
@@ -8,23 +10,11 @@ if [ "$PROD" = "true" ]; then
   log_warn "PRODUCTION environment detected — VPC will NOT be destroyed (Transit Gateway attachment)"
 fi
 
-log_warn "🔓 Temporarily disabling prevent_destroy on EIP resources..."
-
-# Using sed to temporarily modify the tf files
-log_info "📋 Backing up Terraform configuration..."
-cp main.tf main.tf.backup
-cp modules/trust_ec2/main.tf modules/trust_ec2/main.tf.backup
-
-log_info "🗑️  Disabling prevent_destroy in EIP resources temporarily..."
-if [[ "$OSTYPE" == "darwin"* ]]; then
-  sed -i '' 's/prevent_destroy = true/prevent_destroy = false/g' main.tf modules/trust_ec2/main.tf
-else
-  sed -i 's/prevent_destroy = true/prevent_destroy = false/g' main.tf modules/trust_ec2/main.tf
-fi
-
 log_info "💥 Proceeding with infrastructure destruction..."
 
-# Step 1: Delete RDS database instance directly using AWS CLI
+# Step 1: Delete RDS database instance directly using AWS CLI.
+# Terraform cannot destroy the DB instance cleanly due to parameter group
+# dependencies; deleting it via the AWS CLI first avoids those cycles.
 log_info "Step 1: Deleting RDS database instance via AWS CLI..."
 DB_INSTANCE_ID=$(aws_cmd rds describe-db-instances \
   --query 'DBInstances[?DBInstanceIdentifier==`flip-database`].[DBInstanceIdentifier]' \
@@ -54,7 +44,7 @@ terraform destroy -auto-approve \
   -target=aws_db_subnet_group.flip_db_subnet_group \
   2>&1 | grep -v "Warning: Resource targeting is in effect" | grep -v "Warning: Applied changes may be incomplete" | grep -v "Note that the -target option is not suitable for routine use" || true
 
-# Step 3: Destroy remaining infrastructure (VPC, security groups, etc.)
+# Step 3: Destroy remaining infrastructure (EC2, security groups, ALB/NLB, IAM, etc.)
 log_info "Step 3: Destroying remaining infrastructure..."
 
 DESTROY_TARGETS=(
@@ -71,11 +61,7 @@ DESTROY_TARGETS=(
   -target=aws_ses_template.flip_access_request
   -target=aws_ses_template.flip_xnat_credentials
   -target=module.trust_ec2.aws_instance.trust_host
-  -target=module.trust_ec2.aws_security_group.trust_host_sg
-  -target=module.trust_ec2.aws_vpc_security_group_ingress_rule.ssh
-  -target=module.trust_ec2.aws_vpc_security_group_ingress_rule.xnat
-  -target=module.trust_ec2.aws_vpc_security_group_ingress_rule.pacs_ui
-  -target=module.trust_ec2.aws_vpc_security_group_egress_rule.allow_all
+  -target=module.trust_security_group
   -target=aws_key_pair.host_key
   -target=local_file.env
 )
@@ -89,14 +75,7 @@ terraform destroy -auto-approve \
   "${DESTROY_TARGETS[@]}" \
   2>&1 | grep -v "Warning: Resource targeting is in effect" | grep -v "Warning: Applied changes may be incomplete" | grep -v "Note that the -target option is not suitable for routine use"
 
-log_info "🔒 Re-enabling prevent_destroy in EIP resources..."
-mv main.tf.backup main.tf
-mv modules/trust_ec2/main.tf.backup modules/trust_ec2/main.tf
-
-log_success "✅ Infrastructure destroyed! Trust EC2 EIP preserved and protect_destroy re-enabled."
-log_info ""
-log_info "✓ Trust EC2 Elastic IP remains allocated:"
-log_info "  - Trust EC2 EIP: $(terraform output -raw TrustEc2ElasticIp 2>/dev/null || echo 'N/A')"
+log_success "✅ Infrastructure destroyed!"
 if [ "$PROD" = "true" ]; then
   log_info ""
   log_info "✓ VPC preserved (Transit Gateway attachment)"

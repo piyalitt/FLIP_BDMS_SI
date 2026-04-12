@@ -141,14 +141,6 @@ force-unlock: ## Force unlock Terraform state - provide LOCK_ID=<id> as argument
 delete-flip-keypair: ## Delete the flip-keypair from AWS (run before apply if it exists)
 	@bash scripts/manage-aws.sh delete-keypair flip-keypair
 
-.PHONY: list-eips
-list-eips: ## List all Elastic IPs in the region
-	@bash scripts/manage-aws.sh list-eips
-
-.PHONY: release-unused-eips
-release-unused-eips: ## Release unassociated Elastic IPs to free up quota
-	@bash scripts/manage-aws.sh release-unused-eips
-
 .PHONY: plan
 plan: ## Plan Terraform changes (with environment file loaded)
 	@echo "📋 Planning Terraform changes..."
@@ -182,6 +174,10 @@ refresh: ## Refresh Terraform state to sync with actual AWS resources
 apply: ## Apply Terraform configuration to update AWS infrastructure (with environment file loaded)
 	@echo "🛠️ Applying Terraform configuration..."
 	@terraform apply plan.tfplan
+
+.PHONY: forward-trust
+forward-trust: ## SSM port-forward all Trust web UIs and API swagger docs (Ctrl+C to stop)
+	@bash scripts/forward-trust-all.sh
 
 .PHONY: ssh-config
 ssh-config: ## Update local .ssh/config for flip contexts
@@ -381,21 +377,16 @@ check:
 	@uv run ./check_status.py || true
 
 
-.PHONY: backup-eips
-backup-eips: ## Backup current Elastic IPs before destruction (preserves allocation IDs for reassociation)
-	@bash scripts/backup-eips.sh
-
 .PHONY: destroy
-destroy: backup-eips ## Destroy ephemeral infrastructure (EC2, RDS, VPC) - preserves Cognito, Secrets, S3, EIPs
+destroy: ## Destroy ephemeral infrastructure (EC2, RDS, VPC) - preserves Cognito, Secrets, S3
 	@echo ""
 	@echo "⚠️  SELECTIVE DESTRUCTION - PRESERVING:"
 	@echo "   ✓ Cognito user pool and identities"
 	@echo "   ✓ AWS Secrets Manager (FLIP_API secret)"
 	@echo "   ✓ S3 buckets (FLIP + AI Centre data)"
 	@echo "   ✓ ACM certificates and Route53 records"
-	@echo "   ✓ Elastic IP (Trust EC2)"
 ifeq ($(PROD),true)
-	@echo "   ✓ VPC (Transit Gateway attachment — production)"
+	@echo "   ✓ VPC (Transit Gateway attachment - production)"
 endif
 	@echo ""
 	@echo "🗑️  DESTROYING:"
@@ -411,10 +402,7 @@ endif
 	@echo ""
 	@bash -c 'read -p "Type '\''yes'\'' to confirm destruction: " confirm && [ "$$confirm" = "yes" ] || { echo "Aborted."; exit 1; }'
 	@echo ""
-	@bash scripts/destroy-preserve-eips.sh
-	@echo ""
-	@echo "⚠️  IMPORTANT: Review EIP state before re-applying:"
-	@echo "   make list-eips   # Check that your EIPs are still allocated"
+	@bash scripts/destroy-selective.sh
 
 
 .PHONY: help
