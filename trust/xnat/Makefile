@@ -13,8 +13,7 @@
 .PHONY: build up deploy down clean xnat-shell xnat-war-download xnat-plugins-download \
 	xnat-reset xnat-configure xnat-configure-trust-1 xnat-configure-trust-2 xnat-configure-local \
 	create-network-trust-1 create-network-trust-2 up-xnat-1 up-xnat-2 up-xnat-local \
-	down-xnat-1 down-xnat-2 down-xnat-local \
-	down-xnat-1 down-xnat-2
+	down-xnat-1 down-xnat-2 down-xnat-local
 
 # if tag PROD=true is passed, set PROD=true
 ifeq ($(PROD),true)
