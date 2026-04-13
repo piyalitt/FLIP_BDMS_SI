@@ -30,7 +30,7 @@ def get_project_by_id(project_id: UUID, db: Session) -> Projects | None:
         db (Session): The SQLModel session to use for database operations.
 
     Returns:
-        Optional[Projects]: The project object if found, otherwise None.
+        Projects | None: The project object if found, otherwise None.
     """
     logger.debug(f"Getting project with id: '{project_id}'")
 

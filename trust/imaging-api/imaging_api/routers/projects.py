@@ -264,7 +264,7 @@ def get_project_subjects_endpoint(project_id: str, headers: XNATAuthHeaders) -> 
         headers (XNATAuthHeaders): XNAT authentication headers.
 
     Returns:
-        List[Subject]: List of subjects in the project.
+        list[Subject]: List of subjects in the project.
 
     Raises:
         HTTPException: If there is an error during the retrieval of subjects for the project.
@@ -288,7 +288,7 @@ def get_project_experiments_endpoint(project_id: str, headers: XNATAuthHeaders) 
         headers (XNATAuthHeaders): XNAT authentication headers.
 
     Returns:
-        List[Experiment]: List of experiments in the project.
+        list[Experiment]: List of experiments in the project.
 
     Raises:
         HTTPException: If there is an error during the retrieval of experiments for the project.

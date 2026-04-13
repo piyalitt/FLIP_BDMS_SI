@@ -31,7 +31,7 @@ The Trust component of FLIP runs in a Secure Enclave at each Trust to facilitate
 
 As per security principles, no personally identifying data leaves the Secure Enclave.
 
-FLIP implements a microservice-based architecture. The Image Service and Data Service are deployed as Dockerised microservices, orchestrated by a Trust API.
+FLIP implements a microservice-based architecture. The ``imaging-api`` and ``data-access-api`` are deployed as Dockerised microservices, orchestrated by the ``trust-api``.
 
 **********
 Components
@@ -80,9 +80,13 @@ FLIP jobs are distributed by the central hub FL scheduler to an available net.
 Security
 *********
 
-All traffic between the Central Hub and the Secure Enclaves are secured via the means of tunnelling through a VPN tunnel, linking both the Central Hub and the Secure Enclaves. 
+Trusts authenticate to the Central Hub using per-trust API keys. Each trust is identified by its ``TRUST_NAME`` and a secret ``TRUST_API_KEY`` — the hub verifies the SHA-256 hash of the key against its stored ``TRUST_API_KEY_HASHES``. Trust communication payloads are encrypted with a shared ``AES_KEY_BASE64``.
 
-This VPN tunnel means that all traffic is encrypted with at least AES-256 encryption, while traversing between the locations.
+All trust communication is **outbound** — trusts poll the Central Hub for tasks over HTTPS (via the ALB). The hub never makes inbound connections to trusts. FL clients connect outbound to the FL server via the NLB. No inbound firewall rules or port forwarding are required on trust hosts.
+
+Both the Central Hub and Trust EC2 instances run in private subnets with no open inbound ports. Operator access is via AWS Systems Manager Session Manager (SSH-over-SSM). XNAT, Orthanc, and the Trust API swagger docs are accessible via SSM port forwarding only (``make forward-trust``).
+
+See the `Local Deployment Guide <../../../deploy/providers/local/README.md>`_ for details on trust provisioning and authentication setup.
 
 .. figure:: ../assets/support/flip_architecture-flip_network_architecture.png
    :align: center
@@ -163,7 +167,7 @@ As a system, the FLIP solution handles the following types of data:
 Backup
 ======
 
-The data partitions for the PostgreSQL (OMOP), XNAT and Elasticsearch (log files) instances are all mounted on the dedicated storage array. This is a RAID 6 PNY appliance with high resilience.
+The data partitions for the PostgreSQL (OMOP), XNAT and Loki (log files) instances are all mounted on the dedicated storage array. This is a RAID 6 PNY appliance with high resilience.
 
 Backup scripts will be run daily to backup each data store to a /backups/ directory on the storage appliance. This should be backed up up by the Trust using their specific backup process, ideally overnight.
 
@@ -187,24 +191,31 @@ Access to FLIP will be reviewed annually, with dormant accounts being removed.
 RBAC
 ====
 
-FLIP employs role based access control to permit functionality for accounts, this is handled by AWS Cognito through the FLIP UI. FLIP currently has two access profiles, **Administrator** and **Model Developer**. 
+FLIP employs role based access control to permit functionality for accounts, managed through the FLIP API and UI. FLIP currently has three access profiles: **Admin**, **Researcher** and **Observer**. For full details of permissions assigned to each role, see :ref:`rbac-roles`.
 
-Administrator
--------------
+Admin
+-----
 
-FLIP Administrators have permissions to:
+FLIP Admins have all platform permissions including:
 
-- Create new FLIP user accounts
-- Modify the permissions of existing user accounts
-- Approve existing projects
-
+- Create and manage FLIP user accounts
+- Approve and unstage projects
+- Delete any project
+- Manage deployment mode and site banner
+- All Researcher capabilities
 
 Researcher
 ----------
 
 Researchers are model developers with the following permissions:
 
-- Create new projects
-- Add existing users to projects
-- Submit projects for approval
-- Train models
+- Create and manage projects
+- Run and save cohort queries
+- Create models and upload files
+- Initiate model training
+- Stage projects for approval
+
+Observer
+--------
+
+Observers have read-only access to projects they are assigned to. They cannot create, edit, or delete resources.

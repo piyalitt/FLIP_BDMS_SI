@@ -64,7 +64,7 @@ def query_by_accession_number_endpoint(accession_number: str, headers: XNATAuthH
         headers (XNATAuthHeaders): XNAT authentication headers.
 
     Returns:
-        List[Study]: List of studies associated with the provided accession number.
+        list[Study]: List of studies associated with the provided accession number.
 
     Raises:
         HTTPException: If no studies are found for the given accession number or if there is an error during the query.
@@ -92,7 +92,7 @@ def queue_image_import_request_endpoint(
         headers (XNATAuthHeaders): XNAT authentication headers.
 
     Returns:
-        List[ImportStudyResponse]: List of import responses for the queued studies.
+        list[ImportStudyResponse]: List of import responses for the queued studies.
 
     Raises:
         HTTPException: If there is an error during the queuing of the image import request or if the request cannot be

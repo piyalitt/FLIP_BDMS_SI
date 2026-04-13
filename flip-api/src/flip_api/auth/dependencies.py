@@ -118,7 +118,7 @@ def get_token_payload(credentials: HTTPAuthorizationCredentials = Depends(securi
         credentials (HTTPAuthorizationCredentials): The HTTP authorization credentials from the Bearer token.
 
     Returns:
-        Dict[str, Any]: The decoded JWT payload.
+        dict[str, Any]: The decoded JWT payload.
 
     Raises:
         HTTPException: If the credentials are invalid or if there is an error during decoding.

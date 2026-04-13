@@ -39,7 +39,7 @@ def has_permissions(user_id: UUID, required_permissions: list[PermissionRef], db
 
     Args:
         user_id (UUID): The ID of the user to check permissions for.
-        required_permissions (List[PermissionRef]): A list of permissions to check against the user's roles.
+        required_permissions (list[PermissionRef]): A list of permissions to check against the user's roles.
         db (Session): The database session to query user roles and permissions.
 
     Returns:
