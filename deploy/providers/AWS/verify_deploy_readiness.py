@@ -102,6 +102,30 @@ def check_makefile_dependency(target: str, dependency: str, description: str) ->
             return False
 
 
+def check_command_available(command: str, min_version: str | None = None) -> bool:
+    """Check if a command is available in PATH."""
+    result = subprocess.run(
+        ["which", command], capture_output=True, text=True, timeout=5
+    )
+    if result.returncode != 0:
+        return False
+
+    if min_version:
+        result = subprocess.run(
+            [command, "--version"], capture_output=True, text=True, timeout=5
+        )
+        if result.returncode != 0:
+            return False
+        # Extract version number (assumes X.Y.Z format)
+        version_match = re.search(r"(\d+\.\d+\.\d+)", result.stdout + result.stderr)
+        if version_match:
+            actual_version = version_match.group(1)
+            min_parts = [int(x) for x in min_version.split(".")]
+            actual_parts = [int(x) for x in actual_version.split(".")]
+            return actual_parts >= min_parts
+    return True
+
+
 def main() -> int:
     """Run all pre-deployment verification checks."""
     print("=" * 80)
@@ -110,6 +134,22 @@ def main() -> int:
     print()
 
     all_passed = True
+
+    # Check SSM prerequisites
+    print("🔐 SSM SESSION MANAGER PREREQUISITES")
+    if check_command_available("aws"):
+        print("   ✅ AWS CLI installed")
+    else:
+        print("   ❌ AWS CLI not found - install via: brew install awscli")
+        all_passed = False
+
+    if check_command_available("session-manager-plugin", "1.2.319.0"):
+        print("   ✅ Session Manager plugin installed (version >= 1.2.319.0)")
+    else:
+        print("   ⚠️  Session Manager plugin not found or outdated")
+        print("      Install: brew install session-manager-plugin (macOS)")
+        print("      Or: see deploy/providers/AWS/README.md#prerequisites")
+    print()
 
     # Check Python files
     print("🐍 PYTHON FILES")
