@@ -211,7 +211,7 @@ ansible-init: ## Initialize Ansible configuration on EC2 instances (if failed tr
 	@uv run ansible-playbook site.yml -e flip_aicentre_bucket=$(AICENTRE_BUCKET_NAME) -e fl_kit_date=$(FL_KIT_DATE) -e pgdata_archive=trust1_pgdata_20260106.tar.gz
 
 .PHONY: deploy-centralhub
-deploy-centralhub: ## Deploy FLIP containers to flip context with environment from Terraform
+deploy-centralhub: ssh-config ## Deploy FLIP containers to flip context with environment from Terraform
 	@echo "🔍 Checking central hub images (tag: $(DOCKER_TAG))..."
 	@missing=false; \
 	for image in $(CENTRALHUB_IMAGES); do \
@@ -228,10 +228,6 @@ deploy-centralhub: ## Deploy FLIP containers to flip context with environment fr
 	  echo "   ✅ All central hub images found."; \
 	fi
 	@echo "📋 Loading environment variables from Terraform outputs..."
-	@echo "🔑 Refreshing SSH host key for CH EC2 (ensures Docker context SSH works after re-provisioning)..."
-	@CH_IP=$$(terraform output -raw Ec2PublicIp) && \
-	  ssh-keygen -R "$$CH_IP" 2>/dev/null || true && \
-	  ssh-keyscan -H "$$CH_IP" >> ~/.ssh/known_hosts
 	@echo "👷 Create docker context if not exists, pointing to flip to ssh://flip"
 	@docker context create flip --docker "host=ssh://flip" || echo "   Context 'flip' already exists"
 	@# Switch to flip context
@@ -252,31 +248,7 @@ LOCAL_TRUST_SSH_USER ?= ubuntu
 LOCAL_TRUST_NAME ?= Trust_2
 
 .PHONY: deploy-trust
-deploy-trust: update-env ## Deploy trust relationships after central hub is deployed
-	@echo "🔍 Checking trust images (tag: $(DOCKER_TAG))..."
-	@missing=false; \
-	for image in $(TRUST_IMAGES); do \
-	  if ! docker manifest inspect "$$image" >/dev/null 2>&1; then \
-	    echo "   ⚠️  Missing: $$image"; \
-	    missing=true; \
-	  fi; \
-	done; \
-	if [ "$$missing" = "true" ]; then \
-	  echo "🔨 Images missing — triggering builds and waiting 2 minutes..."; \
-	  $(MAKE) trigger-builds; \
-	  sleep 120; \
-	else \
-	  echo "   ✅ All trust images found."; \
-	fi
-	@echo "⚙️  Configure .ssh/config for flip context..."
-	@set -x AWS_PROFILE ${AWS_PROFILE}
-	@terraform output
-	@uv run ./update_ssh_config.py --aws-profile ${AWS_PROFILE} || true
-	@echo "✅ .ssh/config updated!"
-	@echo "🔑 Refreshing SSH host key for Trust EC2 (ensures Docker context SSH works after re-provisioning)..."
-	@TRUST_IP=$$(terraform output -raw TrustEc2PublicIp) && \
-	  ssh-keygen -R "$$TRUST_IP" 2>/dev/null || true && \
-	  ssh-keyscan -H "$$TRUST_IP" >> ~/.ssh/known_hosts
+deploy-trust: update-env ssh-config ## Deploy trust relationships after central hub is deployed
 	@echo "👷 Create docker context if not exists, pointing to flip-trust to ssh://flip-trust"
 	@docker context create flip-trust --docker "host=ssh://flip-trust" || echo "   Context 'flip-trust' already exists"
 	@echo "🔄 Switching to flip-trust Docker context..."
