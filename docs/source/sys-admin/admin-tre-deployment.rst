@@ -31,6 +31,70 @@ This guide covers the TRE deployment mode. For on-premise deployment, see :ref:`
    on-premise model remains the recommended approach where Trust infrastructure and
    governance permit it.
 
+TRE Operator Responsibilities
+=============================
+
+Deploying FLIP inside a TRE involves coordination between the FLIP team and the TRE
+operator. The TRE operator is responsible for:
+
+**Data provisioning (one-off, per project)**
+
+- Ingesting the anonymised OMOP dataset and DICOM imaging data into the TRE via the TRE's
+  standard SOP (after DAC approval).
+- Provisioning an OMOP PostgreSQL database and a PACS instance (e.g. Orthanc) inside the
+  TRE, with consistent pseudonymisation so records can be linked across them.
+
+**Compute provisioning**
+
+- Providing a host with Docker Engine, Docker Compose, and Docker Swarm support, plus at
+  least one NVIDIA GPU accessible via the NVIDIA Container Toolkit.
+- Creating the writable host paths the FLIP stack expects under ``/opt/flip/`` (for certs,
+  FL data, OMOP DB volumes, and observability storage -- see the Ansible playbook at
+  ``deploy/providers/local/site_local_trust.yml``).
+
+**Container image ingestion**
+
+FLIP container images are published to the GitHub Container Registry
+(``ghcr.io/londonaicentre/*``). Because TREs typically block direct pulls from public
+registries, images must be ingested through the TRE's normal file-ingress process. A
+common pattern:
+
+1. Outside the TRE, pull and save each image to a tarball on a workstation that has
+   internet access:
+
+   .. code-block:: shell
+
+      docker pull ghcr.io/londonaicentre/trust-api:<tag>
+      docker save ghcr.io/londonaicentre/trust-api:<tag> -o trust-api-<tag>.tar
+
+2. Submit the tarballs through the TRE's file-ingress airlock.
+3. Inside the TRE, load each image into the local Docker daemon:
+
+   .. code-block:: shell
+
+      docker load -i trust-api-<tag>.tar
+
+.. note::
+
+   Other image distribution approaches may be acceptable depending on the TRE --
+   for example, a TRE-internal Docker registry (e.g. Harbor, GitLab, or a registry
+   mirror) that is pre-populated with the required images and reachable from the
+   FLIP host. Coordinate with the TRE operator to pick the option that best fits
+   local policy.
+
+**Network policy**
+
+- Allow outbound HTTPS (port 443) from the FLIP host to the Central Hub FLIP API endpoint.
+- Allow outbound gRPC or HTTP to the FL Server endpoint (configurable port).
+- No inbound ports need to be opened on the TRE perimeter.
+
+**Output review**
+
+- Operating the TRE's standard output-checking (airlock) process for aggregate metrics
+  leaving the TRE during federated evaluation.
+- Agreeing a project-specific governance process for federated training if weight egress
+  is in scope (see :ref:`tre-deployment` Use Case 2).
+
 Architecture
 ============
 
@@ -88,6 +152,26 @@ Central Hub for new instructions:
 
 - Results (cohort statistics, project status) are pushed outbound from the Trust API to the
   Central Hub.
+
+The polling loop is implemented in ``trust/trust-api/trust_api/services/task_poller.py``.
+Key environment variables (set via ``.env`` or Docker secrets):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Variable
+     - Description
+   * - ``CENTRAL_HUB_API_URL``
+     - Hub endpoint the Trust API polls for tasks.
+   * - ``TRUST_NAME``
+     - Identifier matching the ``Trust.name`` record in the hub database (e.g. ``Trust_1``).
+   * - ``TRUST_API_KEY`` / ``TRUST_API_KEY_HEADER``
+     - Per-trust authentication header used on every outbound request.
+   * - ``AES_KEY_BASE64``
+     - Symmetric key shared with the hub; used to decrypt task payloads.
+   * - ``POLL_INTERVAL_SECONDS``
+     - Polling period in seconds (default: ``5``).
 
 .. admonition:: Network requirements
 
@@ -210,6 +294,15 @@ Software
 - Python 3.12+
 - PostgreSQL client libraries (``postgresql-client``)
 - Make
+
+Observability
+-------------
+
+FLIP deploys a log-aggregation stack (Grafana Alloy, Loki, Grafana) alongside the Trust
+APIs. Alloy scrapes container stdout via the Docker socket, Loki stores logs with 30-day
+retention, and Grafana provides a pre-provisioned dashboard. The stack runs entirely
+inside the TRE boundary -- no log data is sent to the Central Hub. See :doc:`admin-logging`
+for details on configuration, ports, and persistent volumes.
 
 Use Case 1: Federated Evaluation
 ==================================
