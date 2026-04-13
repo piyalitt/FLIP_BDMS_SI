@@ -374,7 +374,26 @@ EC2 instances are accessed through AWS Systems Manager Session Manager — port 
   aws sso login --profile $AWS_PROFILE
   ```
 
-- [AWS Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) installed alongside the AWS CLI.
+- [AWS Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) installed (minimum version 1.2.319.0):
+
+  **macOS:**
+  ```bash
+  brew install session-manager-plugin
+  brew upgrade session-manager-plugin  # Update if already installed
+  ```
+
+  **Linux (Ubuntu/Debian):**
+  ```bash
+  curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o "session-manager-plugin.deb"
+  sudo dpkg -i session-manager-plugin.deb
+  ```
+
+  **Verify installation:**
+  ```bash
+  session-manager-plugin --version  # Should output version >= 1.2.319.0
+  ```
+
+- SSH key at `~/.ssh/host-aws` (configured in Step 3 of [Pre-configurations README](../README.md#step-3-get-ssh-key-configured))
 
 **Updating `~/.ssh/config`**
 
@@ -408,6 +427,31 @@ ssh flip-trust  # Trust EC2
 ```
 
 Both aliases resolve through the SSM tunnel — no public IP or open port 22 is needed. If your AWS session has expired, re-run `aws sso login --profile $AWS_PROFILE` before connecting.
+
+**Troubleshooting SSM Access**
+
+| Problem | Diagnostics | Solution |
+|---------|-------------|----------|
+| `Unable to locate credentials` | `aws sts get-caller-identity` returns error | Run `aws sso login --profile $AWS_PROFILE` to refresh session |
+| `SessionManagerPlugin not found` | `command -v session-manager-plugin` returns nothing | Install plugin: `brew install session-manager-plugin` (macOS) or see prerequisites above |
+| `[ERROR] SessionManagerPlugin is not installed` | Session manager plugin is missing or outdated | Upgrade plugin: `brew upgrade session-manager-plugin` or download latest version |
+| `InvalidInstanceID.NotFound` | SSH attempts to connect but fails | Verify instance exists: `terraform output CentralHubInstanceId` and `terraform output TrustInstanceId` |
+| `AccessDeniedException` | `aws ssm start-session` returns access denied | Check EC2 instance IAM role has `ssm:StartSession` and `ec2messages:*` permissions (Terraform should have created this) |
+| `Connection timeout` (hanging) | SSM tunnel hangs without error | Check security group allows NLB ingress from NAT Gateway (port 8000-8005); verify instances are running: `aws ec2 describe-instances` |
+| `Unable to connect to SSM endpoint` | Connection fails immediately | Verify AWS_REGION matches deployment region: `echo $AWS_REGION` should match `eu-west-2` (or your region) |
+| `Bad ProxyCommand` in ~/.ssh/config | SSH config syntax error | Re-generate config: `make ssh-config` and verify it looks like the example above |
+
+**Testing Connectivity**
+
+```bash
+# Test SSM session directly (before trying SSH)
+aws ssm start-session --target $(terraform output -raw CentralHubInstanceId) --document-name AWS-StartSSHSession --parameters 'command=uname -a'
+
+# Should output Linux kernel info if successful
+
+# Then test SSH
+ssh flip  # Should connect via SSM tunnel
+```
 
 ---
 
