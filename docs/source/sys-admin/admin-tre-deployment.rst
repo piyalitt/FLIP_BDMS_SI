@@ -84,7 +84,8 @@ common pattern:
 
 **Network policy**
 
-- Allow outbound HTTPS (port 443) from the FLIP host to the Central Hub FLIP API endpoint.
+- Allow outbound HTTPS (port 443) from the FLIP host to the Central Hub FLIP API endpoint
+  (e.g. ``https://app.flip.aicentre.co.uk``).
 - Allow outbound gRPC or HTTP to the FL Server endpoint (configurable port).
 - No inbound ports need to be opened on the TRE perimeter.
 
@@ -177,7 +178,7 @@ Key environment variables (set via ``.env`` or Docker secrets):
 
    The TRE must whitelist outbound connections to two endpoints:
 
-   - The Central Hub FLIP API (HTTPS, port 443)
+   - The Central Hub FLIP API (HTTPS, port 443; e.g. ``https://app.flip.aicentre.co.uk``)
    - The FL Server (gRPC or HTTP, configurable port)
 
    No inbound ports need to be opened on the TRE.
@@ -265,7 +266,8 @@ Compute
 Networking
 -----------
 
-- **Outbound HTTPS** to the Central Hub FLIP API endpoint on AWS.
+- **Outbound HTTPS** to the Central Hub FLIP API endpoint on AWS
+  (e.g. ``https://app.flip.aicentre.co.uk``).
 
 - **Outbound gRPC or HTTP** to the FL Server endpoint. If the TRE's network inspection
   appliances block HTTP/2 (required for gRPC), most FL frameworks offer HTTP/REST transport
