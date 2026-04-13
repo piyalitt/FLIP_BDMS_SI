@@ -130,13 +130,15 @@ To get started, copy the example file:
 cp .env.development.example .env.development
 ```
 
-Then generate per-trust API keys (must be done before `make up`):
+Then generate per-trust API keys and the internal service key (the trust keys must be done before `make up`; the
+internal service key is also generated automatically by `make up`):
 
 ```bash
-make generate-dev-keys
+make generate-trust-api-keys
+make generate-internal-service-key
 ```
 
-This generates all API keys and writes them directly into `.env.development`: trust plaintext keys
+These commands write all API keys directly into `.env.development`: trust plaintext keys
 in `TRUST_API_KEYS` (JSON dict) with their hashes in `TRUST_API_KEY_HASHES`, and `INTERNAL_SERVICE_KEY`
 with `INTERNAL_SERVICE_KEY_HASH` for fl-server-to-hub authentication. No separate key files are used.
 
@@ -251,11 +253,13 @@ uv run ruff check . --fix
 uv run mypy .
 ```
 
-Each service has a `Makefile` with a `test` target that runs linting, type checking, and tests in sequence. For example, from a service directory:
+Most services have a `Makefile` with a `test` target that runs linting, type checking, and tests in sequence. For example, from a Python service directory:
 
 ```bash
 make test
 ```
+
+The `flip-ui` service uses `make unit_test` (Vitest) instead of `make test`.
 
 Documentation follows the [Google style guide](https://google.github.io/styleguide/pyguide.html) for Python docstrings.
 
@@ -283,11 +287,14 @@ make test
 
 This will run ruff, mypy, and pytest in sequence. The coverage report is generated in HTML format in the `htmlcov` directory.
 
-To run all tests across the main repository from the root:
+To run unit tests across all services in the main repository from the root:
 
 ```bash
-make tests
+make unit_test
 ```
+
+`make tests` is a narrower target that runs `flip-ui` unit tests followed by the full `flip-api` test suite (ruff,
+mypy, and pytest).
 
 For the `flip-fl-base` repository, unit tests can be run with:
 

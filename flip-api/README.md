@@ -14,7 +14,7 @@
 # flip-api
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
-[![FLIP Central Hub API CI](https://github.com/londonaicentre/FLIP/actions/workflows/central_hub_api.yml/badge.svg)](https://github.com/londonaicentre/FLIP/actions/workflows/central_hub_api.yml)
+[![FLIP Central Hub API CI](https://github.com/londonaicentre/FLIP/actions/workflows/test_flip_api.yml/badge.svg)](https://github.com/londonaicentre/FLIP/actions/workflows/test_flip_api.yml)
 [![flip-api](https://ghcr-badge.egpl.dev/londonaicentre/flip-api/latest_tag?trim=major&label=flip-api)](https://github.com/londonaicentre/FLIP/pkgs/container/flip-api)
 [![Coverage](https://codecov.io/gh/londonaicentre/FLIP/branch/main/graph/badge.svg?flag=flip-api)](https://codecov.io/gh/londonaicentre/FLIP)
 
@@ -39,7 +39,7 @@ It communicates with each Trust's [trust-api](../trust/trust-api/) and stores al
 The flip-api is deployed as a Docker container. In the full local stack, it is started via:
 
 ```bash
-make central-hub   # starts flip-api, the database, and flip-ui
+make central-hub   # starts flip-api and the database
 ```
 
 or as part of the full platform:
@@ -48,13 +48,14 @@ or as part of the full platform:
 make up
 ```
 
-Before starting the platform, generate per-trust API keys:
+Before starting the platform, generate per-trust API keys and the internal service key:
 
 ```bash
-make generate-dev-keys   # from repo root
+make generate-trust-api-keys        # from repo root
+make generate-internal-service-key  # from repo root (also invoked automatically by `make up`)
 ```
 
-This updates `TRUST_API_KEYS` and `TRUST_API_KEY_HASHES` in `.env.development` automatically.
+`generate-trust-api-keys` updates `TRUST_API_KEYS` and `TRUST_API_KEY_HASHES` in `.env.development`. `generate-internal-service-key` writes `INTERNAL_SERVICE_KEY` and `INTERNAL_SERVICE_KEY_HASH` (used for fl-server-to-hub authentication).
 See [`.env.development.example`](../.env.development.example) for the expected format.
 
 The API is served on the port defined by `API_PORT` in [`.env.development.example`](../.env.development.example)
