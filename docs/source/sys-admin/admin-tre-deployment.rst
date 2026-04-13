@@ -218,8 +218,7 @@ Before the FLIP user interacts with the system, the Trust's data team:
 4. Loads the anonymised data into:
 
    - An **OMOP database** inside the TRE.
-   - A **PACS instance** (e.g. Orthanc) inside the TRE, pre-populated with the anonymised
-     DICOMs.
+   - A **PACS instance** (e.g. Orthanc) inside the TRE.
 
 .. note::
 
