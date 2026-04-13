@@ -11,15 +11,9 @@
 #
 
 import json
-import os
 import re
 import subprocess
 import sys
-
-
-def is_truthy(value):
-    """Return True for common truthy env-var values."""
-    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def get_terraform_outputs():
