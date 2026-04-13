@@ -82,7 +82,7 @@ For example:
 | `make restart-no-trust` | Stop and start all services except the trust services related services |
 | `make clean` | Remove all stopped containers, networks, and images |
 | `make ci` | Run the CI pipeline locally using `act` |
-| `make up-local-trust-stag` | Run a local (on-premises) trust in staging mode (HTTPS via nginx-tls) |
+| `make up-local-trust` | Run a local (on-premises) trust (set `PROD=true` or `PROD=stag` for environment) |
 | `make unit_test` | Run the tests for all services |
 
 You can add new commands to the Makefile to create smaller deployments for testing and development.
@@ -227,16 +227,15 @@ The repository is organised as follows:
 - `trust`: Contains the services that would be deployed in individual trust environments.
   - `data-access-api`: Contains the data access API service
   - `imaging-api`: Contains the imaging API service
-  - `nginx`: Contains the nginx/TLS reverse proxy configuration
   - `observability`: Contains the observability stack (Grafana, Loki, Alloy)
   - `omop-db`: Contains a mocked OMOP database
   - `orthanc`: Contains a mocked PACS service (uses [Orthanc](https://www.orthanc-server.com/))
   - `trust-api`: Contains the trust API service
   - `xnat`: Contains a mocked [XNAT](https://www.xnat.org/) service
 
-### HTTPS / TLS
+### Trust Authentication
 
-Trust services are served over HTTPS via an nginx TLS termination proxy using self-signed CA certificates. The Central Hub verifies trust endpoints using a CA bundle containing all trust CAs. See [trust/README.md](trust/README.md) for certificate generation and setup, and [deploy/providers/local/README.md](deploy/providers/local/README.md) for hybrid on-premises deployment with HTTPS.
+Trusts authenticate to the Central Hub using per-trust API keys. All trust communication is outbound — trusts poll the hub over HTTPS (via the ALB). See [CLAUDE.md](CLAUDE.md) for the full authentication model and [deploy/providers/local/README.md](deploy/providers/local/README.md) for on-premises trust deployment.
 
 ## Contributing
 
