@@ -13,8 +13,5 @@
 # limitations under the License.
 
 ---
-collections:
-  - name: community.general
-    version: ">=8.0.0"
 roles:
   - name: geerlingguy.docker

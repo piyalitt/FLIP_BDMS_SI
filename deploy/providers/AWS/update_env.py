@@ -78,7 +78,6 @@ def main():
 
     # Extract values safely
     try:
-        trust_ip = outputs["TrustEc2PublicIp"]["value"]
         db_endpoint = outputs["DbEndpoint"]["value"]
         db_secret_arn = outputs["DbSecretArn"]["value"]
         cognito_user_pool_id = outputs["CognitoUserPoolId"]["value"]
