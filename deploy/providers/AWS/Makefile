@@ -98,6 +98,15 @@ trigger-builds: ## Trigger all GitHub Actions "Build and Push" workflows for the
 	done
 	@echo "✅ Build workflows triggered!"
 
+.PHONY: check-ssm-ready
+check-ssm-ready: ## Verify SSM Session Manager prerequisites are installed
+	@echo "🔍 Checking SSM Session Manager prerequisites..."
+	@command -v aws >/dev/null 2>&1 || { echo "❌ AWS CLI not found. Install: brew install awscli or apt-get install awscli"; exit 1; }
+	@session-manager-plugin --version >/dev/null 2>&1 || { echo "❌ Session Manager plugin not found. Install: brew install session-manager-plugin (macOS) or see README.md"; exit 1; }
+	@ssh-add -l >/dev/null 2>&1 || echo "⚠️  SSH agent has no keys (this is OK, SSM uses AWS credentials instead)"
+	@[ -f ~/.ssh/host-aws ] || { echo "⚠️  SSH key ~/.ssh/host-aws not found (will be needed for Ansible)"; }
+	@echo "✅ SSM prerequisites verified!"
+
 prettier:
 	terraform fmt -recursive
 	npx prettier --write "**/*.{yml,yaml}"
@@ -190,11 +199,11 @@ apply: ## Apply Terraform configuration to update AWS infrastructure (with envir
 	@terraform apply plan.tfplan
 
 .PHONY: ssh-config
-ssh-config: ## Update local .ssh/config for flip contexts
+ssh-config: check-ssm-ready ## Update local .ssh/config for flip contexts (requires SSM plugin)
 	@echo "⚙️  Configure .ssh/config for flip context..."
 	@set -x AWS_PROFILE ${AWS_PROFILE}
 	@terraform output
-	@uv run ./update_ssh_config.py --aws-profile ${AWS_PROFILE} || true
+	@uv run ./update_ssm_ssh_config.py --aws-profile ${AWS_PROFILE} || true
 	@echo "✅ .ssh/config updated!"
 
 .PHONY: update-env
