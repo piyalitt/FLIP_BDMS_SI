@@ -104,16 +104,12 @@ def check_makefile_dependency(target: str, dependency: str, description: str) ->
 
 def check_command_available(command: str, min_version: str | None = None) -> bool:
     """Check if a command is available in PATH."""
-    result = subprocess.run(
-        ["which", command], capture_output=True, text=True, timeout=5
-    )
+    result = subprocess.run(["which", command], capture_output=True, text=True, timeout=5)
     if result.returncode != 0:
         return False
 
     if min_version:
-        result = subprocess.run(
-            [command, "--version"], capture_output=True, text=True, timeout=5
-        )
+        result = subprocess.run([command, "--version"], capture_output=True, text=True, timeout=5)
         if result.returncode != 0:
             return False
         # Extract version number (assumes X.Y.Z format)

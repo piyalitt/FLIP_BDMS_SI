@@ -377,18 +377,21 @@ EC2 instances are accessed through AWS Systems Manager Session Manager — port 
 - [AWS Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) installed (minimum version 1.2.319.0):
 
   **macOS:**
+
   ```bash
   brew install session-manager-plugin
   brew upgrade session-manager-plugin  # Update if already installed
   ```
 
   **Linux (Ubuntu/Debian):**
+
   ```bash
   curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o "session-manager-plugin.deb"
   sudo dpkg -i session-manager-plugin.deb
   ```
 
   **Verify installation:**
+
   ```bash
   session-manager-plugin --version  # Should output version >= 1.2.319.0
   ```
@@ -501,10 +504,10 @@ Changes to template files are automatically picked up on next `terraform apply` 
 
 | Placeholder | Replaced By | Example |
 | --- | --- | --- |
-| `{username}` | Cognito username (email) | john.smith@example.com |
+| `{username}` | Cognito username (email) | <john.smith@example.com> |
 | `{####}` | 6-digit temporary password or verification code | 123456 |
 | `{flip_alb_subdomain}` | ALB domain from Terraform var | flip-app.example.com |
-| `{reset_link}` | Password reset link with token | https://flip.../reset?token=xyz |
+| `{reset_link}` | Password reset link with token | <https://flip.../reset?token=xyz> |
 
 **SES templates** use double-brace (Mustache) placeholders substituted at send time:
 
