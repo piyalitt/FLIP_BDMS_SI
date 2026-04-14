@@ -20,9 +20,7 @@
 # Usage:
 #   ansible-playbook -i <trust-host-ip>, \
 #     -u ubuntu --private-key ~/.ssh/trust_key \
-#     deploy/providers/local/site_local_trust.yml \
-#     -e trust_public_ip=<public-ip-or-hostname> \
-#     -e ch_public_ip=<aws-ec2-public-ip>
+#     deploy/providers/local/site_local_trust.yml
 
 ---
 - name: Configure on-premises Trust host
@@ -31,21 +29,12 @@
   vars:
     flip_dir: /opt/flip
 
-  pre_tasks:
-    - name: Assert required variables are set
-      assert:
-        that:
-          - trust_public_ip is defined and trust_public_ip | length > 0
-          - ch_public_ip is defined and ch_public_ip | length > 0
-        fail_msg: "trust_public_ip and ch_public_ip must be provided via -e"
-
   tasks:
     # ── System packages ──────────────────────────────────────────────────────
     - name: Install required packages
       apt:
         name:
           - openssl
-          - ufw
           - curl
           - python3-cryptography  # required by community.crypto
         state: present

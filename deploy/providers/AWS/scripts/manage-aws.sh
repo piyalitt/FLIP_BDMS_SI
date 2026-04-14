@@ -1,5 +1,5 @@
 #!/bin/bash
-# Manage Elastic IPs and other state/lock operations
+# AWS state/lock management operations (keypair deletion, terraform state unlock)
 
 set -eo pipefail
 

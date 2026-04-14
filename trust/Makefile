@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-.PHONY: build dev prod clean stop up down up-trust-1 up-trust-2 down-trust-1 down-trust-2 up-local-trust-stag create-networks remove-networks recreate-networks tests
+.PHONY: build dev prod clean stop up down up-trust-1 up-trust-2 down-trust-1 down-trust-2 up-local-trust down-local-trust create-networks remove-networks recreate-networks tests
 # if tag PROD=true is passed, set PROD=true
 ifeq ($(PROD),true)
 MAIN_ENV_FILE=../.env.production
@@ -49,6 +49,7 @@ network1 = deploy_trust-network-1
 network2 = deploy_trust-network-2
 trust1 = trust1
 trust2 = trust2
+trust_local = trust-local
 
 get_json_value = $(shell python3 ../flip-api/src/flip_api/scripts/env_utils.py '$(1)' $(2))
 
@@ -134,16 +135,35 @@ down-trust-1-ec2:
 # LOCAL_TRUST_NAME controls which NVFlare participant kit the FL client mounts.
 # Local (on-prem) trusts use Trust_2 kit; EC2 trusts use Trust_1 kit (default).
 # LOCAL_TRUST_NAME is defined in deploy/providers/AWS/Makefile
-up-local-trust-stag:
-	## Starts Trust 1 compose stack
-	## Uses project name 'trust1' so trust-api, imaging-api, etc. keep their normal names,
-	## but overrides TRUST_NAME so the FL client mounts Trust_2/ kit dir.
+# Local trust reuses existing dev dirs to avoid duplicating data:
+#   OMOP_DATA_DIR: points at dev OMOP data (default: /opt/flip/omop/db_data on EC2)
+#   OBSERVABILITY_CONFIG_DIR: points at repo config files (default: /opt/flip/config/observability on EC2)
+#   LOKI/GRAFANA_DATA_VOLUME: uses Docker named volumes (default: bind mounts on EC2)
+up-local-trust:
+	## Starts local trust compose stack with TRUST_NAME=$(LOCAL_TRUST_NAME).
+	## Uses project name 'trust-local' to avoid collisions with dev trust1/trust2.
 	@echo "🚢 Starting local Trust services (TRUST_NAME=$(LOCAL_TRUST_NAME))..."
 	@echo "⚙️ Using environment file ${MAIN_ENV_FILE}"
 	@echo "🧠 FL_BACKEND=$(FL_BACKEND) ($(FL_BACKEND_COMPOSE_FILE))"
 	mkdir -p ${BASE_IMAGES_DOWNLOAD_DIR_TRUST1}
-	$(TRUST_1_VARS) TRUST_NAME=$(LOCAL_TRUST_NAME) TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),$(LOCAL_TRUST_NAME)) DEBUG=$(DEBUG) \
-		$(DOCKER_COMPOSE_CMD) -p $(trust1) up -d --pull always
+	$(TRUST_1_VARS) TRUST_NAME=$(LOCAL_TRUST_NAME) TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),$(LOCAL_TRUST_NAME)) \
+		XNAT_PORT=${XNAT_PORT_LOCAL_TRUST} \
+		PACS_UI_PORT=${PACS_UI_PORT_LOCAL_TRUST} \
+		OMOP_DATA_DIR=./omop-db/volumes/$(LOCAL_TRUST_NAME)/db_data \
+		OBSERVABILITY_CONFIG_DIR=./observability \
+		LOKI_DATA_VOLUME=trust-local-loki-data \
+		GRAFANA_DATA_VOLUME=trust-local-grafana-data \
+		DEBUG=$(DEBUG) \
+		$(DOCKER_COMPOSE_CMD) -f compose_trust.local.yml -p $(trust_local) up -d --pull always
+
+down-local-trust:
+	@echo "🛑 Stopping local Trust services..."
+	$(TRUST_1_VARS) TRUST_NAME=$(LOCAL_TRUST_NAME) \
+		OMOP_DATA_DIR=./omop-db/volumes/$(LOCAL_TRUST_NAME)/db_data \
+		OBSERVABILITY_CONFIG_DIR=./observability \
+		LOKI_DATA_VOLUME=trust-local-loki-data \
+		GRAFANA_DATA_VOLUME=trust-local-grafana-data \
+		$(DOCKER_COMPOSE_CMD) -f compose_trust.local.yml -p $(trust_local) down --remove-orphans
 
 # Uses --pull always to ensure the latest FL images and omop-db image are used
 # ensure omop data is up to date before bringing up trust 2

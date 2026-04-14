@@ -187,6 +187,39 @@ This validates:
 - ✅ SSH connectivity
 - ✅ CloudWatch Logs configuration
 
+### Accessing Trust Services (XNAT, Orthanc, Swagger Docs)
+
+The Trust EC2 is in a private subnet with no inbound ports open. All Trust web UIs and API swagger docs are reachable via AWS Systems Manager (SSM) port forwarding.
+
+**Prerequisites** (one-time setup):
+
+1. AWS CLI installed and configured (`aws configure sso`)
+2. AWS SSM Session Manager plugin installed:
+   ```bash
+   curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o /tmp/session-manager-plugin.deb
+   sudo dpkg -i /tmp/session-manager-plugin.deb
+   ```
+
+**Open all port forwards in one command:**
+
+```bash
+cd deploy/providers/AWS
+make forward-trust
+```
+
+This prints a list of URLs you can paste into your browser:
+
+| Service | Local URL | Purpose |
+| --- | --- | --- |
+| XNAT | `http://localhost:8104` | Neuroimaging platform UI |
+| Orthanc | `http://localhost:8042` | DICOM server UI |
+| trust-api swagger | `http://localhost:8020/docs` | Trust API documentation |
+| imaging-api swagger | `http://localhost:8001/docs` | Imaging API documentation |
+| data-access-api swagger | `http://localhost:8010/docs` | Data access API documentation |
+| Grafana | `http://localhost:3000` | Observability dashboards |
+
+Press Ctrl+C to stop all forwards. The Central Hub UI and API are accessed directly via the public ALB domain (e.g. `https://app.flip.aicentre.co.uk`) — no port forwarding needed.
+
 ## Hybrid Deployment: Adding an On-Premises Trust
 
 To connect a local (on-premises) Trust host to the AWS Central Hub:
@@ -213,7 +246,7 @@ make add-local-trust LOCAL_TRUST_IP=<public-ip>
 
 After provisioning, complete the manual steps printed by the target:
 
-1. Start the trust stack on the host: `cd trust && env PROD=stag make up-local-trust-stag`
+1. Start the trust stack on the host: `cd trust && env PROD=stag make up-local-trust`
 2. Verify the trust can poll the hub (check trust-api logs for successful task polling)
 
 Full details are in the [local provider README](../local/README.md).
@@ -318,12 +351,12 @@ The platform supports a cloud-only setup (Central Hub + Trust on AWS) or a hybri
 ### Central Hub Infrastructure
 
 - **VPC**: Custom VPC with public/private subnets
-- **Central Hub EC2**: Single t3.small instance running Docker containers (UI, API, FL services)
-- **Trust EC2**: Separate t3.small instance running Trust services via Docker Compose
+- **Central Hub EC2**: Single t3.medium instance in a **private subnet**, running Docker containers (UI, API, FL services)
+- **Trust EC2**: Separate t3.xlarge instance in a **private subnet**, running Trust services via Docker Compose
   - Deployed using custom Terraform module (`modules/trust_ec2`)
   - Automatic Docker and Docker Compose installation via user_data
   - Automatic Docker network creation for inter-service communication
-  - Optional Elastic IP for static addressing
+  - No inbound ports open — access via SSM (`ssh flip-trust`) and SSM port forwarding for XNAT/Orthanc debugging (`make forward-trust`)
 - **ALB**: Application Load Balancer for traffic routing
 - **RDS**: PostgreSQL 15 managed database (EOL: October 2027)
 - **CloudWatch**: Logging and monitoring for both EC2 instances
@@ -339,13 +372,12 @@ Trust services can run on AWS EC2 or on-premises. Both models use the same Docke
 - Automated Docker and Docker Compose installation
 - Trust compose stack deployment via user_data script
 - Automatic Docker network creation for inter-service communication
-- Optional Elastic IP for static addressing
+- Runs in a private subnet with no inbound ports — XNAT and Orthanc accessible only via SSM port forwarding for debugging
 
 **On-Premises Trust** — provisioned via `make add-local-trust` and the Ansible playbook in [`deploy/providers/local/`](../local/README.md):
 
 - Same Docker Compose stack, running on a local Ubuntu host
-- UFW firewall allows FL ports from Central Hub IP only
-- No inbound port forwarding needed for the trust API (trusts poll outbound)
+- No inbound port forwarding or firewall rules needed — all trust communication is outbound
 
 ### Port configuration
 
@@ -357,7 +389,6 @@ Trust services can run on AWS EC2 or on-premises. Both models use the same Docke
 | **8000** | FLIP API | 🟢 **OPEN** | Backend API |
 | **8001** | FL API | 🟢 **OPEN** | Federated learning API |
 | **8002** | FL Server | 🟡 **CONDITIONAL** | gRPC (open to trust IPs only) |
-| **8003** | FL Admin | 🟡 **CONDITIONAL** | Admin (open to trust IPs only) |
 | | | | Trust API: no inbound port needed (trusts poll the hub outbound) |
 
 ### Remote Access via SSM Session Manager
