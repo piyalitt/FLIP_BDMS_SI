@@ -131,6 +131,16 @@ resource "aws_cognito_user_pool" "flip_user_pool" {
     email_message_by_link = file("${path.module}/templates/cognito/password_reset_link.html")
   }
 
+  # Require MFA for every user. Existing users will be prompted to enroll a
+  # TOTP device on their next sign-in; new users must enroll before they can
+  # complete sign-in. SMS MFA is intentionally disabled (no SNS dependency,
+  # no SIM-swap risk).
+  mfa_configuration = "ON"
+
+  software_token_mfa_configuration {
+    enabled = true
+  }
+
   deletion_protection = "ACTIVE"
   lifecycle {
     prevent_destroy = true

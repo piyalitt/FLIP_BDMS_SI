@@ -32,6 +32,8 @@ const unguardedRoutes: string[] = [
     "/auth/new-password",
     "/auth/change-password",
     "/auth/access-request",
+    "/auth/mfa-setup",
+    "/auth/mfa-verify",
     "/privacy-policy",
     "/terms-of-service"
 ];
@@ -79,6 +81,16 @@ export const authCheck = async (
             return next('/auth/new-password');
         }
 
+        // First-time MFA enrollment (TOTP setup with QR code)
+        if (auth.signInStep === 'CONTINUE_SIGN_IN_WITH_TOTP_SETUP') {
+            return next('/auth/mfa-setup');
+        }
+
+        // Returning user — enter the code from their authenticator app
+        if (auth.signInStep === 'CONFIRM_SIGN_IN_WITH_TOTP_CODE') {
+            return next('/auth/mfa-verify');
+        }
+
         // Load user info if needed
         if (!auth.user) {
             await auth.fetchInfo();
@@ -97,15 +109,22 @@ export const authCheck = async (
     }
 };
 
+const UNCONFIRMED_STEPS = new Set<string>([
+    "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED",
+    "CONTINUE_SIGN_IN_WITH_TOTP_SETUP",
+    "CONFIRM_SIGN_IN_WITH_TOTP_CODE"
+]);
+
 export const isUserUnconfirmedCheck = async (
     authStore: StoreGeneric
 ): Promise<boolean> => {
-    // Keep the same logic as before, but using v6 state:
-    // true unless the user is exactly in "new password required".
+    // true when the user is fully signed in, signed out, or stuck in any
+    // intermediate challenge step we do not own (the individual challenge
+    // pages will redirect elsewhere if they are opened in the wrong state).
     return (
         authStore.user === null ||
         authStore.confirmedUser ||
-        authStore.signInStep !== "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED"
+        !UNCONFIRMED_STEPS.has(authStore.signInStep)
     );
 };
 

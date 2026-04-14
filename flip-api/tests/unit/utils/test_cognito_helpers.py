@@ -20,7 +20,13 @@ from fastapi.exceptions import HTTPException
 from starlette.status import HTTP_400_BAD_REQUEST, HTTP_500_INTERNAL_SERVER_ERROR
 
 from flip_api.domain.schemas.users import CognitoUser
-from flip_api.utils.cognito_helpers import create_cognito_user, filter_enabled_users, get_cognito_users, get_pool_id
+from flip_api.utils.cognito_helpers import (
+    create_cognito_user,
+    filter_enabled_users,
+    get_cognito_users,
+    get_pool_id,
+    reset_user_mfa,
+)
 
 user1, user2, user3, user4, user5, user6 = [uuid4() for i in range(6)]
 USER_POOL_ID = "test-user-pool-id"
@@ -1150,3 +1156,56 @@ class TestGetCognitoUsers:
         expected_params = {"UserPoolId": "test-pool-id"}
         mock_client_instance.list_users.assert_called_once_with(**expected_params)
         assert len(result) == 2
+
+
+class TestResetUserMfa:
+    """Tests for the reset_user_mfa function."""
+
+    @pytest.fixture
+    def mock_boto3_client(self):
+        """Mock boto3 client for Cognito operations."""
+        with patch("flip_api.utils.cognito_helpers.boto3.client") as mock_client:
+            yield mock_client
+
+    @pytest.fixture
+    def mock_settings(self):
+        """Mock settings for AWS region."""
+        with patch("flip_api.utils.cognito_helpers.get_settings") as mock_get_settings:
+            mock_get_settings.return_value.AWS_REGION = "eu-west-2"
+            yield mock_get_settings
+
+    def test_successful_mfa_reset(self, mock_boto3_client, mock_settings, mock_logger):
+        """Test that a successful reset calls admin_set_user_mfa_preference with MFA disabled."""
+        username = "user@example.com"
+        user_pool_id = "test-pool-id"
+
+        mock_client_instance = mock_boto3_client.return_value
+
+        reset_user_mfa(username, user_pool_id)
+
+        mock_boto3_client.assert_called_once_with("cognito-idp", region_name="eu-west-2")
+        mock_client_instance.admin_set_user_mfa_preference.assert_called_once_with(
+            UserPoolId=user_pool_id,
+            Username=username,
+            SoftwareTokenMfaSettings={"Enabled": False, "PreferredMfa": False},
+        )
+        mock_logger.info.assert_called_once_with(f"Successfully reset MFA for user: {username}")
+
+    def test_client_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
+        """Test that a boto3 ClientError surfaces as HTTP 500."""
+        username = "user@example.com"
+        user_pool_id = "test-pool-id"
+
+        mock_client_instance = mock_boto3_client.return_value
+        client_error = ClientError(
+            error_response={"Error": {"Code": "InternalServiceError", "Message": "boom"}},
+            operation_name="AdminSetUserMFAPreference",
+        )
+        mock_client_instance.admin_set_user_mfa_preference.side_effect = client_error
+
+        with pytest.raises(HTTPException) as exc_info:
+            reset_user_mfa(username, user_pool_id)
+
+        assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
+        assert f"Failed to reset user MFA: {str(client_error)}" in exc_info.value.detail
+        mock_logger.error.assert_called_with(f"Error resetting user MFA: {str(client_error)}")

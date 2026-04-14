@@ -96,6 +96,10 @@ export async function revokeToken(refreshToken: string): Promise<void> {
     await _http.put(`/users/revoke/${refreshToken}`);
 }
 
+export async function resetUserMfa(userId: string): Promise<void> {
+    await _http.post(`/users/${userId}/mfa/reset`);
+}
+
 export async function submitAccessRequest(requestBody: IAccessRequest): Promise<void> {
     await _http.post<string>("/users/access", requestBody, { headers: { Authorization: "" } });
 }

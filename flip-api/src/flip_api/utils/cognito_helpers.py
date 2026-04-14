@@ -261,6 +261,43 @@ def delete_cognito_user(username: str, user_pool_id: str) -> None:
         )
 
 
+def reset_user_mfa(username: str, user_pool_id: str) -> None:
+    """
+    Disable a user's TOTP MFA preference in Cognito.
+
+    Clearing the software-token preference forces the user to enroll a new
+    authenticator device on their next sign-in. Used for lost-device recovery
+    by an administrator.
+
+    Args:
+        username (str): Username (email)
+        user_pool_id (str): Cognito user pool ID
+
+    Returns:
+        None
+
+    Raises:
+        HTTPException: If resetting MFA fails
+    """
+    logger.debug(f"Attempting to reset MFA for user: {username}")
+
+    client = boto3.client("cognito-idp", region_name=get_settings().AWS_REGION)
+
+    try:
+        client.admin_set_user_mfa_preference(
+            UserPoolId=user_pool_id,
+            Username=username,
+            SoftwareTokenMfaSettings={"Enabled": False, "PreferredMfa": False},
+        )
+
+        logger.info(f"Successfully reset MFA for user: {username}")
+    except ClientError as e:
+        logger.error(f"Error resetting user MFA: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to reset user MFA: {str(e)}"
+        )
+
+
 def revoke_token(refresh_token: str, client_id: str) -> None:
     """
     Revoke a refresh token in Cognito.

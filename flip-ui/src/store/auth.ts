@@ -62,13 +62,31 @@ type UserCredentials = {
  * Sign-in steps for the user.
  * - "DONE" means fully signed in.
  * - "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED" indicates the user needs to set a new password.
- * - Other strings can be used for additional steps (like MFA, etc).
+ * - "CONTINUE_SIGN_IN_WITH_TOTP_SETUP" indicates the user must enroll an authenticator (QR + code).
+ * - "CONFIRM_SIGN_IN_WITH_TOTP_CODE" indicates the user has MFA enabled and must enter a code.
+ * - Other strings can be used for additional steps as needed.
  */
-type SignInStep = "DONE" | "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED" | string;
+type SignInStep =
+    | "DONE"
+    | "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED"
+    | "CONTINUE_SIGN_IN_WITH_TOTP_SETUP"
+    | "CONFIRM_SIGN_IN_WITH_TOTP_CODE"
+    | string;
+
+/**
+ * TOTP setup details returned by Cognito/Amplify during MFA enrollment.
+ * `setupUri` is a `otpauth://` URL suitable for rendering as a QR code;
+ * `sharedSecret` is the base32 secret users can type manually.
+ */
+type TotpSetupDetails = {
+    sharedSecret: string;
+    setupUri: string;
+};
 
 type AuthState = {
   user: AmplifyUser | null;
   signInStep: SignInStep | null; // track v6 nextStep
+  totpSetup: TotpSetupDetails | null;
 };
 
 const buildUserWithPermissions = async (
@@ -88,7 +106,8 @@ const buildUserWithPermissions = async (
 export const useAuthStore = defineStore("auth", {
     state: (): AuthState => ({
         user: null,
-        signInStep: null
+        signInStep: null,
+        totpSetup: null
     }),
 
     getters: {
@@ -107,6 +126,7 @@ export const useAuthStore = defineStore("auth", {
             // Always clear stale user state at the start of login
             this.user = null;
             this.signInStep = null;
+            this.totpSetup = null;
 
             const out = await signIn({
                 username: details.username,
@@ -126,6 +146,29 @@ export const useAuthStore = defineStore("auth", {
                 return;
             }
 
+            // TOTP ENROLLMENT REQUIRED (first-time MFA setup)
+            if (step === "CONTINUE_SIGN_IN_WITH_TOTP_SETUP") {
+                // Amplify provides a TotpSetupDetails object with getSetupUri()
+                // and sharedSecret. We surface both so the setup page can render
+                // a QR code and a copy-paste fallback.
+                const details = (out.nextStep as { totpSetupDetails?: {
+                    sharedSecret: string;
+                    getSetupUri: (appName: string, username?: string) => URL;
+                } }).totpSetupDetails;
+                if (details) {
+                    this.totpSetup = {
+                        sharedSecret: details.sharedSecret,
+                        setupUri: details.getSetupUri("FLIP", details.sharedSecret).toString()
+                    };
+                }
+                return;
+            }
+
+            // TOTP CODE CHALLENGE (user already enrolled)
+            if (step === "CONFIRM_SIGN_IN_WITH_TOTP_CODE") {
+                return;
+            }
+
             if (out.isSignedIn) {
                 // Fully signed in
                 const { username, userId } = await getCurrentUser();
@@ -133,17 +176,59 @@ export const useAuthStore = defineStore("auth", {
                 this.signInStep = "DONE";
                 return;
             }
-
-            // Handle other steps your app might support (MFA, TOTP, etc) as needed.
         },
 
         async changePassword(newPassword: string) {
-            await confirmSignIn({ challengeResponse: newPassword });
+            const out = await confirmSignIn({ challengeResponse: newPassword });
 
-            // After confirming new password, user should be signed in
-            const { username, userId } = await getCurrentUser();
-            this.user = await buildUserWithPermissions({ username, userId });
-            this.signInStep = "DONE";
+            // After a new password, Cognito may chain into a TOTP setup step
+            // (because mfa_configuration = "ON" on the user pool). Honour the
+            // nextStep instead of assuming the user is signed in.
+            const step = out.nextStep?.signInStep as SignInStep | undefined;
+            if (step) {
+                this.signInStep = step;
+            }
+
+            if (step === "CONTINUE_SIGN_IN_WITH_TOTP_SETUP") {
+                const details = (out.nextStep as { totpSetupDetails?: {
+                    sharedSecret: string;
+                    getSetupUri: (appName: string, username?: string) => URL;
+                } }).totpSetupDetails;
+                if (details) {
+                    this.totpSetup = {
+                        sharedSecret: details.sharedSecret,
+                        setupUri: details.getSetupUri("FLIP", details.sharedSecret).toString()
+                    };
+                }
+                return;
+            }
+
+            if (out.isSignedIn) {
+                const { username, userId } = await getCurrentUser();
+                this.user = await buildUserWithPermissions({ username, userId });
+                this.signInStep = "DONE";
+            }
+        },
+
+        async confirmTotpSetup(code: string) {
+            const out = await confirmSignIn({ challengeResponse: code });
+
+            if (out.isSignedIn) {
+                const { username, userId } = await getCurrentUser();
+                this.user = await buildUserWithPermissions({ username, userId });
+                this.signInStep = "DONE";
+                this.totpSetup = null;
+            }
+        },
+
+        async confirmTotpChallenge(code: string) {
+            const out = await confirmSignIn({ challengeResponse: code });
+
+            if (out.isSignedIn) {
+                const { username, userId } = await getCurrentUser();
+                this.user = await buildUserWithPermissions({ username, userId });
+                this.signInStep = "DONE";
+            }
         },
 
         async signOut() {
