@@ -125,7 +125,24 @@ const submit = async (v: unknown): Promise<void> => {
             password: values.password
         });
 
-        routeChange.viewProjects();
+        // Route based on the next step returned by Cognito. If the user needs
+        // to change their temporary password, enrol a TOTP authenticator, or
+        // enter a TOTP code, we must send them to the corresponding challenge
+        // page rather than the projects dashboard (which would bounce them
+        // back out through the router guard and lose the challenge state).
+        switch (authStore.signInStep) {
+            case "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED":
+                routeChange.newPassword();
+                break;
+            case "CONTINUE_SIGN_IN_WITH_TOTP_SETUP":
+                routeChange.mfaSetup();
+                break;
+            case "CONFIRM_SIGN_IN_WITH_TOTP_CODE":
+                routeChange.mfaVerify();
+                break;
+            default:
+                routeChange.viewProjects();
+        }
     } catch (e) {
         Snackbar.show({
             type: "error",

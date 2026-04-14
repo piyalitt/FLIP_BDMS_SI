@@ -158,6 +158,16 @@ const submit = async (v: unknown): Promise<void> => {
         return;
     }
 
+    // When the user pool enforces MFA, Cognito chains the new-password
+    // challenge straight into TOTP setup. Follow the nextStep instead of
+    // showing the "log in again" success screen, which would lose the
+    // enrollment state.
+    if (authStore.signInStep === "CONTINUE_SIGN_IN_WITH_TOTP_SETUP") {
+        buttonLoader.value = false;
+        routeChange.mfaSetup();
+        return;
+    }
+
     passwordChanged.value = true;
     buttonLoader.value = false;
 };
