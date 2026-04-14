@@ -52,7 +52,7 @@
         "autoprefixer": "^10.4.7",
         "aws-amplify": "^6.15.3",
         "aws-sdk": "^2.1693.0",
-        "axios": "^1.10.0",
+        "axios": "^1.15.0",
         "c8": "^11.0.0",
         "codemirror-editor-vue3": "^2.1.7",
         "cypress": "^14.5.2",
