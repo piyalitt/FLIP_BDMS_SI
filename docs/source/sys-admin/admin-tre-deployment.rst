@@ -115,7 +115,11 @@ Two communication pathways connect the FLIP node to the Central Hub (hosted on A
 Both pathways use **outbound-only** connections, making FLIP compatible with TRE network
 policies that block inbound traffic.
 
-.. TODO: Add TRE architecture diagram here
+.. figure:: ../assets/tre/TRE_FLIP_diagram_steps.png
+   :width: 700
+   :align: center
+
+   FLIP TRE deployment: outbound-only connections from the FLIP node to the Central Hub.
 
 Communication: Outbound-Only Design
 ------------------------------------
