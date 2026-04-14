@@ -112,12 +112,16 @@ def check_command_available(command: str, min_version: str | None = None) -> boo
         result = subprocess.run([command, "--version"], capture_output=True, text=True, timeout=5)
         if result.returncode != 0:
             return False
-        # Extract version number (assumes X.Y.Z format)
-        version_match = re.search(r"(\d+\.\d+\.\d+)", result.stdout + result.stderr)
+        version_output = result.stdout + result.stderr
+        # Extract the first dotted numeric version, supporting X.Y, X.Y.Z, or X.Y.Z.W formats.
+        version_match = re.search(r"\d+(?:\.\d+)+", version_output)
         if version_match:
-            actual_version = version_match.group(1)
-            min_parts = [int(x) for x in min_version.split(".")]
-            actual_parts = [int(x) for x in actual_version.split(".")]
+            actual_parts = [int(part) for part in version_match.group(0).split(".")]
+            min_parts = [int(part) for part in min_version.split(".")]
+            # Pad shorter list with zeros for uniform comparison
+            max_len = max(len(actual_parts), len(min_parts))
+            actual_parts.extend([0] * (max_len - len(actual_parts)))
+            min_parts.extend([0] * (max_len - len(min_parts)))
             return actual_parts >= min_parts
     return True
 
@@ -167,11 +171,7 @@ def main() -> int:
 
     # Check templates
     print("📝 USER DATA TEMPLATES")
-    all_passed &= check_file_exists("templates/user_data.sh.tftpl", "Central Hub user_data")
-    all_passed &= check_bash_syntax("templates/user_data.sh.tftpl", "Central Hub user_data")
-
-    all_passed &= check_file_exists("modules/trust_ec2/templates/user_data.sh.tftpl", "Trust EC2 user_data")
-    all_passed &= check_bash_syntax("modules/trust_ec2/templates/user_data.sh.tftpl", "Trust EC2 user_data")
+    print("   ℹ️  user_data is inlined in Terraform resources — no standalone template files to validate")
     print()
 
     # Check Ansible files
@@ -182,43 +182,52 @@ def main() -> int:
     # Check Makefile targets
     print("🎯 MAKEFILE TARGETS")
     all_passed &= check_makefile_target("ssh-config", "SSH config generation")
-    all_passed &= check_makefile_target("gen-trust-ec2-certs", "TLS cert generation")
+    all_passed &= check_makefile_target("check-ssm-ready", "SSM prerequisites check")
     all_passed &= check_makefile_target("ansible-init", "Ansible provisioning")
     all_passed &= check_makefile_target("deploy-centralhub", "Central Hub deployment")
+    all_passed &= check_makefile_target("deploy-trust", "Trust deployment")
     all_passed &= check_makefile_target("full-deploy", "Full deployment")
     print()
 
     # Check Makefile dependencies
     print("🔗 MAKEFILE DEPENDENCIES")
     all_passed &= check_makefile_dependency(
-        "gen-trust-ec2-certs",
         "ssh-config",
-        "gen-trust-ec2-certs depends on ssh-config",
-    )
-    all_passed &= check_makefile_dependency(
-        "write-trust-ca",
-        "ssh-config",
-        "write-trust-ca depends on ssh-config",
+        "check-ssm-ready",
+        "ssh-config depends on check-ssm-ready",
     )
     all_passed &= check_makefile_dependency(
         "deploy-centralhub",
-        "write-trust-ca",
-        "deploy-centralhub depends on write-trust-ca",
+        "ssh-config",
+        "deploy-centralhub depends on ssh-config",
+    )
+    all_passed &= check_makefile_dependency(
+        "full-deploy",
+        "deploy-centralhub",
+        "full-deploy depends on deploy-centralhub",
+    )
+    all_passed &= check_makefile_dependency(
+        "full-deploy",
+        "deploy-trust",
+        "full-deploy depends on deploy-trust",
     )
     print()
 
     # Check unit tests
     print("🧪 UNIT TESTS")
-    success, output = run_command(["uv", "run", "pytest", "test_update_ssm_ssh_config.py", "-q"])
-    if success:
-        # Count passing tests from output
-        if "passed" in output:
-            print(f"   ✅ Unit tests passing: {output.strip()}")
-        else:
-            print("   ✅ Unit tests passing")
-        all_passed &= True
+    uv_available, _ = run_command(["which", "uv"])
+    if not uv_available:
+        print("   ⚠️  Unit tests skipped (uv not installed)")
     else:
-        print("   ⚠️  Unit tests check skipped (uv/pytest may not be installed)")
+        success, output = run_command(["uv", "run", "pytest", "test_update_ssm_ssh_config.py", "-q"])
+        if success:
+            if "passed" in output:
+                print(f"   ✅ Unit tests passing: {output.strip()}")
+            else:
+                print("   ✅ Unit tests passing")
+        else:
+            print(f"   ❌ Unit tests FAILED:\n{output.strip()}")
+            all_passed = False
     print()
 
     # Check documentation

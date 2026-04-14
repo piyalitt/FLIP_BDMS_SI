@@ -81,7 +81,7 @@ Verify the new SSM-based SSH works before removing old infrastructure:
 
 ```bash
 # Test direct SSM session first (diagnostic)
-aws ssm start-session --target $(terraform output -raw CentralHubInstanceId)
+aws ssm start-session --target $(terraform output -raw Ec2InstanceId)
 # You should see a shell prompt. If this fails, stop and debug IAM permissions.
 
 # Test SSH via config (what you'll use going forward)
@@ -170,7 +170,7 @@ session-manager-plugin --version
 aws sts get-caller-identity
 
 # Test SSM directly
-aws ssm start-session --target $(terraform output -raw CentralHubInstanceId) --document-name AWS-StartSSHSession
+aws ssm start-session --target $(terraform output -raw Ec2InstanceId)
 ```
 
 **Fix:** See [Prerequisites](README.md#prerequisites) section of AWS README
@@ -240,7 +240,7 @@ If you encounter issues during migration:
 1. **Check [Troubleshooting](README.md#troubleshooting-ssm-access) section** in AWS README
 2. **Run diagnostics:**
    ```bash
-   make -C deploy/providers/AWS verify  # Pre-deployment verification
+   make -C deploy/providers/AWS check-ssm-ready  # Pre-deployment verification
    ```
 3. **Test connectivity:**
    ```bash

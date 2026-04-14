@@ -469,7 +469,7 @@ Both aliases resolve through the SSM tunnel — no public IP or open port 22 is 
 | `Unable to locate credentials` | `aws sts get-caller-identity` returns error | Run `aws sso login --profile $AWS_PROFILE` to refresh session |
 | `SessionManagerPlugin not found` | `command -v session-manager-plugin` returns nothing | Install plugin: `brew install session-manager-plugin` (macOS) or see prerequisites above |
 | `[ERROR] SessionManagerPlugin is not installed` | Session manager plugin is missing or outdated | Upgrade plugin: `brew upgrade session-manager-plugin` or download latest version |
-| `InvalidInstanceID.NotFound` | SSH attempts to connect but fails | Verify instance exists: `terraform output CentralHubInstanceId` and `terraform output TrustInstanceId` |
+| `InvalidInstanceID.NotFound` | SSH attempts to connect but fails | Verify instance exists: `terraform output Ec2InstanceId` and `terraform output TrustEc2InstanceId` |
 | `AccessDeniedException` | `aws ssm start-session` returns access denied | Check EC2 instance IAM role has `ssm:StartSession` and `ec2messages:*` permissions (Terraform should have created this) |
 | `Connection timeout` (hanging) | SSM tunnel hangs without error | Check security group allows NLB ingress from NAT Gateway (port 8000-8005); verify instances are running: `aws ec2 describe-instances` |
 | `Unable to connect to SSM endpoint` | Connection fails immediately | Verify AWS_REGION matches deployment region: `echo $AWS_REGION` should match `eu-west-2` (or your region) |
@@ -479,9 +479,9 @@ Both aliases resolve through the SSM tunnel — no public IP or open port 22 is 
 
 ```bash
 # Test SSM session directly (before trying SSH)
-aws ssm start-session --target $(terraform output -raw CentralHubInstanceId) --document-name AWS-StartSSHSession --parameters 'command=uname -a'
+aws ssm start-session --target $(terraform output -raw Ec2InstanceId)
 
-# Should output Linux kernel info if successful
+# Should open an interactive shell. Run `uname -a` to verify connectivity, then `exit`.
 
 # Then test SSH
 ssh flip  # Should connect via SSM tunnel

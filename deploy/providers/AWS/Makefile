@@ -146,10 +146,6 @@ force-unlock: ## Force unlock Terraform state - provide LOCK_ID=<id> as argument
 	fi
 	@bash scripts/manage-aws.sh force-unlock $(LOCK_ID)
 
-.PHONY: delete-flip-keypair
-delete-flip-keypair: ## Delete the flip-keypair from AWS (run before apply if it exists)
-	@bash scripts/manage-aws.sh delete-keypair flip-keypair
-
 .PHONY: plan
 plan: ## Plan Terraform changes (with environment file loaded)
 	@echo "📋 Planning Terraform changes..."
