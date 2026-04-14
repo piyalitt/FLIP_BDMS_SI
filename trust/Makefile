@@ -29,13 +29,7 @@ include $(MAIN_ENV_FILE)
 export $(shell sed 's/=.*//' $(MAIN_ENV_FILE))
 endif
 
-# ---- FL backend selection (flower | nvflare) ----
-FL_BACKEND ?= flower
-VALID_FL_BACKENDS := flower nvflare
-
-ifeq (,$(filter $(FL_BACKEND),$(VALID_FL_BACKENDS)))
-$(error Invalid FL_BACKEND '$(FL_BACKEND)'. Must be one of: $(VALID_FL_BACKENDS))
-endif
+include ../deploy/fl_backend.mk
 
 COMMON_COMPOSE_FILE := compose_trust.$(__DCKR_SUFFIX).yml
 FL_BACKEND_COMPOSE_FILE := compose_trust.$(__DCKR_SUFFIX).$(FL_BACKEND).yml
