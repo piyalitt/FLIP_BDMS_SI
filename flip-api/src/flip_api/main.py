@@ -50,7 +50,6 @@ from flip_api.model_services import (
     retrieve_model_status_from_logs,
     retrieve_trusts_in_model,
     save_model,
-    update_model_status,
 )
 from flip_api.private_services import (
     add_log,
@@ -170,7 +169,6 @@ ROUTERS: tuple[APIRouter, ...] = (
     retrieve_model_status_from_logs.router,
     retrieve_trusts_in_model.router,
     save_model.router,
-    update_model_status.router,
     # Private services
     add_log.router,
     invoke_model_status_update.router,
