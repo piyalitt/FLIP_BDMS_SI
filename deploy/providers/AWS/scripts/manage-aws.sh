@@ -1,5 +1,5 @@
 #!/bin/bash
-# AWS state/lock management operations (keypair deletion, terraform state unlock)
+# Terraform state management (force-unlock).
 
 set -eo pipefail
 
@@ -8,31 +8,9 @@ source "$SCRIPT_DIR/utils.sh"
 
 check_aws_profile
 
-action="${1:?Action required: list-eips, release-unused-eips, force-unlock}"
+action="${1:?Action required: force-unlock}"
 
 case "$action" in
-    list-eips)
-        log_info "Elastic IPs in ${AWS_REGION}:"
-        aws_cmd ec2 describe-addresses --query 'Addresses[*].[PublicIp,AllocationId,AssociationId,NetworkInterfaceId]' --output table
-        ;;
-    
-    release-unused-eips)
-        log_info "Releasing unassociated Elastic IPs..."
-        UNASSOC_EIPS=$(aws_cmd ec2 describe-addresses --filters "Name=association-id,Values=none" --query 'Addresses[*].AllocationId' --output text)
-        
-        if [ -z "$UNASSOC_EIPS" ]; then
-            log_success "No unassociated EIPs found"
-        else
-            echo "$UNASSOC_EIPS" | tr ' ' '\n' | while read -r alloc_id; do
-                [ -z "$alloc_id" ] && continue
-                log_info "Releasing $alloc_id..."
-                aws_cmd ec2 release-address --allocation-id "$alloc_id" \
-                    && log_success "Released $alloc_id" \
-                    || log_warn "Failed to release $alloc_id"
-            done
-        fi
-        ;;
-    
     force-unlock)
         lock_id="${2:?Lock ID is required: force-unlock <lock-id>}"
         log_info "Force unlocking Terraform state (ID: $lock_id)..."
@@ -43,10 +21,10 @@ case "$action" in
             exit 1
         fi
         ;;
-    
+
     *)
         log_error "Unknown action: $action"
-        echo "Usage: $(basename "$0") {list-eips|release-unused-eips|force-unlock} [args]"
+        echo "Usage: $(basename "$0") force-unlock <lock-id>"
         exit 1
         ;;
 esac
