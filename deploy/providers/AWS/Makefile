@@ -144,7 +144,7 @@ force-unlock: ## Force unlock Terraform state - provide LOCK_ID=<id> as argument
 		echo "❌ LOCK_ID not provided. Usage: make force-unlock LOCK_ID=<lock-id>"; \
 		exit 1; \
 	fi
-	@bash scripts/manage-aws.sh force-unlock $(LOCK_ID)
+	@bash scripts/force-unlock.sh $(LOCK_ID)
 
 .PHONY: plan
 plan: ## Plan Terraform changes (with environment file loaded)
