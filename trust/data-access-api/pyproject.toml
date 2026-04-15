@@ -20,7 +20,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "cryptography>=46.0.5",
+    "cryptography>=46.0.7",
     "fastapi[standard]>=0.115.11",
     "pandas>=2.2.3",
     "psycopg2-binary>=2.9.10",
