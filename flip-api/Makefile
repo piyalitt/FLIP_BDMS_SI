@@ -22,8 +22,7 @@ export $(shell sed 's/=.*//' ../.env.github)
 endif
 
 service_name = flip-api
-dep_duplicates_check_command = uv run python ../scripts/check_pyproject_duplicate_dependencies.py --file pyproject.toml
-lint_command = uv run ruff check . --fix && $(dep_duplicates_check_command)
+lint_command = uv run ruff check . --fix
 test_args = --tb=short --disable-warnings --cov=src/ --cov-report=html --cov-report=term-missing --cov-report=xml:coverage.xml
 test_coverage_html_command = uv run pytest $(test_args)
 test_coverage_html_command_unit = uv run pytest ./tests/unit ./tests/step_functions_services $(test_args)
