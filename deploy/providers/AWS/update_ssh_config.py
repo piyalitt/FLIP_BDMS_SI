@@ -200,10 +200,10 @@ def add_ssh_host_key(hostname: str) -> bool:
     """Add SSH host key to known_hosts.
 
     Args:
-        instance_id_or_ip (str): EC2 instance ID (i-xxx) or public IP address
+        hostname (str): Hostname or IP address to scan
 
     Returns:
-        bool: True if the instance is running, False otherwise
+        bool: True if the host key was added, False otherwise
     """
     try:
         known_hosts = Path.home() / ".ssh" / "known_hosts"
@@ -219,29 +219,6 @@ def add_ssh_host_key(hostname: str) -> bool:
                 f.write(result.stdout)
             return True
         return False
-    if instance_id_or_ip.startswith("i-"):
-        filter_name = "instance-id"
-    else:
-        filter_name = "ip-address"
-    try:
-        result = subprocess.run(
-            [
-                "aws",
-                "ec2",
-                "describe-instances",
-                "--filters",
-                f"Name={filter_name},Values={instance_id_or_ip}",
-                "--query",
-                "Reservations[*].Instances[*].State.Name",
-                "--output",
-                "text",
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=30,
-        )
-        return "running" in result.stdout.strip().lower()
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
         return False
 
@@ -319,7 +296,9 @@ def main(
         try:
             host_value = get_terraform_output(tf_output_name)
         except SystemExit:
-            print_status("INFO", f"Skipping '{service_name}' — Terraform output '{tf_output_name}' not available (not deployed?)")
+            print_status(
+                "INFO", f"Skipping '{service_name}' — Terraform output '{tf_output_name}' not available (not deployed?)"
+            )
             continue
 
         # Read SSH config
