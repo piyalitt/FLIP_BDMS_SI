@@ -115,6 +115,18 @@ class TestUnzipFile:
         with pytest.raises(FileNotFoundError, match="ZIP file not found"):
             unzip_file("/nonexistent/path.zip", "/tmp", "test")
 
+    def test_zip_slip_entry_raises_value_error(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            zip_path = os.path.join(tmp_dir, "malicious.zip")
+
+            with zipfile.ZipFile(zip_path, "w") as zf:
+                zf.writestr("../evil.txt", "bad")
+
+            with pytest.raises(ValueError, match="Attempted path traversal in ZIP entry"):
+                unzip_file(zip_path, tmp_dir, "ACC123")
+
+            assert os.path.exists(zip_path)
+
 
 # ── download_and_unzip_images ──
 

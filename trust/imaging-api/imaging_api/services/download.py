@@ -218,7 +218,7 @@ def unzip_file(zip_path: str, extract_dir: str, new_name: str):
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
         for member in zip_ref.namelist():
             member_path = os.path.realpath(os.path.join(extract_dir_abs, member))
-            if not member_path.startswith(extract_dir_abs + os.sep):
+            if os.path.commonpath([extract_dir_abs, member_path]) != extract_dir_abs:
                 raise ValueError(f"Attempted path traversal in ZIP entry: {member}")
         zip_ref.extractall(extract_dir_abs)
 
