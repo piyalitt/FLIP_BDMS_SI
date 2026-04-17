@@ -62,21 +62,7 @@ export TF_VAR_flip_cognito_researcher_email ?= $(flip_cognito_researcher_email)
 export TF_VAR_ADMIN_USER_PASSWORD := $(ADMIN_USER_PASSWORD)
 export TF_VAR_SES_VERIFIED_EMAIL := $(SES_VERIFIED_EMAIL)
 
-.PHONY: create-backend init plan apply destroy validate status fmt help
-
-help:
-	@echo "Dev-account Terraform targets (Cognito + SES only):"
-	@echo "  make create-backend - create/bootstrap the backend bucket"
-	@echo "  make init      - terraform init (first run, or after changing backend config)"
-	@echo "  make validate  - terraform validate"
-	@echo "  make fmt       - terraform fmt -recursive on this dir + shared modules"
-	@echo "  make plan      - terraform plan"
-	@echo "  make apply     - terraform apply"
-	@echo "  make destroy   - terraform destroy (refused while prevent_destroy is set)"
-	@echo "  make status    - terraform state list"
-	@echo ""
-	@echo "Env: loaded from $(ENV_FILE)"
-	@echo "First-time setup for an already-existing dev Cognito pool: see README.md."
+.PHONY: create-backend init plan apply destroy validate status fmt
 
 create-backend:
 	@echo "🚀 Creating Terraform backend resources..."
