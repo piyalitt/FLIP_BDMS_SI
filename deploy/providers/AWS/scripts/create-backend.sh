@@ -31,6 +31,7 @@ echo "   Region:  ${REGION}"
 echo "   Bucket:  ${BUCKET_NAME}"
 echo "   Key:     ${STATE_KEY}"
 
+# 1. Create S3 Bucket if it doesn't exist, and configure it for Terraform state storage.
 if aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
     echo "✅ S3 bucket '$BUCKET_NAME' already exists."
 else
@@ -53,6 +54,7 @@ else
     echo "✅ S3 bucket created."
 fi
 
+# 2. Check if the state object already exists. If not, it will be created automatically by Terraform on first write.
 if aws s3api head-object --bucket "$BUCKET_NAME" --key "$STATE_KEY" 2>/dev/null; then
     echo "✅ State object '$STATE_KEY' already exists in S3."
 else
