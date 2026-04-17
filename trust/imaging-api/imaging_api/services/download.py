@@ -62,9 +62,17 @@ async def download_and_unzip_images(
         imaging_api.utils.exceptions.NotFoundError: If the project with the given ID is not found, if no experiments are
         found for the given accession ID, if no data is found at the download URL, or if the ZIP file is not found after
         download.
+        ValueError: If the net ID attempts path traversal outside the base images directory.
         Exception: If there is an error during any of the requests to XNAT, during the download process, or during the
         unzipping process.
     """
+    # Validate net_id doesn't escape base images directory
+    download_dir = os.path.join(BASE_IMAGES_DOWNLOAD_DIR, net_id)
+    base_images_download_dir_abs = os.path.realpath(BASE_IMAGES_DOWNLOAD_DIR)
+    download_dir_abs = os.path.realpath(download_dir)
+    if os.path.commonpath([base_images_download_dir_abs, download_dir_abs]) != base_images_download_dir_abs:
+        raise ValueError(f"Path traversal detected in net ID: {net_id}")
+
     # Get project ID from central hub project ID
     try:
         project = get_project_from_central_hub_project_id(central_hub_project_id, headers)
@@ -100,9 +108,8 @@ async def download_and_unzip_images(
     )
     logger.info(f"Download URL: {download_url}")
 
-    # Define download and extraction paths
-    download_dir = os.path.join(BASE_IMAGES_DOWNLOAD_DIR, net_id)
-    zip_file_path = os.path.join(download_dir, f"{accession_id}-scans-{resource_type}.zip")
+    # Define download and extraction paths (net_id already validated above)
+    zip_file_path = os.path.join(download_dir_abs, f"{accession_id}-scans-{resource_type}.zip")
 
     # Download the ZIP file
     try:
@@ -116,7 +123,7 @@ async def download_and_unzip_images(
     logger.info(f"Downloaded file: {downloaded_file}")
 
     # Unzip file and rename the folder
-    extracted_folder = unzip_file(downloaded_file, download_dir, accession_id)
+    extracted_folder = unzip_file(downloaded_file, download_dir_abs, accession_id)
     logger.debug(f"Extracted folder: {extracted_folder}")
 
     # List contents of the extracted folder recursively

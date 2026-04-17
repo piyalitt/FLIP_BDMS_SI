@@ -232,3 +232,9 @@ class TestDownloadAndUnzipImages:
 
         with pytest.raises(NotFoundError, match="File not found at"):
             await download_and_unzip_images("hub-proj-1", "ACC1", "net1", "scan", "NIFTI", headers)
+
+    @pytest.mark.asyncio
+    async def test_net_id_path_traversal_is_rejected(self, headers):
+        with patch("imaging_api.services.download.BASE_IMAGES_DOWNLOAD_DIR", "/tmp/base"):
+            with pytest.raises(ValueError, match="Path traversal detected in net ID"):
+                await download_and_unzip_images("hub-proj-1", "ACC1", "../escape", "scan", "NIFTI", headers)
