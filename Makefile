@@ -98,8 +98,8 @@ up: check-aws-access generate-internal-service-key create-networks
 	${DOCKER_COMMAND} up --remove-orphans -d $(PULL_ALWAYS_FLAG)
 	@echo "🚢 Starting trust services..."
 	$(MAKE) -C trust up
-# 	@echo "🚢 Starting XNAT services..."
-# 	$(MAKE) -C trust/xnat up
+	@echo "🚢 Starting XNAT services..."
+	$(MAKE) -C trust/xnat up
 	@echo "✅ All services started successfully!"
 
 # Minimal $(MAKE) up
