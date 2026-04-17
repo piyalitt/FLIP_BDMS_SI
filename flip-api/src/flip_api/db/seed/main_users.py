@@ -17,7 +17,7 @@ from flip_api.db.models.user_models import RoleRef, User, UserRole
 from flip_api.utils.cognito_helpers import (
     get_user_by_email_or_id,
 )
-from flip_api.utils.constants import ADMIN_EMAIL, OBSERVER_EMAIL, RESEARCHER_EMAIL
+from flip_api.utils.constants import ADMIN_EMAIL_1, ADMIN_EMAIL_2, ADMIN_EMAIL_3, OBSERVER_EMAIL, RESEARCHER_EMAIL
 from flip_api.utils.logger import logger
 
 
@@ -60,8 +60,10 @@ def seed_main_users(session: Session) -> None:
     """
     logger.debug("Seeding main users...")
 
-    # Create / sync the admin user
-    ensure_user_and_role(ADMIN_EMAIL, RoleRef.ADMIN, session)
+    # Create / sync the admin users
+    ensure_user_and_role(ADMIN_EMAIL_1, RoleRef.ADMIN, session)
+    ensure_user_and_role(ADMIN_EMAIL_2, RoleRef.ADMIN, session)
+    ensure_user_and_role(ADMIN_EMAIL_3, RoleRef.ADMIN, session)
 
     # Create / sync the researcher user
     ensure_user_and_role(RESEARCHER_EMAIL, RoleRef.RESEARCHER, session)

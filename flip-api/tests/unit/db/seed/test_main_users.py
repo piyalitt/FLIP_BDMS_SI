@@ -17,7 +17,8 @@ from sqlmodel import Session
 
 from flip_api.db.models.user_models import RoleRef
 from flip_api.db.seed.main_users import seed_main_users
-from flip_api.utils.constants import ADMIN_EMAIL, OBSERVER_EMAIL, RESEARCHER_EMAIL
+from flip_api.utils.constants import ADMIN_EMAIL_1 as ADMIN_EMAIL
+from flip_api.utils.constants import OBSERVER_EMAIL, RESEARCHER_EMAIL
 
 
 @pytest.fixture
