@@ -69,14 +69,14 @@ async def upload_data_to_xnat(
     base_images_download_dir_abs = os.path.realpath(BASE_IMAGES_DOWNLOAD_DIR)
     upload_directory_abs = os.path.realpath(upload_directory)
 
-    if os.path.commonpath([base_images_download_dir_abs, upload_directory_abs]) != base_images_download_dir_abs:
+    if not upload_directory_abs.startswith(base_images_download_dir_abs + os.sep):
         raise ValueError(f"Path traversal detected in net ID: {net_id}")
 
     # Verify and build full file paths, rejecting any path traversal attempts
     full_file_paths: list[str] = []
     for file_relative_path in files_relative_paths_to_upload:
         full_path = os.path.realpath(os.path.join(upload_directory_abs, file_relative_path))
-        if os.path.commonpath([upload_directory_abs, full_path]) != upload_directory_abs:
+        if not full_path.startswith(upload_directory_abs + os.sep):
             raise ValueError(f"Path traversal detected in file path: {file_relative_path}")
         full_file_paths.append(full_path)
 
