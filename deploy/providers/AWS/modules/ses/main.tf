@@ -13,18 +13,6 @@
 # limitations under the License.
 
 # FLIP SES sender identity + transactional email templates.
-#
-# For an already-deployed environment (prod/stag), move each resource in
-# state first to avoid an apply-time destroy+recreate:
-#
-#   terraform state mv aws_ses_email_identity.flip_sender \
-#       module.ses.aws_ses_email_identity.flip_sender
-#   terraform state mv aws_ses_template.flip_access_request \
-#       module.ses.aws_ses_template.flip_access_request
-#   terraform state mv aws_ses_template.flip_xnat_credentials \
-#       module.ses.aws_ses_template.flip_xnat_credentials
-#   terraform state mv aws_ses_template.flip_xnat_added_to_project \
-#       module.ses.aws_ses_template.flip_xnat_added_to_project
 
 resource "aws_ses_email_identity" "flip_sender" {
   email = var.sender_email

@@ -13,26 +13,6 @@
 # limitations under the License.
 
 # FLIP Cognito user pool + client + domain + seed users.
-#
-# The resource addresses here are load-bearing for the prod stack because
-# the production state predates this module. When introducing the module
-# to an already-deployed environment, move each resource in state first:
-#
-#   terraform state mv aws_cognito_user_pool.flip_user_pool \
-#       module.cognito.aws_cognito_user_pool.flip_user_pool
-#   terraform state mv random_string.cognito_domain \
-#       module.cognito.random_string.cognito_domain
-#   terraform state mv aws_cognito_user_pool_domain.main \
-#       module.cognito.aws_cognito_user_pool_domain.main
-#   terraform state mv aws_cognito_user_pool_client.client \
-#       module.cognito.aws_cognito_user_pool_client.client
-#   terraform state mv aws_cognito_user.admin_user \
-#       module.cognito.aws_cognito_user.admin_user
-#   terraform state mv aws_cognito_user.researcher_user \
-#       module.cognito.aws_cognito_user.researcher_user
-#
-# Otherwise terraform tries to destroy + recreate the pool, which the
-# prevent_destroy lifecycle block will (correctly) refuse.
 
 resource "aws_cognito_user_pool" "flip_user_pool" {
   name                     = var.user_pool_name
