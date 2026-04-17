@@ -12,11 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Dev state lives in its own S3 key so it cannot collide with prod/stag.
-# The bucket itself is still supplied at `init` time via `-backend-config`;
-# depending on organisation policy it may be either the shared state bucket
-# or a dev-account-owned bucket. See dev/Makefile for the expected
-# backend-config incantation and dev/README.md for the setup steps.
+# Dev state lives at its own S3 object key so it cannot collide with
+# prod/stag state. The bucket itself is supplied at `init` time via
+# `-backend-config`; see dev/Makefile and dev/README.md.
 
 terraform {
   backend "s3" {

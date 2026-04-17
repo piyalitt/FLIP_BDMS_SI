@@ -96,25 +96,28 @@ For debugging or selective deployment, run individual steps:
 # 1. Login to AWS
 make aws-login
 
-# 2. Initialize Terraform (creates/configures S3 backend)
+# 2. Bootstrap the Terraform backend bucket once, if needed
+make create-backend
+
+# 3. Initialize Terraform (uses the configured S3 backend)
 make init
 
-# 3. Import existing resources (prevents replacement errors)
+# 4. Import existing resources (prevents replacement errors)
 make import-all
 
-# 4. Plan changes
+# 5. Plan changes
 make plan
 
-# 5. Apply infrastructure
+# 6. Apply infrastructure
 make apply
 
-# 6. Configure SSH access
+# 7. Configure SSH access
 make ssh-config
 
-# 7. Setup EC2 instances with Ansible
+# 8. Setup EC2 instances with Ansible
 make ansible-init
 
-# 8. Deploy services
+# 9. Deploy services
 make deploy-centralhub
 make deploy-trust
 
@@ -145,16 +148,15 @@ The `PROD` variable determines which environment files are loaded:
 
 The dev AWS account runs only the services that cannot reasonably run locally (Cognito for auth, SES for email). A separate, minimal Terraform root lives in [`dev/`](./dev/README.md) and calls the same `modules/cognito` and `modules/ses` as this stack, so a change to either service lands in both environments from one place. The dev stack reuses `.env.development` — the same env file the local Docker Compose dev stack consumes — so there is no extra file to maintain.
 
-Delegation targets are wired into the Makefile in this directory, so you can drive the dev stack from the same place as prod/stag:
+The dev stack has its own Makefile; drive it from the `dev/` directory:
 
 ```bash
-cd deploy/providers/AWS
-make dev-init     # one-time, or after backend config changes
-make dev-plan
-make dev-apply
+cd deploy/providers/AWS/dev
+make create-backend  # one-time, if the backend bucket needs bootstrapping
+make init            # one-time, or after backend config changes
+make plan
+make apply
 ```
-
-(or run the equivalents without the `dev-` prefix from `./dev/`.)
 
 See [`dev/README.md`](./dev/README.md) for the one-time `terraform import` workflow that pulls the manually-created dev Cognito pool into state.
 

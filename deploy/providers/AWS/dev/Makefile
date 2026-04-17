@@ -39,12 +39,11 @@ ifeq ($(AWS_PROFILE),FlipDeveloperAccess-080369786334)
 $(error AWS_PROFILE is the STAG account — refuse to run dev-stack commands against stag)
 endif
 
-# Backend bucket for dev state. Set DEV_STATE_BUCKET in .env.development
-# if dev uses its own state bucket; otherwise fall back to the shared
-# STATE_BUCKET (must be reachable from the dev AWS profile).
-DEV_STATE_BUCKET ?= $(STATE_BUCKET)
-ifndef DEV_STATE_BUCKET
-$(error Set DEV_STATE_BUCKET (or STATE_BUCKET) in $(ENV_FILE))
+# Backend bucket for dev state. The bucket name comes from the shared
+# FLIP_TFSTATE_BUCKET_NAME env var, but dev writes to its own backend key
+# so it cannot collide with prod/stag state.
+ifeq ($(strip $(FLIP_TFSTATE_BUCKET_NAME)),)
+$(error Set FLIP_TFSTATE_BUCKET_NAME in $(ENV_FILE))
 endif
 
 # Terraform variables picked up via the TF_VAR_ env var convention.
@@ -63,14 +62,11 @@ export TF_VAR_flip_cognito_researcher_email ?= $(flip_cognito_researcher_email)
 export TF_VAR_ADMIN_USER_PASSWORD := $(ADMIN_USER_PASSWORD)
 export TF_VAR_SES_VERIFIED_EMAIL := $(SES_VERIFIED_EMAIL)
 
-BACKEND_CONFIG := \
-	-backend-config="bucket=$(DEV_STATE_BUCKET)" \
-	-backend-config="region=$(AWS_REGION)"
-
-.PHONY: init plan apply destroy validate status fmt help
+.PHONY: create-backend init plan apply destroy validate status fmt help
 
 help:
 	@echo "Dev-account Terraform targets (Cognito + SES only):"
+	@echo "  make create-backend - create/bootstrap the backend bucket"
 	@echo "  make init      - terraform init (first run, or after changing backend config)"
 	@echo "  make validate  - terraform validate"
 	@echo "  make fmt       - terraform fmt -recursive on this dir + shared modules"
@@ -82,8 +78,12 @@ help:
 	@echo "Env: loaded from $(ENV_FILE)"
 	@echo "First-time setup for an already-existing dev Cognito pool: see README.md."
 
+create-backend:
+	@echo "🚀 Creating Terraform backend resources..."
+	@TFSTATE_BUCKET_NAME="$(FLIP_TFSTATE_BUCKET_NAME)" TFSTATE_KEY="flip/dev/terraform.tfstate" TFSTATE_REGION="$(AWS_REGION)" ../scripts/create-backend.sh
+
 init:
-	terraform init $(BACKEND_CONFIG) -reconfigure
+	terraform init -backend-config="bucket=$(FLIP_TFSTATE_BUCKET_NAME)" -reconfigure
 
 validate:
 	terraform validate
