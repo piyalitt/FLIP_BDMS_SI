@@ -205,16 +205,26 @@ def unzip_file(zip_path: str, extract_dir: str, new_name: str):
 
     Returns:
         str: Path to the renamed directory.
+
+    Raises:
+        FileNotFoundError: If the ZIP file does not exist.
+        ValueError: If the ZIP file contains path traversal entries (zip slip).
     """
     if not os.path.exists(zip_path):
         raise FileNotFoundError(f"ZIP file not found: {zip_path}")
 
+    extract_dir_abs = os.path.realpath(extract_dir)
+
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
-        zip_ref.extractall(extract_dir)
+        for member in zip_ref.namelist():
+            member_path = os.path.realpath(os.path.join(extract_dir_abs, member))
+            if not member_path.startswith(extract_dir_abs + os.sep):
+                raise ValueError(f"Attempted path traversal in ZIP entry: {member}")
+        zip_ref.extractall(extract_dir_abs)
 
     # Rename the extracted directory
-    extracted_dir = os.path.join(extract_dir, Path(zip_path).stem)
-    renamed_dir = os.path.join(extract_dir, new_name)
+    extracted_dir = os.path.join(extract_dir_abs, Path(zip_path).stem)
+    renamed_dir = os.path.join(extract_dir_abs, new_name)
 
     if os.path.exists(extracted_dir):
         os.rename(extracted_dir, renamed_dir)
