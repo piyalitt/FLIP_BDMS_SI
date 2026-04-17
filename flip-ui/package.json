@@ -102,7 +102,8 @@
         "xml2js": ">=0.5.0",
         "lodash": "^4.18.1",
         "lodash-es": "^4.18.1",
-        "esbuild": ">=0.25.0"
+        "esbuild": ">=0.25.0",
+        "follow-redirects": ">=1.15.12"
     },
     "babel": {
         "presets": [
