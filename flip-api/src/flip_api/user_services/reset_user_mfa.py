@@ -34,11 +34,15 @@ def reset_mfa_for_user(
     token_id: UUID = Depends(verify_token),
 ) -> dict[str, Any]:
     """
-    Reset (disable) a user's TOTP MFA preference.
+    Reset a user's TOTP MFA preference and revoke their active sessions.
 
-    Used by administrators to recover users who have lost their authenticator
-    device. The next sign-in attempt by the target user will return the
-    ``CONTINUE_SIGN_IN_WITH_TOTP_SETUP`` challenge, forcing re-enrollment.
+    Used by administrators to recover users who have lost their
+    authenticator device. The Cognito pool is ``OPTIONAL`` (see the cognito
+    module for rationale), so the next sign-in does NOT produce a
+    ``CONTINUE_SIGN_IN_WITH_TOTP_SETUP`` challenge — Cognito signs the user
+    in cleanly, and the app-layer MFA gate (``verify_token`` + the UI
+    router guard on ``needsMfaEnrolment``) routes them through the
+    post-auth enrolment page instead.
 
     Args:
         user_id: ID (Cognito ``sub``) of the user whose MFA should be reset
@@ -64,20 +68,14 @@ def reset_mfa_for_user(
         user_pool_id = get_user_pool_id(request)
         username = get_username(user_id, user_pool_id)
 
-        if not username:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User with ID {user_id} is not registered.",
-            )
-
         reset_user_mfa(username, user_pool_id)
 
         return {}
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error resetting user MFA: {str(e)}")
+    except Exception:
+        logger.exception(f"Error resetting user MFA for user_id={user_id}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reset user MFA"
         )

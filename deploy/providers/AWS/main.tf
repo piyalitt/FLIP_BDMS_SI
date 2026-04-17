@@ -510,12 +510,12 @@ output "DbSecretArn" {
 
 output "CognitoUserPoolId" {
   description = "Cognito User Pool ID"
-  value       = aws_cognito_user_pool.flip_user_pool.id
+  value       = module.cognito.user_pool_id
 }
 
 output "CognitoAppClientId" {
   description = "Cognito App Client ID"
-  value       = aws_cognito_user_pool_client.client.id
+  value       = module.cognito.app_client_id
 }
 
 output "FlServerEndpoint" {
@@ -531,30 +531,18 @@ output "FlServerRawNlbDns" {
 ############################
 # SES Email Templates
 ############################
+#
+# Resource definitions now live in ./modules/ses. `terraform state mv` the
+# existing four resources into the module before the first apply — see the
+# module's header comment for the list.
 
-resource "aws_ses_email_identity" "flip_sender" {
-  email = var.SES_VERIFIED_EMAIL
-}
+module "ses" {
+  source = "./modules/ses"
 
-resource "aws_ses_template" "flip_access_request" {
-  name    = "flip-access-request"
-  subject = "Access Request from {{name}} on FLIP"
-  html    = file("${path.module}/templates/ses/flip-access-request.html")
-  text    = file("${path.module}/templates/ses/flip-access-request.txt")
-}
-
-resource "aws_ses_template" "flip_xnat_credentials" {
-  name    = "flip-xnat-credentials"
-  subject = "Your XNAT credentials for {{trust_name}}"
-  html    = file("${path.module}/templates/ses/flip-xnat-credentials.html")
-  text    = file("${path.module}/templates/ses/flip-xnat-credentials.txt")
-}
-
-resource "aws_ses_template" "flip_xnat_added_to_project" {
-  name    = "flip-xnat-added-to-project"
-  subject = "You have been added to a project at {{trust_name}}"
-  html    = file("${path.module}/templates/ses/flip-xnat-added-to-project.html")
-  text    = file("${path.module}/templates/ses/flip-xnat-added-to-project.txt")
+  sender_email  = var.SES_VERIFIED_EMAIL
+  templates_dir = "${path.module}/templates/ses"
+  # template_name_prefix left empty so prod keeps its existing SES template
+  # names (flip-access-request etc.) and this refactor is a pure state-mv.
 }
 
 

@@ -81,7 +81,7 @@ export const authCheck = async (
             return next('/auth/new-password');
         }
 
-        // First-time MFA enrollment (TOTP setup with QR code)
+        // First-time MFA enrollment (TOTP setup with QR code), sign-in chain
         if (auth.signInStep === 'CONTINUE_SIGN_IN_WITH_TOTP_SETUP') {
             return next('/auth/mfa-setup');
         }
@@ -91,9 +91,17 @@ export const authCheck = async (
             return next('/auth/mfa-verify');
         }
 
-        // Load user info if needed
-        if (!auth.user) {
+        // Load user info if needed (page reload after sign-in). This also
+        // populates `mfaEnabled` from the backend so the MFA-gate check
+        // below has a definitive answer to work with.
+        if (!auth.user || auth.mfaEnabled === null) {
             await auth.fetchInfo();
+        }
+
+        // Admin-reset users (or anyone Cognito signed in without MFA)
+        // can only reach the enrolment page until they finish setup.
+        if (auth.mfaEnabled === false && to.path !== '/auth/mfa-setup') {
+            return next('/auth/mfa-setup');
         }
 
         return next();
@@ -137,22 +145,37 @@ export const authConfig = {
         Cognito: {
             region: process.env.VITE_AWS_REGION || 'eu-west-2',
             userPoolId: process.env.VITE_AWS_USER_POOL_ID,
-            userPoolClientId: process.env.VITE_AWS_CLIENT_ID,
-            clientSecret: process.env.VITE_AWS_CLIENT_SECRET,
-            authenticationFlowType: 'USER_PASSWORD_AUTH',
-            loginWith: {}
+            userPoolClientId: process.env.VITE_AWS_CLIENT_ID
         }
     }
 };
 
 let tokenRefreshTimeout = 0;
 
+// Routes where a tokenRefresh_failure or background 401 must NOT force
+// the user to log in. Two classes of page:
+//   1. No session exists yet — login, new-password (pre-auth challenge),
+//      change-password (forgot-password flow), access-request. Amplify
+//      emits `tokenRefresh_failure` periodically on these because there
+//      are no tokens to refresh; forwarding that to gotoLogin would
+//      interrupt the user mid-form (e.g. filling in a reset code).
+//   2. Mid-challenge flows — mfa-setup, mfa-verify. A yank to login
+//      would lose challenge state or interrupt TOTP enrolment.
+export const NO_FORCED_SIGNOUT_PATHS = new Set<string>([
+    "/auth/login",
+    "/auth/new-password",
+    "/auth/change-password",
+    "/auth/access-request",
+    "/auth/mfa-setup",
+    "/auth/mfa-verify"
+]);
+
 const listener = (data: { payload: { event: string } }) => {
     const store = useAuthStore();
 
     switch (data.payload.event) {
         case "tokenRefresh_failure":
-            if (router.currentRoute.value.fullPath === "/auth/login") {
+            if (NO_FORCED_SIGNOUT_PATHS.has(router.currentRoute.value.fullPath)) {
                 break;
             }
 

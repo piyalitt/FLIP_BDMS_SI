@@ -10,6 +10,22 @@
 # limitations under the License.
 #
 
+# Detect whether the invocation only asks for dev-* delegation targets.
+# When it does, skip the prod/stag env-file load and the prod/stag profile
+# guard — the sub-make under ./dev loads .env.development and runs its
+# own guard against the dev AWS account.
+NON_DEV_GOALS := $(filter-out dev-%,$(MAKECMDGOALS))
+
+ifeq ($(MAKECMDGOALS),)
+# Bare `make` targets the default recipe, which is a prod/stag operation.
+PROD_CONTEXT := 1
+else ifneq ($(NON_DEV_GOALS),)
+# Any non-dev goal on the command line means we're in prod/stag context.
+PROD_CONTEXT := 1
+endif
+
+ifdef PROD_CONTEXT
+
 ifeq ($(PROD),true)
 MAIN_ENV_FILE=../../../.env.production
 else
@@ -40,6 +56,8 @@ ifneq ($(AWS_PROFILE),FlipDeveloperAccess-080369786334)
 $(error "For staging deployments, AWS_PROFILE must be set to 'FlipDeveloperAccess-080369786334'")
 endif
 endif
+
+endif # PROD_CONTEXT
 
 ## SETTING VARIABLES FOR TERRAFORM
 export TF_VAR_max_azs=2
@@ -465,3 +483,39 @@ full-deploy-stag-hybrid: ## Full staging hybrid deployment including local trust
 	echo "✅ Hybrid staging deployment complete." && \
 	echo "➡️  Final manual step: start the local trust stack on the trust host:" && \
 	echo "   cd ../../../trust && env PROD=stag make up-local-trust"
+
+############################
+# Dev-account delegation
+############################
+# These targets hand off to ./dev/Makefile, which loads ../../../.env.development
+# and enforces a dev AWS profile. They intentionally bypass the prod/stag
+# profile guard at the top of this file — the detection of dev-* goals in
+# MAKECMDGOALS skips the load of .env.stag / .env.production above.
+
+.PHONY: dev-init
+dev-init: ## Dev account: terraform init on the Cognito+SES stack
+	$(MAKE) -C dev init
+
+.PHONY: dev-validate
+dev-validate: ## Dev account: terraform validate
+	$(MAKE) -C dev validate
+
+.PHONY: dev-fmt
+dev-fmt: ## Dev account: terraform fmt -recursive
+	$(MAKE) -C dev fmt
+
+.PHONY: dev-plan
+dev-plan: ## Dev account: preview changes to the Cognito+SES stack
+	$(MAKE) -C dev plan
+
+.PHONY: dev-apply
+dev-apply: ## Dev account: apply changes to the Cognito+SES stack
+	$(MAKE) -C dev apply
+
+.PHONY: dev-destroy
+dev-destroy: ## Dev account: destroy the Cognito+SES stack (refused while prevent_destroy is set)
+	$(MAKE) -C dev destroy
+
+.PHONY: dev-status
+dev-status: ## Dev account: terraform state list
+	$(MAKE) -C dev status

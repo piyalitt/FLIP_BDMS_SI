@@ -100,6 +100,12 @@ export async function resetUserMfa(userId: string): Promise<void> {
     await _http.post(`/users/${userId}/mfa/reset`);
 }
 
+export async function getMfaStatus(): Promise<{ enabled: boolean }> {
+    const response = await _http.get<{ enabled: boolean }>("/users/me/mfa/status");
+
+    return response.data;
+}
+
 export async function submitAccessRequest(requestBody: IAccessRequest): Promise<void> {
     await _http.post<string>("/users/access", requestBody, { headers: { Authorization: "" } });
 }

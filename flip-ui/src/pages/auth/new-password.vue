@@ -158,11 +158,15 @@ const submit = async (v: unknown): Promise<void> => {
         return;
     }
 
-    // When the user pool enforces MFA, Cognito chains the new-password
-    // challenge straight into TOTP setup. Follow the nextStep instead of
-    // showing the "log in again" success screen, which would lose the
-    // enrollment state.
-    if (authStore.signInStep === "CONTINUE_SIGN_IN_WITH_TOTP_SETUP") {
+    // With pool=ON, Cognito chains the new-password challenge straight
+    // into TOTP setup, so we honour the nextStep rather than showing the
+    // "log in again" success screen (which would lose the enrolment
+    // state). The `needsMfaEnrolment` branch only triggers if the user
+    // somehow arrived signed-in-but-un-enrolled (e.g. an admin reset).
+    if (
+        authStore.signInStep === "CONTINUE_SIGN_IN_WITH_TOTP_SETUP" ||
+        authStore.needsMfaEnrolment
+    ) {
         buttonLoader.value = false;
         routeChange.mfaSetup();
         return;

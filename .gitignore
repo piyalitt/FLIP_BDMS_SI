@@ -341,6 +341,7 @@ flip-fl-api/transfer/*/*
 trust/terraform.tfstate
 
 .claude/settings.local.json
+.codex
 
 *.gz
 
@@ -364,3 +365,4 @@ deploy/providers/AWS/REFACTORING.md
 
 # Email template preview files (generated locally for testing)
 deploy/providers/AWS/email_previews/
+deploy/providers/AWS/dev/.terraform.lock.hcl

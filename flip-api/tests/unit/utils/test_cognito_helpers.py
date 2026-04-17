@@ -25,6 +25,7 @@ from flip_api.utils.cognito_helpers import (
     filter_enabled_users,
     get_cognito_users,
     get_pool_id,
+    is_mfa_enabled,
     reset_user_mfa,
 )
 
@@ -42,6 +43,21 @@ class CognitoUserFactory(factory.Factory):
     id = factory.Faker("uuid4")
     email = factory.Faker("email")
     is_disabled = factory.Faker("boolean")
+
+
+@pytest.fixture(autouse=True)
+def _reset_cognito_client_cache():
+    """
+    `_cognito_client` is lru_cached so a boto3 client is built once per
+    process. Tests patch `boto3.client` and assume each test starts fresh;
+    clear the cache between tests so a mock from one test doesn't leak
+    into the next.
+    """
+    from flip_api.utils.cognito_helpers import _cognito_client
+
+    _cognito_client.cache_clear()
+    yield
+    _cognito_client.cache_clear()
 
 
 @pytest.fixture
@@ -1175,7 +1191,7 @@ class TestResetUserMfa:
             yield mock_get_settings
 
     def test_successful_mfa_reset(self, mock_boto3_client, mock_settings, mock_logger):
-        """Test that a successful reset calls admin_set_user_mfa_preference with MFA disabled."""
+        """Reset clears the TOTP preference AND globally signs the user out."""
         username = "user@example.com"
         user_pool_id = "test-pool-id"
 
@@ -1189,10 +1205,16 @@ class TestResetUserMfa:
             Username=username,
             SoftwareTokenMfaSettings={"Enabled": False, "PreferredMfa": False},
         )
-        mock_logger.info.assert_called_once_with(f"Successfully reset MFA for user: {username}")
+        mock_client_instance.admin_user_global_sign_out.assert_called_once_with(
+            UserPoolId=user_pool_id,
+            Username=username,
+        )
+        mock_logger.info.assert_called_once_with(
+            f"Successfully reset MFA and revoked sessions for user: {username}"
+        )
 
     def test_client_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
-        """Test that a boto3 ClientError surfaces as HTTP 500."""
+        """A boto3 ClientError on either sub-call surfaces as HTTP 500."""
         username = "user@example.com"
         user_pool_id = "test-pool-id"
 
@@ -1207,5 +1229,87 @@ class TestResetUserMfa:
             reset_user_mfa(username, user_pool_id)
 
         assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
-        assert f"Failed to reset user MFA: {str(client_error)}" in exc_info.value.detail
-        mock_logger.error.assert_called_with(f"Error resetting user MFA: {str(client_error)}")
+        assert exc_info.value.detail == "Failed to reset user MFA"
+        # Never echo the underlying boto3 error text to the client.
+        assert "InternalServiceError" not in exc_info.value.detail
+        assert "boom" not in exc_info.value.detail
+        mock_logger.exception.assert_called_with("Error resetting user MFA")
+        # The sign-out sub-call is skipped once the first step raises.
+        mock_client_instance.admin_user_global_sign_out.assert_not_called()
+
+    def test_sign_out_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
+        """If preference clears but global sign-out fails the admin still sees a 500."""
+        username = "user@example.com"
+        user_pool_id = "test-pool-id"
+
+        mock_client_instance = mock_boto3_client.return_value
+        client_error = ClientError(
+            error_response={"Error": {"Code": "InternalServiceError", "Message": "kaboom"}},
+            operation_name="AdminUserGlobalSignOut",
+        )
+        mock_client_instance.admin_user_global_sign_out.side_effect = client_error
+
+        with pytest.raises(HTTPException) as exc_info:
+            reset_user_mfa(username, user_pool_id)
+
+        assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
+        assert exc_info.value.detail == "Failed to reset user MFA"
+        assert "kaboom" not in exc_info.value.detail
+
+
+class TestIsMfaEnabled:
+    """Tests for the is_mfa_enabled helper."""
+
+    @pytest.fixture
+    def mock_boto3_client(self):
+        with patch("flip_api.utils.cognito_helpers.boto3.client") as mock_client:
+            yield mock_client
+
+    @pytest.fixture
+    def mock_settings(self):
+        with patch("flip_api.utils.cognito_helpers.get_settings") as mock_get_settings:
+            mock_get_settings.return_value.AWS_REGION = "eu-west-2"
+            yield mock_get_settings
+
+    def test_totp_enabled_returns_true(self, mock_boto3_client, mock_settings):
+        mock_client_instance = mock_boto3_client.return_value
+        mock_client_instance.admin_get_user.return_value = {
+            "Username": "user@example.com",
+            "UserMFASettingList": ["SOFTWARE_TOKEN_MFA"],
+        }
+
+        assert is_mfa_enabled("user@example.com", "pool-id") is True
+        mock_client_instance.admin_get_user.assert_called_once_with(
+            UserPoolId="pool-id", Username="user@example.com"
+        )
+
+    def test_empty_mfa_list_returns_false(self, mock_boto3_client, mock_settings):
+        mock_client_instance = mock_boto3_client.return_value
+        mock_client_instance.admin_get_user.return_value = {
+            "Username": "user@example.com",
+            "UserMFASettingList": [],
+        }
+
+        assert is_mfa_enabled("user@example.com", "pool-id") is False
+
+    def test_missing_mfa_list_returns_false(self, mock_boto3_client, mock_settings):
+        """A brand-new user may have no UserMFASettingList key at all."""
+        mock_client_instance = mock_boto3_client.return_value
+        mock_client_instance.admin_get_user.return_value = {"Username": "user@example.com"}
+
+        assert is_mfa_enabled("user@example.com", "pool-id") is False
+
+    def test_client_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
+        mock_client_instance = mock_boto3_client.return_value
+        mock_client_instance.admin_get_user.side_effect = ClientError(
+            error_response={"Error": {"Code": "InternalServiceError", "Message": "boom"}},
+            operation_name="AdminGetUser",
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            is_mfa_enabled("user@example.com", "pool-id")
+
+        assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
+        assert exc_info.value.detail == "Failed to fetch MFA state"
+        assert "boom" not in exc_info.value.detail
+        mock_logger.exception.assert_called_once()

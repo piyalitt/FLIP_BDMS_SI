@@ -14,19 +14,21 @@
 import {
     confirmResetPassword,
     confirmSignIn,
-    fetchAuthSession,
     fetchUserAttributes,
     getCurrentUser,
     resetPassword,
+    setUpTOTP,
     signIn,
-    signOut
+    signOut,
+    updateMFAPreference,
+    verifyTOTPSetup
 } from "aws-amplify/auth";
 
 import { defineStore } from "pinia";
 
 import { IChangePassword } from "@/interfaces/auth/interfaces";
 import { routeChange } from "@/router";
-import { getUserPermissions, revokeToken } from "@/services/user-service";
+import { getMfaStatus, getUserPermissions } from "@/services/user-service";
 
 /**
  * Available User Permissions
@@ -58,26 +60,16 @@ type UserCredentials = {
     password: string;
 };
 
-/**
- * Sign-in steps for the user.
- * - "DONE" means fully signed in.
- * - "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED" indicates the user needs to set a new password.
- * - "CONTINUE_SIGN_IN_WITH_TOTP_SETUP" indicates the user must enroll an authenticator (QR + code).
- * - "CONFIRM_SIGN_IN_WITH_TOTP_CODE" indicates the user has MFA enabled and must enter a code.
- * - Other strings can be used for additional steps as needed.
- */
-type SignInStep =
+// DONE means Cognito's challenge chain is cleared — it does NOT imply the
+// app-gate will let the user through (`mfaEnabled` decides that).
+export type SignInStep =
     | "DONE"
     | "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED"
     | "CONTINUE_SIGN_IN_WITH_TOTP_SETUP"
-    | "CONFIRM_SIGN_IN_WITH_TOTP_CODE"
-    | string;
+    | "CONFIRM_SIGN_IN_WITH_TOTP_CODE";
 
-/**
- * TOTP setup details returned by Cognito/Amplify during MFA enrollment.
- * `setupUri` is a `otpauth://` URL suitable for rendering as a QR code;
- * `sharedSecret` is the base32 secret users can type manually.
- */
+// `setupUri` is an `otpauth://` URL for QR rendering; `sharedSecret` is the
+// base32 secret users can type manually.
 type TotpSetupDetails = {
     sharedSecret: string;
     setupUri: string;
@@ -85,15 +77,19 @@ type TotpSetupDetails = {
 
 type AuthState = {
   user: AmplifyUser | null;
-  signInStep: SignInStep | null; // track v6 nextStep
+  signInStep: SignInStep | null;
   totpSetup: TotpSetupDetails | null;
+  // null = not yet known (store hydration in progress or sign-in incomplete)
+  mfaEnabled: boolean | null;
 };
 
 const buildUserWithPermissions = async (
   base: Pick<AmplifyUser, "username" | "userId">
 ): Promise<AmplifyUser> => {
-  const attributes = (await fetchUserAttributes()) as Attributes;
-  const permsRes = await getUserPermissions(attributes.sub);
+  const [attributes, permsRes] = await Promise.all([
+    fetchUserAttributes() as Promise<Attributes>,
+    getUserPermissions(base.userId)
+  ]);
 
   return {
     ...base,
@@ -102,145 +98,221 @@ const buildUserWithPermissions = async (
   };
 };
 
+// Shape of Amplify's `nextStep` when Cognito chains into MFA_SETUP.
+type AmplifyTotpNextStep = {
+    totpSetupDetails?: {
+        sharedSecret: string;
+        getSetupUri: (appName: string, username?: string) => URL;
+    };
+};
+
 
 export const useAuthStore = defineStore("auth", {
     state: (): AuthState => ({
         user: null,
         signInStep: null,
-        totpSetup: null
+        totpSetup: null,
+        mfaEnabled: null
     }),
 
     getters: {
         getUser: (state) => state.user,
-        confirmedUser: (state) => state.signInStep === "DONE" && !!state.user
+        // Sign-in challenge chain complete AND TOTP confirmed active at the app layer.
+        confirmedUser: (state) =>
+            state.signInStep === "DONE" && !!state.user && state.mfaEnabled === true,
+        // True when Cognito tokens exist and challenges are cleared but MFA is not yet active —
+        // the one state where we route the user to the enrolment page instead of the app.
+        needsMfaEnrolment: (state) =>
+            state.signInStep === "DONE" && state.mfaEnabled === false
     },
     actions: {
-        async fetchInfo() {
-            // Get the currently signed-in user (no sign-in step here)
-            const { username, userId } = await getCurrentUser();
-            this.user = await buildUserWithPermissions({ username, userId });
+        // Load user + MFA state into the store. When `mfaEnabled` is already
+        // known (e.g. just after a successful TOTP enrolment), the caller
+        // can pass it in to skip the round-trip to /users/me/mfa/status.
+        async hydrate(knownMfaEnabled?: boolean) {
+            const [{ username, userId }, mfaEnabled] = await Promise.all([
+                getCurrentUser(),
+                knownMfaEnabled !== undefined
+                    ? Promise.resolve(knownMfaEnabled)
+                    : getMfaStatus().then(s => s.enabled)
+            ]);
             this.signInStep = "DONE";
+            this.mfaEnabled = mfaEnabled;
+            if (mfaEnabled) {
+                this.user = await buildUserWithPermissions({ username, userId });
+            } else {
+                // Permissions endpoint is MFA-gated, so hold the profile
+                // at attributes-only until the user completes enrolment.
+                const attributes = (await fetchUserAttributes()) as Attributes;
+                this.user = { username, userId, attributes, permissions: [] };
+            }
+        },
+
+        async fetchInfo() {
+            await this.hydrate();
+        },
+
+        async finaliseSignIn() {
+            await this.hydrate();
         },
 
         async signIn(details: UserCredentials) {
-            // Always clear stale user state at the start of login
             this.user = null;
             this.signInStep = null;
             this.totpSetup = null;
+            this.mfaEnabled = null;
 
             const out = await signIn({
                 username: details.username,
                 password: details.password
             });
 
-            // Extract next step
             const step = out.nextStep?.signInStep as SignInStep | undefined;
-
             if (step) {
                 this.signInStep = step;
             }
 
-            // NEW PASSWORD REQUIRED
-            if (step === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
-                // No session exists yet — do not try to fetch user info
-                return;
-            }
-
-            // TOTP ENROLLMENT REQUIRED (first-time MFA setup)
             if (step === "CONTINUE_SIGN_IN_WITH_TOTP_SETUP") {
-                // Amplify provides a TotpSetupDetails object with getSetupUri()
-                // and sharedSecret. We surface both so the setup page can render
-                // a QR code and a copy-paste fallback.
-                const details = (out.nextStep as { totpSetupDetails?: {
-                    sharedSecret: string;
-                    getSetupUri: (appName: string, username?: string) => URL;
-                } }).totpSetupDetails;
-                if (details) {
-                    this.totpSetup = {
-                        sharedSecret: details.sharedSecret,
-                        setupUri: details.getSetupUri("FLIP", details.sharedSecret).toString()
-                    };
-                }
+                this.captureTotpSetupDetails(out.nextStep);
                 return;
             }
 
-            // TOTP CODE CHALLENGE (user already enrolled)
-            if (step === "CONFIRM_SIGN_IN_WITH_TOTP_CODE") {
+            if (
+                step === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED" ||
+                step === "CONFIRM_SIGN_IN_WITH_TOTP_CODE"
+            ) {
                 return;
             }
 
             if (out.isSignedIn) {
-                // Fully signed in
-                const { username, userId } = await getCurrentUser();
-                this.user = await buildUserWithPermissions({ username, userId });
-                this.signInStep = "DONE";
-                return;
+                await this.hydrate();
             }
         },
 
         async changePassword(newPassword: string) {
             const out = await confirmSignIn({ challengeResponse: newPassword });
 
-            // After a new password, Cognito may chain into a TOTP setup step
-            // (because mfa_configuration = "ON" on the user pool). Honour the
-            // nextStep instead of assuming the user is signed in.
             const step = out.nextStep?.signInStep as SignInStep | undefined;
             if (step) {
                 this.signInStep = step;
             }
 
             if (step === "CONTINUE_SIGN_IN_WITH_TOTP_SETUP") {
-                const details = (out.nextStep as { totpSetupDetails?: {
-                    sharedSecret: string;
-                    getSetupUri: (appName: string, username?: string) => URL;
-                } }).totpSetupDetails;
-                if (details) {
-                    this.totpSetup = {
-                        sharedSecret: details.sharedSecret,
-                        setupUri: details.getSetupUri("FLIP", details.sharedSecret).toString()
-                    };
-                }
+                this.captureTotpSetupDetails(out.nextStep);
                 return;
             }
 
             if (out.isSignedIn) {
-                const { username, userId } = await getCurrentUser();
-                this.user = await buildUserWithPermissions({ username, userId });
-                this.signInStep = "DONE";
-            }
-        },
-
-        async confirmTotpSetup(code: string) {
-            const out = await confirmSignIn({ challengeResponse: code });
-
-            if (out.isSignedIn) {
-                const { username, userId } = await getCurrentUser();
-                this.user = await buildUserWithPermissions({ username, userId });
-                this.signInStep = "DONE";
-                this.totpSetup = null;
+                await this.hydrate();
             }
         },
 
         async confirmTotpChallenge(code: string) {
             const out = await confirmSignIn({ challengeResponse: code });
+            if (!out.isSignedIn) return;
 
-            if (out.isSignedIn) {
-                const { username, userId } = await getCurrentUser();
-                this.user = await buildUserWithPermissions({ username, userId });
+            // Cognito only issues CONFIRM_SIGN_IN_WITH_TOTP_CODE to users
+            // whose MFA preference is already active, so once the challenge
+            // clears we know MFA is on — skip the backend round-trip.
+            // As with confirmTotpSetup/completeMfaEnrolment, post-success
+            // hydrate failures (network blip, backend unreachable) are
+            // logged but non-fatal: the router guard will re-fetch on the
+            // next navigation. Without this, a valid code + transient
+            // hydrate failure surfaces to the user as "Sign-in failed:
+            // Network Error" — misleadingly blaming the code.
+            try {
+                await this.hydrate(true);
+            } catch (e) {
+                console.error("Failed to hydrate user post-TOTP-challenge:", e);
                 this.signInStep = "DONE";
+                this.mfaEnabled = null;
+            }
+        },
+
+        // Cognito's MFA_SETUP challenge verifies the software token but does
+        // not flip the user's MFA preference; without an explicit
+        // `updateMFAPreference` the backend's /users/me/mfa/status still
+        // reads an empty UserMFASettingList and the router guard bounces
+        // the user back to enrol with a fresh secret.
+        //
+        // Once `confirmSignIn` resolves with `isSignedIn=true` the code was
+        // already accepted by Cognito — any subsequent failure
+        // (updateMFAPreference, hydrate) is a post-success cleanup issue,
+        // not a code mismatch. Swallow those errors so the user isn't told
+        // "Invalid code" about a code Cognito accepted.
+        async confirmTotpSetup(code: string) {
+            const out = await confirmSignIn({ challengeResponse: code });
+            if (!out.isSignedIn) return;
+
+            try {
+                await updateMFAPreference({ totp: "PREFERRED" });
+            } catch (e) {
+                console.error("Failed to set MFA preference post-setup:", e);
+            }
+            this.totpSetup = null;
+            try {
+                await this.hydrate(true);
+            } catch (e) {
+                console.error("Failed to hydrate user post-MFA setup:", e);
+                // Leave `mfaEnabled=null` so the router guard re-fetches
+                // the authoritative backend state on the next navigation
+                // (via `fetchInfo()` at utils/auth.ts). Forcing it to
+                // `true` here would let the user into the app even if
+                // `updateMFAPreference` silently failed — every API call
+                // would then 403 under the app-gate and the UI would be
+                // half-broken with no recovery.
+                this.signInStep = "DONE";
+                this.mfaEnabled = null;
+            }
+        },
+
+        captureTotpSetupDetails(nextStep: unknown) {
+            const details = (nextStep as AmplifyTotpNextStep).totpSetupDetails;
+            if (details) {
+                this.totpSetup = {
+                    sharedSecret: details.sharedSecret,
+                    setupUri: details.getSetupUri("FLIP", details.sharedSecret).toString()
+                };
+            }
+        },
+
+        async beginMfaEnrolment() {
+            const details = await setUpTOTP();
+            this.totpSetup = {
+                sharedSecret: details.sharedSecret ?? "",
+                setupUri: details.getSetupUri("FLIP", this.user?.attributes.email).toString()
+            };
+        },
+
+        async completeMfaEnrolment(code: string) {
+            // `verifyTOTPSetup` is the code-mismatch site: if the user's
+            // code is wrong this throws and the caller shows "Invalid
+            // code". Everything after is post-success cleanup; swallow
+            // those errors so a transient follow-up failure doesn't
+            // misleadingly surface as a code error.
+            await verifyTOTPSetup({ code });
+            try {
+                await updateMFAPreference({ totp: "PREFERRED" });
+            } catch (e) {
+                console.error("Failed to set MFA preference post-enrolment:", e);
+            }
+            this.totpSetup = null;
+            try {
+                await this.hydrate(true);
+            } catch (e) {
+                console.error("Failed to hydrate user post-MFA enrolment:", e);
+                // See confirmTotpSetup: leave mfaEnabled=null so the
+                // router guard converges on the real backend state.
+                this.signInStep = "DONE";
+                this.mfaEnabled = null;
             }
         },
 
         async signOut() {
             try {
-                const session = await fetchAuthSession();
-                const refreshToken = session.tokens?.refreshToken?.toString();
-
+                // global:true calls Cognito's GlobalSignOut, which invalidates
+                // all tokens (including the refresh token) for this user session.
                 await signOut({ global: true });
-
-                if (refreshToken) {
-                    await revokeToken(refreshToken);
-                }
             } catch (error) {
                 console.error("Sign out error:", error);
             }

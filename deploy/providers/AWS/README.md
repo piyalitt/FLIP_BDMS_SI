@@ -141,6 +141,38 @@ The `PROD` variable determines which environment files are loaded:
 - `PROD=stag` → Uses `.env.stag`, `flip-api/.env.stag`
 - `PROD=true` → Uses `.env.production`, `flip-api/.env.production`
 
+**Dev account (Cognito + SES only):**
+
+The dev AWS account runs only the services that cannot reasonably run locally (Cognito for auth, SES for email). A separate, minimal Terraform root lives in [`dev/`](./dev/README.md) and calls the same `modules/cognito` and `modules/ses` as this stack, so a change to either service lands in both environments from one place. The dev stack reuses `.env.development` — the same env file the local Docker Compose dev stack consumes — so there is no extra file to maintain.
+
+Delegation targets are wired into the Makefile in this directory, so you can drive the dev stack from the same place as prod/stag:
+
+```bash
+cd deploy/providers/AWS
+make dev-init     # one-time, or after backend config changes
+make dev-plan
+make dev-apply
+```
+
+(or run the equivalents without the `dev-` prefix from `./dev/`.)
+
+See [`dev/README.md`](./dev/README.md) for the one-time `terraform import` workflow that pulls the manually-created dev Cognito pool into state.
+
+### Terraform module layout
+
+```
+deploy/providers/AWS/
+├── main.tf / services.tf       # prod + stag stack root
+├── modules/
+│   ├── cognito/                # shared: pool, domain, client, seed users
+│   ├── ses/                    # shared: sender identity, transactional templates
+│   ├── secgroup/               # shared: security-group wrapper
+│   └── trust_ec2/              # prod/stag only
+└── dev/                        # dev-account root (calls cognito + ses modules)
+```
+
+If you introduce the Cognito or SES modules to a stack that was previously using inline resources (relevant the first time this code is applied against the existing prod state), you **must** move each resource in state before the next apply — see the header comment in `modules/cognito/main.tf` and `modules/ses/main.tf` for the exact `terraform state mv` commands. Without them, Terraform will propose destroying the pool, which `prevent_destroy` correctly refuses.
+
 ### Destroy Infrastructure
 
 The destroy process preserves critical resources (Cognito, Secrets, S3) while safely removing infrastructure:

@@ -97,9 +97,17 @@ const authStore = useAuthStore();
 const loginLoader = ref(false);
 
 onBeforeMount(async () => {
+    // Only redirect to /projects if the user has a real access token.
+    // `fetchAuthSession` can return a session object (e.g. with a stale
+    // challenge string) without tokens and without throwing, and the
+    // previous `routeChange.viewProjects()` on any non-throw was what
+    // made "Back to log in" from mid-challenge pages bounce straight
+    // back to the challenge page via the router guard.
     try {
-        await fetchAuthSession();
-        routeChange.viewProjects();  // user already logged in
+        const session = await fetchAuthSession();
+        if (session.tokens?.accessToken) {
+            routeChange.viewProjects();
+        }
     } catch {
         // not logged in → stay on login page
     }
@@ -125,11 +133,10 @@ const submit = async (v: unknown): Promise<void> => {
             password: values.password
         });
 
-        // Route based on the next step returned by Cognito. If the user needs
-        // to change their temporary password, enrol a TOTP authenticator, or
-        // enter a TOTP code, we must send them to the corresponding challenge
-        // page rather than the projects dashboard (which would bounce them
-        // back out through the router guard and lose the challenge state).
+        // Route based on the next step returned by Cognito. Challenge pages
+        // drive their own follow-ups; once the challenge chain is cleared,
+        // the MFA gate (via `needsMfaEnrolment`) decides whether to send
+        // the user to the app or into post-auth enrolment.
         switch (authStore.signInStep) {
             case "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED":
                 routeChange.newPassword();
@@ -141,7 +148,11 @@ const submit = async (v: unknown): Promise<void> => {
                 routeChange.mfaVerify();
                 break;
             default:
-                routeChange.viewProjects();
+                if (authStore.needsMfaEnrolment) {
+                    routeChange.mfaSetup();
+                } else {
+                    routeChange.viewProjects();
+                }
         }
     } catch (e) {
         Snackbar.show({

@@ -37,6 +37,9 @@ meta:
                 :pre-icon="LockOutline"
                 :input-props="{inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: 6}"
             />
+            <p class="text-sm text-gray-500 dark:text-gray-400" data-test="lost-authenticator-msg">
+                Lost your authenticator? Ask a FLIP admin to reset MFA for you.
+            </p>
             <div class="flex-grow" />
             <div class="flex flex-row">
                 <div class="flex-grow" />
@@ -92,12 +95,25 @@ const submit = async (v: unknown): Promise<void> => {
     try {
         await authStore.confirmTotpChallenge(code);
         routeChange.viewProjects();
-    } catch {
-        Snackbar.show({
-            type: "error",
-            title: "Invalid code",
-            text: "That code did not match. Please try again."
-        });
+    } catch (e) {
+        console.error("MFA code verification failed:", e);
+        const err = e as { name?: string; message?: string };
+        const isCodeError =
+            err.name === "CodeMismatchException" ||
+            err.name === "ExpiredCodeException" ||
+            /code.*mismatch|did not match|expired/i.test(err.message ?? "");
+
+        if (isCodeError) {
+            Snackbar.error({
+                title: "Invalid code",
+                text: "That code did not match. Please try again."
+            });
+        } else {
+            Snackbar.error({
+                title: "Sign-in failed",
+                text: err.message ?? "Something went wrong. Please sign out and try again."
+            });
+        }
     } finally {
         loading.value = false;
     }

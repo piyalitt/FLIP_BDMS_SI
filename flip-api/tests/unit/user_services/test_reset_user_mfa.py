@@ -54,7 +54,7 @@ def test_permission_denied(mock_request, mock_db, user_id, token_id):
 
 
 def test_user_not_found(mock_request, mock_db, user_id, token_id):
-    """Target user missing from Cognito returns 404 and no reset call."""
+    """Target user missing from Cognito bubbles get_username's 404 and skips the reset call."""
     user_pool_id = "test-user-pool-id"
 
     with (
@@ -65,7 +65,10 @@ def test_user_not_found(mock_request, mock_db, user_id, token_id):
     ):
         mock_has_permissions.return_value = True
         mock_get_user_pool_id.return_value = user_pool_id
-        mock_get_username.return_value = None
+        mock_get_username.side_effect = HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with ID {user_id} is not registered.",
+        )
 
         with pytest.raises(HTTPException) as exc_info:
             reset_mfa_for_user(user_id, mock_request, mock_db, token_id)
@@ -118,5 +121,7 @@ def test_internal_server_error(mock_request, mock_db, user_id, token_id):
             reset_mfa_for_user(user_id, mock_request, mock_db, token_id)
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert "Internal server error" in exc_info.value.detail
-        mock_logger.error.assert_called_once()
+        assert exc_info.value.detail == "Failed to reset user MFA"
+        # Ensure the raw exception string is NOT leaked to the client.
+        assert "boom" not in exc_info.value.detail
+        mock_logger.exception.assert_called_once()

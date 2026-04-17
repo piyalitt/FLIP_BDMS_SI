@@ -15,7 +15,14 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
 
 import { useAuthStore } from "@/store/auth";
+import { NO_FORCED_SIGNOUT_PATHS } from "@/utils/auth";
 import { Snackbar } from "@/utils/snackbar";
+
+// Debounce the "Not Authorised" snackbar so a burst of parallel 401s
+// (common when multiple SWRV hooks fail at the same token expiry) shows
+// exactly one message, not one per request.
+let lastNotAuthorisedAt = 0;
+const NOT_AUTHORISED_COOLDOWN_MS = 5_000;
 
 export interface IResponse<T> extends AxiosResponse<T> { }
 
@@ -40,7 +47,9 @@ class Http {
         const authStore = useAuthStore();
         const devMode = process.env.NODE_ENV === "development";
 
-        console.log("Initializing HTTP client in", devMode ? "development" : "production", "mode");
+        if (devMode) {
+            console.log("Initializing HTTP client in development mode");
+        }
 
         const http = axios.create({
             baseURL: devMode ? process.env.VITE_AWS_BASE_URL : window.AWS_BASE_URL,
@@ -69,12 +78,25 @@ class Http {
             (response) => response,
             function (error) {
                 if (error.response?.status === 401) {
+                    // Skip the forced sign-out entirely on mid-flow auth
+                    // pages; the user hasn't completed their challenge
+                    // chain and we'd throw away their progress.
+                    const currentPath = window.location.pathname;
+                    if (NO_FORCED_SIGNOUT_PATHS.has(currentPath)) {
+                        return Promise.reject(error);
+                    }
+
                     authStore.signOut();
-                    Snackbar.show({
-                        type: "info",
-                        title: "Not Authorised",
-                        text: "You have been signed out. Please log back in."
-                    });
+
+                    const now = Date.now();
+                    if (now - lastNotAuthorisedAt > NOT_AUTHORISED_COOLDOWN_MS) {
+                        lastNotAuthorisedAt = now;
+                        Snackbar.show({
+                            type: "info",
+                            title: "Not Authorised",
+                            text: "You have been signed out. Please log back in."
+                        });
+                    }
 
                     return Promise.reject(error);
                 }

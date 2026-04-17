@@ -13,6 +13,7 @@
 import logging
 from collections import defaultdict
 from collections.abc import Sequence
+from functools import lru_cache
 from typing import Any
 from uuid import UUID
 
@@ -28,6 +29,14 @@ from flip_api.utils.logger import logger
 from flip_api.utils.paging_utils import PagingInfo
 
 boto3.set_stream_logger("boto3.resources", logging.INFO)
+
+
+@lru_cache(maxsize=1)
+def _cognito_client() -> Any:
+    """Module-level cached cognito-idp client. boto3 clients are thread-safe
+    and expensive to construct; sharing one avoids paying endpoint-resolution
+    cost on every authenticated request."""
+    return boto3.client("cognito-idp", region_name=get_settings().AWS_REGION)
 
 
 def get_pool_id(request: Request) -> str:
@@ -84,7 +93,7 @@ def get_cognito_users(params: dict[str, Any] | None = None) -> list[CognitoUser]
         HTTPException: If there is an error fetching users from Cognito or if the user pool ID is not found.
     """
     user_pool_id = get_settings().AWS_COGNITO_USER_POOL_ID
-    client = boto3.client("cognito-idp", region_name=get_settings().AWS_REGION)
+    client = _cognito_client()
     if params is None:
         params = {"UserPoolId": user_pool_id}
     elif "UserPoolId" not in params:
@@ -166,7 +175,7 @@ def get_user_by_email_or_id(
     return users[0]
 
 
-def get_username(user_id: str, user_pool_id: str) -> str | None:
+def get_username(user_id: str, user_pool_id: str) -> str:
     """
     Get a username from Cognito by user ID.
 
@@ -175,10 +184,10 @@ def get_username(user_id: str, user_pool_id: str) -> str | None:
         user_pool_id (str): Cognito user pool ID
 
     Returns:
-        str | None: The username (email) associated with the user ID, or None if not found.
+        str: The username (email) associated with the user ID.
 
     Raises:
-        HTTPException: If the request cannot be processed.
+        HTTPException: 404 if no matching user, 500 on Cognito errors.
     """
     params = {
         "UserPoolId": user_pool_id,
@@ -212,7 +221,7 @@ def update_user(username: str, user_pool_id: str, disabled: bool) -> Disabled:
     Raises:
         HTTPException: If the request cannot be processed.
     """
-    client = boto3.client("cognito-idp", region_name=get_settings().AWS_REGION)
+    client = _cognito_client()
 
     try:
         params = {"UserPoolId": user_pool_id, "Username": username}
@@ -248,7 +257,7 @@ def delete_cognito_user(username: str, user_pool_id: str) -> None:
     """
     logger.debug(f"Attempting to delete user: {username}")
 
-    client = boto3.client("cognito-idp", region_name=get_settings().AWS_REGION)
+    client = _cognito_client()
 
     try:
         client.admin_delete_user(UserPoolId=user_pool_id, Username=username)
@@ -263,11 +272,14 @@ def delete_cognito_user(username: str, user_pool_id: str) -> None:
 
 def reset_user_mfa(username: str, user_pool_id: str) -> None:
     """
-    Disable a user's TOTP MFA preference in Cognito.
+    Disable a user's TOTP MFA preference and invalidate their sessions.
 
-    Clearing the software-token preference forces the user to enroll a new
-    authenticator device on their next sign-in. Used for lost-device recovery
-    by an administrator.
+    Cognito has no admin API to delete a verified TOTP secret, so clearing
+    the preference is the only server-side handle; the app-layer MFA gate
+    (``verify_token`` + router guard) then funnels the user through
+    post-auth enrolment, which mints a fresh secret. A global sign-out
+    revokes any active refresh tokens so a pre-reset session cannot keep
+    operating.
 
     Args:
         username (str): Username (email)
@@ -277,11 +289,11 @@ def reset_user_mfa(username: str, user_pool_id: str) -> None:
         None
 
     Raises:
-        HTTPException: If resetting MFA fails
+        HTTPException: If resetting MFA or signing the user out fails
     """
     logger.debug(f"Attempting to reset MFA for user: {username}")
 
-    client = boto3.client("cognito-idp", region_name=get_settings().AWS_REGION)
+    client = _cognito_client()
 
     try:
         client.admin_set_user_mfa_preference(
@@ -289,13 +301,52 @@ def reset_user_mfa(username: str, user_pool_id: str) -> None:
             Username=username,
             SoftwareTokenMfaSettings={"Enabled": False, "PreferredMfa": False},
         )
+        client.admin_user_global_sign_out(UserPoolId=user_pool_id, Username=username)
 
-        logger.info(f"Successfully reset MFA for user: {username}")
+        logger.info(f"Successfully reset MFA and revoked sessions for user: {username}")
     except ClientError as e:
-        logger.error(f"Error resetting user MFA: {str(e)}")
+        logger.exception("Error resetting user MFA")
+        # Generic client-facing detail: the boto3 `str(e)` can include
+        # Cognito error codes, request IDs, or ARNs. Do not echo it.
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to reset user MFA: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reset user MFA",
+        ) from e
+
+
+def is_mfa_enabled(username: str, user_pool_id: str) -> bool:
+    """
+    Check whether a user has TOTP MFA active in Cognito.
+
+    A user is considered MFA-active if SOFTWARE_TOKEN_MFA is present in
+    their UserMFASettingList — Cognito only adds that entry after the
+    user has both verified a software token and had their preference set
+    with Enabled=True.
+
+    Args:
+        username (str): Username (email)
+        user_pool_id (str): Cognito user pool ID
+
+    Returns:
+        bool: True if TOTP MFA is enabled for the user, False otherwise.
+
+    Raises:
+        HTTPException: If the Cognito lookup fails.
+    """
+    client = _cognito_client()
+
+    try:
+        response = client.admin_get_user(UserPoolId=user_pool_id, Username=username)
+    except ClientError as e:
+        logger.exception(f"Error fetching MFA state for user {username}")
+        # Hot path: called by verify_token on every authenticated request.
+        # Keep the detail generic to avoid echoing Cognito/boto3 internals.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch MFA state",
+        ) from e
+
+    return "SOFTWARE_TOKEN_MFA" in response.get("UserMFASettingList", [])
 
 
 def revoke_token(refresh_token: str, client_id: str) -> None:
@@ -312,7 +363,7 @@ def revoke_token(refresh_token: str, client_id: str) -> None:
     Raises:
         HTTPException: If token revocation fails
     """
-    client = boto3.client("cognito-idp", region_name=get_settings().AWS_REGION)
+    client = _cognito_client()
 
     try:
         client.revoke_token(Token=refresh_token, ClientId=client_id)
@@ -441,7 +492,7 @@ def create_cognito_user(email: str, user_pool_id: str) -> UUID:
     """
     logger.debug("Attempting to register the user...")
 
-    client = boto3.client("cognito-idp", region_name=get_settings().AWS_REGION)
+    client = _cognito_client()
 
     try:
         response = client.admin_create_user(
