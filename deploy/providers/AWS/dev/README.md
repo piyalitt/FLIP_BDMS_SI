@@ -43,95 +43,48 @@ make status          # terraform state list
 make destroy         # refused while prevent_destroy is set
 ```
 
-## First-time setup: import the existing manual Cognito pool
+## First-time setup
 
-The dev Cognito pool, domain, client and seed users already exist in the dev account because they were created manually before this stack existed. Running `make apply` without importing those resources first would fail (Cognito pool names must be unique) or — worse — create parallel resources and leave the manual ones orphaned.
+The dev Cognito + SES resources are Terraform-managed from day one. There is no import workflow — the stack creates every resource it needs.
 
-### 1. Collect the identifiers
+### Joining an already-bootstrapped dev account
 
-From the AWS console (or CLI) in the dev account, note:
-
-- **User pool ID** (format `<region>_XXXXXXXXX`, e.g. `eu-west-2_AbC123XyZ`)
-- **App client ID** (26-char alphanumeric, e.g. `6aXXX...`)
-- **Hosted-UI domain prefix** (the 8-char random string in `<prefix>.auth.<region>.amazoncognito.com`)
-
-The seed user identifiers are their email addresses (because the pool uses `username_attributes = ["email"]`).
-
-### 2. Bootstrap the backend if needed
-
-If the dev state bucket does not exist yet, create it once:
+If a colleague has already run `make apply` against the shared dev account, there is nothing for you to create:
 
 ```bash
 cd deploy/providers/AWS/dev
-make create-backend
+make init          # pulls providers, wires up the shared S3 backend
+make plan          # should report "No changes"
+terraform output   # Cognito pool ID, app client ID, domain, SES sender ARN
 ```
 
-This uses the shared helper script at `../scripts/create-backend.sh` to create the bucket. Terraform then creates the backend object at `flip/dev/terraform.tfstate` on the first state write.
+Copy the outputs into your `.env.development` (`CognitoUserPoolId`, `CognitoAppClientId`, `CognitoDomain`) and you are ready to run the local Docker Compose stack against real Cognito.
 
-### 3. `make init`
+### Bootstrapping a fresh dev account
+
+Use this the first time the dev account is provisioned, or after a clean-slate reset:
 
 ```bash
 cd deploy/providers/AWS/dev
+make create-backend  # creates the S3 state bucket (idempotent; safe to re-run)
 make init
-```
-
-This downloads the providers and wires up the S3 backend at key `flip/dev/terraform.tfstate`.
-
-### 4. `terraform import` each resource
-
-Run these from `deploy/providers/AWS/dev/` (direct `terraform` calls; no Makefile wrapper for `import`):
-
-```bash
-cd deploy/providers/AWS/dev
-
-# User pool
-terraform import module.cognito.aws_cognito_user_pool.flip_user_pool <user_pool_id>
-
-# Hosted-UI domain (import by the domain prefix string)
-terraform import module.cognito.aws_cognito_user_pool_domain.main <domain_prefix>
-
-# App client: import by "<user_pool_id>/<client_id>"
-terraform import module.cognito.aws_cognito_user_pool_client.client <user_pool_id>/<client_id>
-
-# Seed admin user: import by "<user_pool_id>/<username>"
-terraform import module.cognito.aws_cognito_user.admin_user <user_pool_id>/<admin_email>
-
-# Seed researcher user (skip if not present in the manual pool)
-terraform import 'module.cognito.aws_cognito_user.researcher_user[0]' <user_pool_id>/<researcher_email>
-```
-
-The `random_string.cognito_domain` resource has no AWS analogue to import from — it just records the eight-character prefix Terraform generated. After importing `aws_cognito_user_pool_domain.main`, run a plan; Terraform will propose creating the `random_string` to match the imported domain value, which is a no-op at the AWS level. Accept it.
-
-### 5. Import the SES resources
-
-```bash
-# Verified sender identity: import by the email address
-terraform import module.ses.aws_ses_email_identity.flip_sender <sender_email>
-
-# Transactional templates: import by template name
-terraform import module.ses.aws_ses_template.flip_access_request flip-access-request
-terraform import module.ses.aws_ses_template.flip_xnat_credentials flip-xnat-credentials
-terraform import module.ses.aws_ses_template.flip_xnat_added_to_project flip-xnat-added-to-project
-```
-
-### 6. `make plan` and close the loop
-
-```bash
-cd deploy/providers/AWS/dev
-make plan
-```
-
-The plan output should show **no destructive changes**. Likely diffs, all safe to apply in-place:
-
-- **In-place updates** (`~` prefix): expected if attributes drifted — for example, MFA mode if the manual pool predates the MFA commit. Accept with `make apply`.
-- **Destroy + recreate** (`-/+` prefix): an immutable attribute disagrees with the module. Investigate before applying; do NOT `apply` unless intentional.
-- **Additions** (`+` prefix) of `random_string.cognito_domain`: expected once.
-
-Once the plan is clean:
-
-```bash
+make plan            # should only propose additions
 make apply
 ```
+
+Post-apply:
+
+1. **SES sender verification** — AWS emails `SES_VERIFIED_EMAIL` a verification link. Click it. Until you do, SES will refuse to send.
+2. **Cognito seed users** — Cognito emails the admin (and researcher, if configured) an invite with a temporary password. First sign-in forces a password change.
+3. **Read the outputs** — `terraform output` gives the IDs you need for `.env.development`.
+
+### Rebuilding from scratch
+
+To wipe the dev stack and start over: `terraform destroy` is refused by the `prevent_destroy` lifecycle blocks on the shared Cognito / SES modules (those blocks exist to protect the prod pool, which uses the same module). Instead:
+
+1. Delete the resources manually in the AWS console / CLI (user pool domain, user pool, SES templates, SES identity).
+2. `terraform state rm` each resource from the dev state, or delete the state object at `s3://$FLIP_TFSTATE_BUCKET_NAME/flip/dev/terraform.tfstate` for a full reset.
+3. Re-run the **Bootstrapping a fresh dev account** flow above.
 
 ## Day-to-day use
 
@@ -140,10 +93,7 @@ cd deploy/providers/AWS/dev
 make plan       # preview changes
 make apply      # deploy
 make status     # list resources under terraform management
-make destroy    # NB: prevent_destroy will refuse this
 ```
-
-To force a destroy (e.g. to rebuild the dev pool from scratch), remove the `prevent_destroy` lifecycle blocks in the shared modules **on a throwaway branch**, or `terraform state rm` each resource and delete them manually in the console. Do not remove `prevent_destroy` on the main branch — it's the last line of defence for the prod pool, which uses the same module.
 
 ## Relationship to the prod/stag stack
 
