@@ -188,9 +188,8 @@ forward-trust: ## SSM port-forward all Trust web UIs and API swagger docs (Ctrl+
 .PHONY: ssh-config
 ssh-config: check-ssm-ready ## Update local .ssh/config for flip contexts (requires SSM plugin)
 	@echo "⚙️  Configure .ssh/config for flip context..."
-	@set -x AWS_PROFILE ${AWS_PROFILE}
-	@terraform output
-	@uv run ./update_ssm_ssh_config.py --aws-profile ${AWS_PROFILE} || true
+	@AWS_PROFILE=${AWS_PROFILE} terraform output
+	@AWS_PROFILE=${AWS_PROFILE} uv run ./update_ssm_ssh_config.py --aws-profile ${AWS_PROFILE}
 	@echo "✅ .ssh/config updated!"
 
 .PHONY: update-env
@@ -244,7 +243,7 @@ LOCAL_TRUST_SSH_USER ?= ubuntu
 LOCAL_TRUST_NAME ?= Trust_2
 
 .PHONY: deploy-trust
-deploy-trust: update-env ## Deploy trust relationships after central hub is deployed
+deploy-trust: ssh-config update-env ## Deploy trust relationships after central hub is deployed
 	@echo "🔍 Checking trust images (tag: $(DOCKER_TAG))..."
 	@missing=false; \
 	for image in $(TRUST_IMAGES); do \
@@ -260,11 +259,6 @@ deploy-trust: update-env ## Deploy trust relationships after central hub is depl
 	else \
 	  echo "   ✅ All trust images found."; \
 	fi
-	@echo "⚙️  Configure .ssh/config for flip context..."
-	@set -x AWS_PROFILE ${AWS_PROFILE}
-	@terraform output
-	@uv run ./update_ssh_config.py --aws-profile ${AWS_PROFILE} || true
-	@echo "✅ .ssh/config updated!"
 	@echo "👷 Create docker context if not exists, pointing to flip-trust to ssh://flip-trust"
 	@docker context create flip-trust --docker "host=ssh://flip-trust" || echo "   Context 'flip-trust' already exists"
 	@echo "🔄 Switching to flip-trust Docker context..."

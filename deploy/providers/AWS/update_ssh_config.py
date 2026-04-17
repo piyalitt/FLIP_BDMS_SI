@@ -196,33 +196,6 @@ def update_hostname_in_section(section: str, new_hostname: str) -> str:
     return new_section
 
 
-def add_ssh_host_key(hostname: str) -> bool:
-    """Add SSH host key to known_hosts.
-
-    Args:
-        hostname (str): Hostname or IP address to scan
-
-    Returns:
-        bool: True if the host key was added, False otherwise
-    """
-    try:
-        known_hosts = Path.home() / ".ssh" / "known_hosts"
-        result = subprocess.run(
-            ["ssh-keyscan", "-H", hostname],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=10,
-        )
-        if result.stdout:
-            with open(known_hosts, "a") as f:
-                f.write(result.stdout)
-            return True
-        return False
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
-        return False
-
-
 @click.command()
 @click.option(
     "--ssh-config",
