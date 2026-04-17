@@ -24,6 +24,7 @@ export $(shell sed 's/=.*//' $(MAIN_ENV_FILE))
 endif
 
 LOCK ?= true
+PRESERVE_VPC ?= true
 
 # Export PROD so child processes (e.g. check_status.py) can determine the environment
 export PROD
@@ -381,22 +382,22 @@ check:
 
 
 .PHONY: destroy
-destroy: ## Destroy ephemeral infrastructure (EC2, RDS, VPC) - preserves Cognito, Secrets, S3
+destroy: ## Destroy ephemeral infrastructure (EC2, RDS, optional VPC) - preserves Cognito, Secrets, S3
 	@echo ""
 	@echo "⚠️  SELECTIVE DESTRUCTION - PRESERVING:"
 	@echo "   ✓ Cognito user pool and identities"
 	@echo "   ✓ AWS Secrets Manager (FLIP_API secret)"
 	@echo "   ✓ S3 buckets (FLIP + AI Centre data)"
 	@echo "   ✓ ACM certificates and Route53 records"
-ifeq ($(PROD),true)
-	@echo "   ✓ VPC (Transit Gateway attachment - production)"
+ifneq ($(filter true,$(PROD) $(PRESERVE_VPC)),)
+	@echo "   ✓ VPC (preserved)"
 endif
 	@echo ""
 	@echo "🗑️  DESTROYING:"
 	@echo "   • EC2 instances (flip, trust)"
 	@echo "   • RDS database (PostgreSQL)"
 	@echo "   • Security groups"
-ifneq ($(PROD),true)
+ifeq ($(filter true,$(PROD) $(PRESERVE_VPC)),)
 	@echo "   • VPC"
 endif
 	@echo "   • ALB/NLB load balancers"
@@ -405,7 +406,7 @@ endif
 	@echo ""
 	@bash -c 'read -p "Type '\''yes'\'' to confirm destruction: " confirm && [ "$$confirm" = "yes" ] || { echo "Aborted."; exit 1; }'
 	@echo ""
-	@bash scripts/destroy-selective.sh
+	@PRESERVE_VPC=$(PRESERVE_VPC) bash scripts/destroy-selective.sh
 
 
 .PHONY: help
