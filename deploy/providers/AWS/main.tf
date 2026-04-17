@@ -531,10 +531,6 @@ output "FlServerRawNlbDns" {
 ############################
 # SES Email Templates
 ############################
-#
-# Resource definitions now live in ./modules/ses. `terraform state mv` the
-# existing four resources into the module before the first apply — see the
-# module's header comment for the list.
 
 module "ses" {
   source = "./modules/ses"

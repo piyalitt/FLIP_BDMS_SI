@@ -173,8 +173,6 @@ deploy/providers/AWS/
 └── dev/                        # dev-account root (calls cognito + ses modules)
 ```
 
-If you introduce the Cognito or SES modules to a stack that was previously using inline resources (relevant the first time this code is applied against the existing prod state), you **must** move each resource in state before the next apply — see the header comment in `modules/cognito/main.tf` and `modules/ses/main.tf` for the exact `terraform state mv` commands. Without them, Terraform will propose destroying the pool, which `prevent_destroy` correctly refuses.
-
 ### Destroy Infrastructure
 
 The destroy process preserves critical resources (Cognito, Secrets, S3) while safely removing infrastructure:
