@@ -102,9 +102,7 @@ def _replace_or_append_host_block(content: str, alias: str, new_block: str) -> s
     # (?:^# Managed by FLIP.*\n)? - optional comment line
     # ^Host\s+{alias}\n - Host line
     # (?:^[ \t][^\n]*\n)* - indented config lines
-    host_regex = re.compile(
-        rf"(?m)(?:^# Managed by FLIP[^\n]*\n)?^Host\s+{re.escape(alias)}\n(?:^[ \t][^\n]*\n)*"
-    )
+    host_regex = re.compile(rf"(?m)(?:^# Managed by FLIP[^\n]*\n)?^Host\s+{re.escape(alias)}\n(?:^[ \t][^\n]*\n)*")
     if host_regex.search(content):
         return host_regex.sub(new_block, content, count=1)
     suffix = "" if content.endswith("\n") else "\n"
