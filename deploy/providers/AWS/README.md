@@ -96,25 +96,28 @@ For debugging or selective deployment, run individual steps:
 # 1. Login to AWS
 make aws-login
 
-# 2. Initialize Terraform (creates/configures S3 backend)
+# 2. Bootstrap the Terraform backend bucket once, if needed
+make create-backend
+
+# 3. Initialize Terraform (uses the configured S3 backend)
 make init
 
-# 3. Import existing resources (prevents replacement errors)
+# 4. Import existing resources (prevents replacement errors)
 make import-all
 
-# 4. Plan changes
+# 5. Plan changes
 make plan
 
-# 5. Apply infrastructure
+# 6. Apply infrastructure
 make apply
 
-# 6. Configure SSH access
+# 7. Configure SSH access
 make ssh-config
 
-# 7. Setup EC2 instances with Ansible
+# 8. Setup EC2 instances with Ansible
 make ansible-init
 
-# 8. Deploy services
+# 9. Deploy services
 make deploy-centralhub
 make deploy-trust
 
@@ -140,6 +143,37 @@ The `PROD` variable determines which environment files are loaded:
 
 - `PROD=stag` → Uses `.env.stag`, `flip-api/.env.stag`
 - `PROD=true` → Uses `.env.production`, `flip-api/.env.production`
+
+**Dev account (Cognito + SES only):**
+
+The dev AWS account runs only the services that cannot reasonably run locally (Cognito for auth, SES for email). A separate, minimal Terraform root lives in [`dev/`](./dev/README.md) and calls the same `modules/cognito` and `modules/ses` as this stack, so a change to either service lands in both environments from one place. The dev stack reuses `.env.development` — the same env file the local Docker Compose dev stack consumes — so there is no extra file to maintain.
+
+The dev stack has its own Makefile; drive it from the `dev/` directory:
+
+```bash
+cd deploy/providers/AWS/dev
+make create-backend  # one-time, if the backend bucket needs bootstrapping
+make init            # one-time, or after backend config changes
+make plan
+make apply
+```
+
+See [`dev/README.md`](./dev/README.md) for the one-time `terraform import` workflow that pulls the manually-created dev Cognito pool into state.
+
+### Terraform module layout
+
+```
+deploy/providers/AWS/
+├── main.tf / services.tf       # prod + stag stack root
+├── modules/
+│   ├── cognito/                # shared: pool, domain, client, seed users
+│   ├── ses/                    # shared: sender identity, transactional templates
+│   ├── secgroup/               # shared: security-group wrapper
+│   └── trust_ec2/              # prod/stag only
+└── dev/                        # dev-account root (calls cognito + ses modules)
+```
+
+If you introduce the Cognito or SES modules to a stack that was previously using inline resources (relevant the first time this code is applied against the existing prod state), you **must** move each resource in state before the next apply — see the header comment in `modules/cognito/main.tf` and `modules/ses/main.tf` for the exact `terraform state mv` commands. Without them, Terraform will propose destroying the pool, which `prevent_destroy` correctly refuses.
 
 ### Destroy Infrastructure
 

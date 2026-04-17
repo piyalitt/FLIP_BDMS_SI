@@ -99,7 +99,7 @@ prettier:
 .PHONY: create-backend
 create-backend: ## Create Terraform backend S3 bucket - Only run once
 	@echo "🚀 Creating Terraform backend resources..."
-	@./create_backend.sh
+	@TFSTATE_BUCKET_NAME="$(FLIP_TFSTATE_BUCKET_NAME)" TFSTATE_KEY="flip/terraform.tfstate" TFSTATE_REGION="$(AWS_REGION)" ./scripts/create-backend.sh
 
 .PHONY: aws-login
 aws-login: ## Login to AWS SSO (required before terraform operations)
@@ -465,3 +465,4 @@ full-deploy-stag-hybrid: ## Full staging hybrid deployment including local trust
 	echo "✅ Hybrid staging deployment complete." && \
 	echo "➡️  Final manual step: start the local trust stack on the trust host:" && \
 	echo "   cd ../../../trust && env PROD=stag make up-local-trust"
+
