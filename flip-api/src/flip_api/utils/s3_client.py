@@ -42,8 +42,7 @@ class S3Client:
 
     def __init__(self):
         """Initialize S3 client with AWS credentials."""
-        settings = get_settings()
-        self.client = boto3.client("s3", region_name=settings.AWS_REGION)
+        self.client = boto3.client("s3", region_name=get_settings().AWS_REGION)
 
     def get_presigned_url(self, s3_path: str, expiration: int = 3600) -> str:
         """

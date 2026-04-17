@@ -10,8 +10,6 @@
 # limitations under the License.
 #
 
-from uuid import UUID
-
 from sqlmodel import Session, select
 
 from flip_api.db.models.user_models import Permission, PermissionRef
@@ -27,7 +25,7 @@ def seed_permissions(session: Session) -> list[str]:
         if not existing_permission:
             # Create new permission
             new_permission = Permission(
-                id=UUID(perm_data.value), permission_name=perm_data.name, permission_description=perm_data.name
+                id=perm_data.value, permission_name=perm_data.name, permission_description=perm_data.name
             )
             session.add(new_permission)
 
