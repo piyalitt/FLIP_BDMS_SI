@@ -10,6 +10,7 @@
         "skipLibCheck": true,
         "esModuleInterop": true,
         "allowSyntheticDefaultImports": true,
+        "baseUrl": ".",
         "resolveJsonModule": true,
         "types": [
             "node",
