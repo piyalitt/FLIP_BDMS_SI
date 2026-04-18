@@ -9,7 +9,7 @@ import { defineConfig, loadEnv } from "vite";
 import Pages from "vite-plugin-pages";
 import progress from "vite-plugin-progress";
 import Inspector from "vite-plugin-vue-inspector";
-import Layouts from "vite-plugin-vue-layouts";
+import Layouts from "vite-plugin-vue-layouts-next";
 import svgLoader from "vite-svg-loader";
 
 // https://vitejs.dev/config/
