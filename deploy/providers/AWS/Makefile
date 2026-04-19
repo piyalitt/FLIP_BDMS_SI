@@ -258,7 +258,7 @@ deploy-ui: ## Build flip-ui from the working tree and deploy it to S3 + invalida
 	@# on pre-existing TypeScript errors in the repo — tracked separately.
 	@cd ../../../flip-ui && npm ci && npm run build:deploy
 	@echo "🔧 Generating window.js from $(MAIN_ENV_FILE)..."
-	@cd ../../../flip-ui && bash scripts/generate-window-js.sh > dist/js/window.js
+	@cd ../../../flip-ui && sh scripts/generate-window-js.sh > dist/js/window.js
 	@echo "📦 Syncing static assets to s3://$(FLIP_UI_BUCKET_NAME)/ ..."
 	@# Hashed bundles are content-addressed and safe to cache forever.
 	@AWS_PROFILE=$(AWS_PROFILE) aws s3 sync ../../../flip-ui/dist/ s3://$(FLIP_UI_BUCKET_NAME)/ \
