@@ -153,21 +153,21 @@ The Makefile guards refuse to apply unless `AWS_PROFILE` matches the expected pr
 sso_session = FLIP
 sso_account_id = <prod-sso-account-id>
 sso_role_name = <sso-role-name>
-region = eu-west-2
+region = <aws-region>
 output = json
 
 [profile stag]
 sso_session = FLIP
 sso_account_id = <stag-sso-account-id>
 sso_role_name = <sso-role-name>
-region = eu-west-2
+region = <aws-region>
 output = json
 
 [profile dev]
 sso_session = FLIP
 sso_account_id = <dev-sso-account-id>
 sso_role_name = <sso-role-name>
-region = eu-west-2
+region = <aws-region>
 output = json
 ```
 
@@ -570,7 +570,7 @@ Before testing emails:
 
 1. **Verify SES Email** in AWS Console (SES → Configuration → Identities)
 2. **Sandbox Mode** (default): can only send to verified email addresses. Request production access in SES console.
-3. **Check Send Quota**: `aws ses get-account-sending-enabled --region eu-west-2`
+3. **Check Send Quota**: `aws ses get-account-sending-enabled --region <aws-region>`
 
 ### Troubleshooting Email Issues
 

@@ -80,7 +80,10 @@ create-backend:
 	@TFSTATE_BUCKET_NAME="$(FLIP_TFSTATE_BUCKET_NAME)" TFSTATE_KEY="flip/dev/terraform.tfstate" TFSTATE_REGION="$(AWS_REGION)" ../scripts/create-backend.sh
 
 init:
-	terraform init -backend-config="bucket=$(FLIP_TFSTATE_BUCKET_NAME)" -reconfigure
+	terraform init \
+		-backend-config="bucket=$(FLIP_TFSTATE_BUCKET_NAME)" \
+		-backend-config="region=$(AWS_REGION)" \
+		-reconfigure
 
 validate:
 	terraform validate

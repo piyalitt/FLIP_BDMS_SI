@@ -127,7 +127,11 @@ init: ## Initialize Terraform configuration
 	@echo "🔧 Initializing Terraform..."
 	@echo "Using AWS profile: $(AWS_PROFILE)"
 	@echo "Using backend bucket: $(FLIP_TFSTATE_BUCKET_NAME)"
-	@terraform init -backend-config="bucket=$(FLIP_TFSTATE_BUCKET_NAME)" -reconfigure
+	@echo "Using AWS region: $(AWS_REGION)"
+	@terraform init \
+		-backend-config="bucket=$(FLIP_TFSTATE_BUCKET_NAME)" \
+		-backend-config="region=$(AWS_REGION)" \
+		-reconfigure
 
 
 .PHONY: import-persistent

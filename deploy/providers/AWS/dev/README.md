@@ -18,7 +18,7 @@ The Cognito and SES resource definitions are shared with the prod stack via the 
    sso_session = FLIP
    sso_account_id = <dev-sso-account-id>
    sso_role_name = <sso-role-name>
-   region = eu-west-2
+   region = <aws-region>
    output = json
    ```
 
