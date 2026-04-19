@@ -30,7 +30,7 @@ After:
 
 ```text
 users  → stag.flip.aicentre.co.uk   → CloudFront → S3 (static UI bundle)
-users  → stag.flip.aicentre.co.uk/api/... → CloudFront → ALB (HTTP:8080, api-listener) → flip-api
+users  → stag.flip.aicentre.co.uk/api/... → CloudFront → ALB (HTTPS:443) → flip-api
 trusts → stag.flip.aicentre.co.uk/api/... → same as above (URL unchanged, CloudFront transparent)
 ```
 
@@ -117,7 +117,7 @@ Builds the UI from the working tree, regenerates `window.js` from `.env.stag` va
 Open `https://stag.flip.aicentre.co.uk/` in a browser. Expect:
 
 - UI loads, Cognito login works.
-- Deep links like `/projects/<id>` return the SPA (CloudFront 403/404 → `/index.html` rewrite).
+- Deep links like `/projects/<id>` return the SPA (a CloudFront Function rewrites non-asset URIs to `/index.html` at viewer-request).
 - `curl https://stag.flip.aicentre.co.uk/api/health` returns `{"status":"ok","message":"flip is running"}`.
 - A trust host's poller logs show successful task polls against the canonical URL.
 
@@ -126,12 +126,6 @@ If any of these fail:
 - Check CloudFront distribution status: `aws cloudfront get-distribution --id <id> --query 'Distribution.Status'` — should be `Deployed`.
 - Check CloudFront access logs in `s3://flip-cf-logs-<subdomain>/standard-logs/` (delivery has ~5–15 min latency). Field `x-edge-result-type` + `x-edge-detailed-result-type` identify the root cause of 5xx responses.
 - Rollback: there is no built-in rollback flag in `main`. To revert, you'd need to restore the ALB UI target group and flip the A-record manually via AWS console, then re-import state. Avoid this unless absolutely necessary — forward-fix is almost always faster.
-
-## Known issue: CloudFront → ALB `/api/*` origin is HTTP on port 8080
-
-Prod's `/api/*` CloudFront behavior currently uses **HTTP on port 8080** to reach the ALB `api-listener`, not HTTPS on 443. CloudFront-to-ALB TLS handshake consistently produced 502s despite the ALB serving TLS 1.2 cleanly to every other client. HTTP is acceptable interim state because the hop is on AWS's global network; traffic between users and CloudFront is still HTTPS.
-
-Follow-up work (tracked in `cloudfront.tf` comment on `custom_origin_config`): inspect `x-edge-detailed-result-type` in the newly-enabled access logs, identify the handshake failure cause, restore `origin_protocol_policy = "https-only"` on port 443.
 
 ## Prod migration notes (for reference, remove after stag completes)
 

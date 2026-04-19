@@ -209,6 +209,26 @@ resource "aws_s3_bucket_lifecycle_configuration" "cloudfront_logs" {
   }
 }
 
+resource "aws_s3_bucket_server_side_encryption_configuration" "cloudfront_logs" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# CloudFront log delivery uses canonical-user ACL grants, not AllUsers/
+# AuthenticatedUsers, so blocking public ACLs/policies is safe here.
+resource "aws_s3_bucket_public_access_block" "cloudfront_logs" {
+  bucket                  = aws_s3_bucket.cloudfront_logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 ############################
 # S3 bucket for UI assets
 ############################
@@ -263,13 +283,36 @@ resource "aws_cloudfront_origin_access_control" "flip_ui" {
   signing_protocol                  = "sigv4"
 }
 
+# SPA deep-link rewriter. Runs at viewer-request on the default (S3)
+# behavior only — never on /api/* — so ALB 403/404 responses keep
+# their real status codes. Replaces a pair of distribution-level
+# custom_error_response blocks that masked API errors as 200 index.html.
+resource "aws_cloudfront_function" "spa_rewrite" {
+  name    = "flip-ui-spa-rewrite-${replace(var.flip_alb_subdomain, ".", "-")}"
+  runtime = "cloudfront-js-2.0"
+  comment = "Rewrite SPA deep links (non-asset) to /index.html"
+  publish = true
+  code    = <<-EOT
+    function handler(event) {
+      var uri = event.request.uri;
+      // Paths with an extension are real assets (/js/app.abc.js, /favicon.ico).
+      var lastSlash = uri.lastIndexOf('/');
+      var lastDot = uri.lastIndexOf('.');
+      if (lastDot > lastSlash) {
+        return event.request;
+      }
+      event.request.uri = '/index.html';
+      return event.request;
+    }
+  EOT
+}
+
 # Managed CloudFront policies (stable AWS-wide IDs; no region dependency).
 # See https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html
 locals {
-  cloudfront_policy_caching_optimized     = "658327ea-f89d-4fab-a63d-7e88639e58f6"
-  cloudfront_policy_caching_disabled      = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-  cloudfront_policy_all_viewer            = "216adef6-5c7f-47e4-b989-5492eafa07d3"
-  cloudfront_policy_cors_s3_response_hdrs = "60669652-455b-4ae9-85a4-c4c02393f86c"
+  cloudfront_policy_caching_optimized = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+  cloudfront_policy_caching_disabled  = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+  cloudfront_policy_all_viewer        = "216adef6-5c7f-47e4-b989-5492eafa07d3"
 }
 
 resource "aws_cloudfront_distribution" "flip_ui" {
@@ -306,6 +349,14 @@ resource "aws_cloudfront_distribution" "flip_ui" {
     cached_methods         = ["GET", "HEAD"]
     compress               = true
     cache_policy_id        = local.cloudfront_policy_caching_optimized
+
+    # Vue router uses createWebHistory — deep links like /projects/42 hit
+    # S3 as missing objects. The function rewrites them to /index.html at
+    # the edge. /api/* has its own behavior and never invokes this.
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.spa_rewrite.arn
+    }
   }
 
   ordered_cache_behavior {
@@ -317,22 +368,6 @@ resource "aws_cloudfront_distribution" "flip_ui" {
     compress                 = true
     cache_policy_id          = local.cloudfront_policy_caching_disabled
     origin_request_policy_id = local.cloudfront_policy_all_viewer
-  }
-
-  # SPA fallback: Vue router uses createWebHistory, so deep links like
-  # /projects/42 hit S3 as real paths and need to return /index.html.
-  custom_error_response {
-    error_code            = 403
-    response_code         = 200
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 0
-  }
-
-  custom_error_response {
-    error_code            = 404
-    response_code         = 200
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 0
   }
 
   restrictions {
