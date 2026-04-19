@@ -101,3 +101,41 @@ module "cognito" {
   seed_user_password = var.ADMIN_USER_PASSWORD
   templates_dir      = "${path.module}/templates/cognito"
 }
+
+# State migration: Cognito resources used to live at the root of this stack and
+# now live inside module.cognito. These `moved` blocks let any state still on
+# the old root addresses (or any fresh import that lands at the root) self-heal
+# on the next plan — no manual `terraform state mv` step required. They are
+# no-ops where state is already aligned. Safe to remove once every live state
+# file has been migrated.
+moved {
+  from = aws_cognito_user_pool.flip_user_pool
+  to   = module.cognito.aws_cognito_user_pool.flip_user_pool
+}
+
+moved {
+  from = random_string.cognito_domain
+  to   = module.cognito.random_string.cognito_domain
+}
+
+moved {
+  from = aws_cognito_user_pool_domain.main
+  to   = module.cognito.aws_cognito_user_pool_domain.main
+}
+
+moved {
+  from = aws_cognito_user_pool_client.client
+  to   = module.cognito.aws_cognito_user_pool_client.client
+}
+
+moved {
+  from = aws_cognito_user.admin_user
+  to   = module.cognito.aws_cognito_user.admin_user
+}
+
+# researcher_user is wrapped in `count = var.researcher_email == "" ? 0 : 1`
+# inside the module, so the destination carries the [0] index.
+moved {
+  from = aws_cognito_user.researcher_user
+  to   = module.cognito.aws_cognito_user.researcher_user[0]
+}

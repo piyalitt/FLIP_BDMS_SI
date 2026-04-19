@@ -28,16 +28,22 @@ LOCK ?= true
 # Export PROD so child processes (e.g. check_status.py) can determine the environment
 export PROD
 
-# If PROD=true, check that the AWS_PROFILE=FlipDeveloperAccess-046651569599
-# else we're in staging, check AWS_PROFILE=FlipDeveloperAccess-080369786334
-# TODO remove AWS account numbers from Makefile and use a more robust method of ensuring correct AWS account is used
+# Logical AWS profile names. Defaults match the short-alias pattern recommended
+# in deploy/providers/AWS/README.md (operators add `[profile prod]` / `[profile stag]`
+# blocks to their ~/.aws/config that point at the FLIP SSO accounts). Override via
+# the env file or on the command line if your local profile names differ.
+PROD_AWS_PROFILE ?= prod
+STAG_AWS_PROFILE ?= stag
+
+# Refuse to operate against an unintended AWS account. Profile name is the safety
+# guard because Make has no easy way to read the account ID without an `aws` call.
 ifeq ($(PROD),true)
-ifneq ($(AWS_PROFILE),FlipDeveloperAccess-046651569599)
-$(error "For production deployments, AWS_PROFILE must be set to 'FlipDeveloperAccess-046651569599'")
+ifneq ($(AWS_PROFILE),$(PROD_AWS_PROFILE))
+$(error "For production deployments, AWS_PROFILE must be set to '$(PROD_AWS_PROFILE)' (override via PROD_AWS_PROFILE)")
 endif
 else
-ifneq ($(AWS_PROFILE),FlipDeveloperAccess-080369786334)
-$(error "For staging deployments, AWS_PROFILE must be set to 'FlipDeveloperAccess-080369786334'")
+ifneq ($(AWS_PROFILE),$(STAG_AWS_PROFILE))
+$(error "For staging deployments, AWS_PROFILE must be set to '$(STAG_AWS_PROFILE)' (override via STAG_AWS_PROFILE)")
 endif
 endif
 

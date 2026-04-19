@@ -103,7 +103,7 @@ make create-backend
 make init
 
 # 4. Import existing resources (prevents replacement errors)
-make import-all
+make import-persistent
 
 # 5. Plan changes
 make plan
@@ -144,6 +144,37 @@ The `PROD` variable determines which environment files are loaded:
 - `PROD=stag` → Uses `.env.stag`, `flip-api/.env.stag`
 - `PROD=true` → Uses `.env.production`, `flip-api/.env.production`
 
+#### AWS profile aliases
+
+The Makefile guards refuse to apply unless `AWS_PROFILE` matches the expected profile for the chosen environment. Defaults are the short logical names `prod`, `stag`, and `dev` — add these aliases to `~/.aws/config` so commands like `AWS_PROFILE=stag make plan` work without thinking about account numbers:
+
+```ini
+[profile prod]
+sso_session = FLIP
+sso_account_id = <prod-sso-account-id>
+sso_role_name = <sso-role-name>
+region = eu-west-2
+output = json
+
+[profile stag]
+sso_session = FLIP
+sso_account_id = <stag-sso-account-id>
+sso_role_name = <sso-role-name>
+region = eu-west-2
+output = json
+
+[profile dev]
+sso_session = FLIP
+sso_account_id = <dev-sso-account-id>
+sso_role_name = <sso-role-name>
+region = eu-west-2
+output = json
+```
+
+Replace each `<…>` with the matching value from the FLIP AWS account directory (kept out of the public repo).
+
+If your local profile names differ, override the defaults via `PROD_AWS_PROFILE`, `STAG_AWS_PROFILE`, or `DEV_AWS_PROFILE` (in your env file or on the make command line).
+
 **Dev account (Cognito + SES only):**
 
 The dev AWS account runs only the services that cannot reasonably run locally (Cognito for auth, SES for email). A separate, minimal Terraform root lives in [`dev/`](./dev/README.md) and calls the same `modules/cognito` and `modules/ses` as this stack, so a change to either service lands in both environments from one place. The dev stack reuses `.env.development` — the same env file the local Docker Compose dev stack consumes — so there is no extra file to maintain.
@@ -172,6 +203,8 @@ deploy/providers/AWS/
 │   └── trust_ec2/              # prod/stag only
 └── dev/                        # dev-account root (calls cognito + ses modules)
 ```
+
+The Cognito and SES resources used to live at the root of the prod/stag stack. `services.tf` and `main.tf` ship `moved` blocks that re-anchor the old root addresses onto the new `module.cognito.*` / `module.ses.*` paths, so any state still on the old layout self-heals on the next plan — no manual `terraform state mv` needed. `scripts/import-resources.sh` already targets the module addresses, so a fresh import lands in the right place too.
 
 ### Destroy Infrastructure
 

@@ -541,6 +541,29 @@ module "ses" {
   # names (flip-access-request etc.) and this refactor is a pure state-mv.
 }
 
+# State migration: SES resources used to live at the root of this stack and now
+# live inside module.ses. See the matching `moved` block in services.tf for the
+# rationale. Safe to remove once every live state file has been migrated.
+moved {
+  from = aws_ses_email_identity.flip_sender
+  to   = module.ses.aws_ses_email_identity.flip_sender
+}
+
+moved {
+  from = aws_ses_template.flip_access_request
+  to   = module.ses.aws_ses_template.flip_access_request
+}
+
+moved {
+  from = aws_ses_template.flip_xnat_credentials
+  to   = module.ses.aws_ses_template.flip_xnat_credentials
+}
+
+moved {
+  from = aws_ses_template.flip_xnat_added_to_project
+  to   = module.ses.aws_ses_template.flip_xnat_added_to_project
+}
+
 
 ###################
 # Trust

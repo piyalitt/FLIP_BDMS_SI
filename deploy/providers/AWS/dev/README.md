@@ -11,7 +11,20 @@ The Cognito and SES resource definitions are shared with the prod stack via the 
 
 ## Prerequisites
 
-1. An AWS SSO profile for the FLIP dev AWS account configured via `aws configure sso`. The profile name must match the `AWS_PROFILE` value in your `.env.development`.
+1. An AWS SSO profile for the FLIP dev AWS account configured via `aws configure sso`. By default the Makefile expects `AWS_PROFILE=dev` and refuses to run if it sees the prod or stag profile. Add a short alias to `~/.aws/config`:
+
+   ```ini
+   [profile dev]
+   sso_session = FLIP
+   sso_account_id = <dev-sso-account-id>
+   sso_role_name = <sso-role-name>
+   region = eu-west-2
+   output = json
+   ```
+
+   Replace each `<…>` with the value from the FLIP AWS account directory.
+
+   If your local profile names differ, override `DEV_AWS_PROFILE` (and/or `PROD_AWS_PROFILE` / `STAG_AWS_PROFILE` for the refusal guard) in `.env.development` or on the make command line.
 2. A Terraform state bucket reachable from the dev account. The state **key** is hard-coded to `flip/dev/terraform.tfstate`; the bucket name comes from `FLIP_TFSTATE_BUCKET_NAME` in `.env.development`. If you need to create/bootstrap that bucket, run `make create-backend` from this directory.
 3. A populated `.env.development` at the repo root. This is the same file the local Docker Compose dev stack uses — no second env file to maintain.
 
