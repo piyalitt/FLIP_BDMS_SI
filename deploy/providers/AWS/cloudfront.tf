@@ -219,8 +219,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "cloudfront_logs" 
   }
 }
 
-# CloudFront log delivery uses canonical-user ACL grants, not AllUsers/
-# AuthenticatedUsers, so blocking public ACLs/policies is safe here.
+# CloudFront log delivery uses either canonical-user ACL grants (legacy —
+# what this bucket uses today) or an AWS service-principal bucket policy.
+# Neither is "public" under PAB semantics, so blocking public ACLs and
+# policies is safe regardless of which delivery mechanism is in use.
 resource "aws_s3_bucket_public_access_block" "cloudfront_logs" {
   bucket                  = aws_s3_bucket.cloudfront_logs.id
   block_public_acls       = true
@@ -283,22 +285,25 @@ resource "aws_cloudfront_origin_access_control" "flip_ui" {
   signing_protocol                  = "sigv4"
 }
 
-# SPA deep-link rewriter. Runs at viewer-request on the default (S3)
-# behavior only — never on /api/* — so ALB 403/404 responses keep
-# their real status codes. Replaces a pair of distribution-level
-# custom_error_response blocks that masked API errors as 200 index.html.
+# SPA deep-link rewriter. Attached to the default (S3) cache behavior
+# only, so /api/* responses keep their real ALB status codes.
+# IMPORTANT: do not add distribution-level custom_error_response blocks
+# for 403/404 — they are inherited by /api/* and would mask real error
+# codes as 200 index.html (the bug this function exists to avoid).
 resource "aws_cloudfront_function" "spa_rewrite" {
-  name    = "flip-ui-spa-rewrite-${replace(var.flip_alb_subdomain, ".", "-")}"
+  # CloudFront Function names are [A-Za-z0-9-_]{1,64}; strip any other
+  # character the subdomain might ever contain.
+  name    = "flip-ui-spa-rewrite-${replace(var.flip_alb_subdomain, "/[^a-zA-Z0-9]/", "-")}"
   runtime = "cloudfront-js-2.0"
   comment = "Rewrite SPA deep links (non-asset) to /index.html"
   publish = true
   code    = <<-EOT
     function handler(event) {
       var uri = event.request.uri;
-      // Paths with an extension are real assets (/js/app.abc.js, /favicon.ico).
-      var lastSlash = uri.lastIndexOf('/');
-      var lastDot = uri.lastIndexOf('.');
-      if (lastDot > lastSlash) {
+      // Known asset extensions pass through so missing assets 404
+      // naturally. Using an allowlist (vs. "any path containing a dot")
+      // avoids misrouting dotted SPA segments like /v1.2/projects/42.
+      if (/\.(js|css|map|json|html|txt|png|jpe?g|gif|svg|ico|webp|avif|woff2?|ttf|eot)$/i.test(uri)) {
         return event.request;
       }
       event.request.uri = '/index.html';
@@ -350,9 +355,8 @@ resource "aws_cloudfront_distribution" "flip_ui" {
     compress               = true
     cache_policy_id        = local.cloudfront_policy_caching_optimized
 
-    # Vue router uses createWebHistory — deep links like /projects/42 hit
-    # S3 as missing objects. The function rewrites them to /index.html at
-    # the edge. /api/* has its own behavior and never invokes this.
+    # Attached to the S3 default behavior only — /api/* has its own
+    # cache behavior and never invokes this function.
     function_association {
       event_type   = "viewer-request"
       function_arn = aws_cloudfront_function.spa_rewrite.arn

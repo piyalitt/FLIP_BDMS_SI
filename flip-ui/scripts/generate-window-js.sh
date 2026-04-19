@@ -20,9 +20,8 @@ set -eu
 
 # Values flow into quoted JS string literals. Route them through
 # JSON.stringify so a stray " or \ in a .env value can't break the
-# generated file or smuggle JS. node is always present wherever this
-# script runs (dev container is node:22-alpine; `make deploy-ui` runs
-# `npm ci` right before calling this script).
+# generated file or smuggle JS. Requires `node` on PATH; both the
+# dev container and `make deploy-ui` guarantee this.
 json_str() {
   node -pe 'JSON.stringify(process.argv[1] || "")' -- "${1-}"
 }
@@ -39,9 +38,14 @@ RELEASE=$(json_str "${RELEASE_VERSION:-}")
 
 # MAX_REIMPORT_COUNT is emitted as a raw number, so reject non-numeric
 # input rather than letting parseInt("garbage") produce NaN at runtime.
-MAX_REIMPORT_RAW="${MAX_REIMPORT_COUNT:-10}"
+# Tolerate whitespace padding (easy .env typo); warn loudly on anything
+# else so the fallback isn't silent.
+MAX_REIMPORT_RAW=$(printf '%s' "${MAX_REIMPORT_COUNT:-10}" | tr -d '[:space:]')
 case "$MAX_REIMPORT_RAW" in
-  ''|*[!0-9]*) MAX_REIMPORT=10 ;;
+  ''|*[!0-9]*)
+    echo "generate-window-js: WARNING — MAX_REIMPORT_COUNT='${MAX_REIMPORT_COUNT-}' is not numeric; falling back to 10." >&2
+    MAX_REIMPORT=10
+    ;;
   *) MAX_REIMPORT="$MAX_REIMPORT_RAW" ;;
 esac
 
