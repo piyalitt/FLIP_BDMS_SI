@@ -292,14 +292,9 @@ resource "aws_cloudfront_distribution" "flip_ui" {
     origin_id   = "alb-api-origin"
 
     custom_origin_config {
-      # KNOWN ISSUE: CloudFront → ALB over HTTPS consistently 502s despite the ALB
-      # serving TLS 1.2 cleanly to every other client. Using HTTP:8080 (ALB
-      # api-listener, which forwards to the ec2-instance-api target group) as the
-      # working origin for now. Follow-up: inspect x-edge-detailed-result-type from
-      # CloudFront access logs (logging_config below) and restore https-only:443.
-      http_port              = 8080
+      http_port              = 80
       https_port             = 443
-      origin_protocol_policy = "http-only"
+      origin_protocol_policy = "https-only"
       origin_ssl_protocols   = ["TLSv1.2"]
     }
   }
