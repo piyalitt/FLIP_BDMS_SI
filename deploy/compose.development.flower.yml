@@ -36,6 +36,12 @@ services:
       - default
       - shared-net-1
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/openapi.json', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   fl-api-net-2:
     container_name: flip-fl-api-net-2
@@ -54,6 +60,12 @@ services:
       - default
       - shared-net-2
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/openapi.json', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   fl-server-net-1:
     container_name: fl-server-net-1
@@ -106,8 +118,10 @@ services:
       - ${FL_PROVISIONED_DIR}/../register-supernode-keys.sh:/scripts/register-supernode-keys.sh:ro
     entrypoint: ["/bin/bash", "/scripts/register-supernode-keys.sh"]
     depends_on:
-      - fl-server-net-1
-      - fl-api-net-1
+      fl-server-net-1:
+        condition: service_started
+      fl-api-net-1:
+        condition: service_healthy
     networks:
       - shared-net-1
 
@@ -159,7 +173,9 @@ services:
       - ${FL_PROVISIONED_DIR}/net-2/keys:/keys:ro
     entrypoint: ["/bin/bash", "/scripts/register-supernode-keys.sh"]
     depends_on:
-      - fl-server-net-2
-      - fl-api-net-2
+      fl-server-net-2:
+        condition: service_started
+      fl-api-net-2:
+        condition: service_healthy
     networks:
       - shared-net-2

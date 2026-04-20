@@ -32,6 +32,12 @@ services:
     depends_on:
       - fl-server-net-1
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/openapi.json', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   fl-server-net-1:
     container_name: fl-server-net-1
@@ -76,5 +82,7 @@ services:
       - /opt/flip/services/net-1/keys:/keys:ro
     entrypoint: ["/bin/bash", "/scripts/register-supernode-keys.sh"]
     depends_on:
-      - fl-server-net-1
-      - fl-api-net-1
+      fl-server-net-1:
+        condition: service_started
+      fl-api-net-1:
+        condition: service_healthy
