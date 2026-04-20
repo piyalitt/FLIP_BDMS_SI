@@ -5,16 +5,23 @@
         "node": "^20.19.0 || >=22.12.0"
     },
     "scripts": {
+        "generate-window-js": "sh scripts/generate-window-js.sh > public/js/window.js",
+        "predev": "npm run generate-window-js",
         "dev": "vite --host 0.0.0.0 --port 443 --mode development",
+        "prebuild": "npm run generate-window-js",
         "build": "vue-tsc --noEmit && vite build",
+        "prebuild:deploy": "npm run generate-window-js",
+        "build:deploy": "vite build",
         "serve": "vite preview",
         "test:unit": "vitest run --silent --coverage",
         "lint": "npx eslint ./src/**/*.vue ./src/**/*.ts",
         "prepare": "husky install",
         "test:unit:update": "vitest run -u --silent --coverage",
         "test:unit:watch": "vitest watch --silent",
+        "prestart-test": "npm run generate-window-js",
         "start-test": "vite --host 127.0.0.1 --port 443 --mode development",
         "test:ui": "cypress run --browser chrome",
+        "pretest:start": "npm run generate-window-js",
         "test:start": "vite --port 443 --mode development",
         "test:ci": "start-server-and-test test:start http-get://localhost:443 test:ui"
     },

@@ -10,8 +10,11 @@
 # limitations under the License.
 #
 
-# Development stage - for Docker Compose with volume mounts
-FROM node:22-alpine AS development
+# Local development image — used by deploy/compose.development.yml with a bind
+# mount of the repo into /app. Stag/prod do not run flip-ui as a container;
+# the UI is served as a static bundle from S3 + CloudFront (see
+# deploy/providers/AWS/cloudfront.tf and `make deploy-ui`).
+FROM node:22-alpine
 
 # Install dependencies for building node modules
 RUN apk add --no-cache python3 make g++ xdg-utils
@@ -36,13 +39,4 @@ EXPOSE $UI_PORT
 ENTRYPOINT ["/usr/local/bin/ui-entrypoint.sh"]
 
 # Default command for development (used with volume mounts)
-CMD ["npm", "run", "dev"]
-
-# Production stage - builds and serves the application
-FROM development AS production
-
-# Copy source files for production build
-COPY . .
-
-# TODO eventually the UI will be deployed in CloudFront so we won't need this section
 CMD ["npm", "run", "dev"]
