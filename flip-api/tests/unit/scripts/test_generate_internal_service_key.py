@@ -26,7 +26,9 @@ def env_file(tmp_path: Path) -> Path:
     """Create a minimal env file with placeholders."""
     f = tmp_path / ".env.test"
     f.write_text(
-        "SOME_VAR=hello\nINTERNAL_SERVICE_KEY_HEADER=X-Internal-Service-Key\nINTERNAL_SERVICE_KEY_HASH=<placeholder>\n"
+        "SOME_VAR=hello\n"
+        "INTERNAL_SERVICE_KEY_HEADER=X-Internal-Service-Key\n"
+        "INTERNAL_SERVICE_KEY_HASH=<placeholder>\n"
     )
     return f
 

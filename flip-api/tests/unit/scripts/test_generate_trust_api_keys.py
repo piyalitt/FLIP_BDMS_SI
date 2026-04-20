@@ -89,7 +89,9 @@ class TestGenerateTrustApiKeys:
         """main() should preserve existing keys in TRUST_API_KEYS and not regenerate them."""
         existing_key = "bLYIayFxl2m_lJ2oGU1ZWhQGSNz7qp41MH6_Ggk3f-o"
         env_file = tmp_path / ".env.test"
-        env_file.write_text(ENV_TEMPLATE + f'TRUST_API_KEYS={{"Trust_1": "{existing_key}"}}\n')
+        env_file.write_text(
+            ENV_TEMPLATE + f'TRUST_API_KEYS={{"Trust_1": "{existing_key}"}}\n'
+        )
 
         with patch("sys.argv", ["generate_trust_api_keys", "--env-file", str(env_file)]):
             main()
@@ -113,7 +115,9 @@ class TestGenerateTrustApiKeys:
         """--force should regenerate keys even when TRUST_API_KEYS already has values."""
         existing_key = "bLYIayFxl2m_lJ2oGU1ZWhQGSNz7qp41MH6_Ggk3f-o"
         env_file = tmp_path / ".env.test"
-        env_file.write_text(ENV_TEMPLATE + f'TRUST_API_KEYS={{"Trust_1": "{existing_key}"}}\n')
+        env_file.write_text(
+            ENV_TEMPLATE + f'TRUST_API_KEYS={{"Trust_1": "{existing_key}"}}\n'
+        )
 
         with patch("sys.argv", ["generate_trust_api_keys", "--env-file", str(env_file), "--force"]):
             main()

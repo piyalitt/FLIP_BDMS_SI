@@ -92,7 +92,9 @@ def update_model_status(model_id: UUID, status: ModelStatus | None, session: Ses
     return status
 
 
-def add_log(model_id: UUID, log: str, session: Session, transaction: Any | None = None, success: bool = True) -> None:
+def add_log(
+    model_id: UUID, log: str, session: Session, transaction: Any | None = None, success: bool = True
+) -> None:
     """
     Add a log entry to the database
 

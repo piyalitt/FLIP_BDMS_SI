@@ -118,13 +118,11 @@ async def test_check_trusts_health_mixed():
     now = datetime.now(timezone.utc)
     trusts = [
         Trust(
-            id=uuid4(),
-            name="Online Trust",
+            id=uuid4(), name="Online Trust",
             last_heartbeat=now - timedelta(seconds=5),
         ),
         Trust(
-            id=uuid4(),
-            name="Offline Trust",
+            id=uuid4(), name="Offline Trust",
             last_heartbeat=now - timedelta(minutes=5),
         ),
         Trust(id=uuid4(), name="Never Seen", last_heartbeat=None),

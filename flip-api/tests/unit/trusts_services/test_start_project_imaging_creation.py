@@ -55,7 +55,9 @@ def mock_get_session():
 
 @pytest.fixture
 def mock_has_permissions():
-    with mock.patch("flip_api.trusts_services.start_project_imaging_creation.has_permissions") as mock_has_permissions:
+    with mock.patch(
+        "flip_api.trusts_services.start_project_imaging_creation.has_permissions"
+    ) as mock_has_permissions:
         mock_has_permissions.return_value = True
         yield mock_has_permissions
 

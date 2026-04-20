@@ -76,18 +76,16 @@ def get_uploaded_files_info(
         # Format response
         result = []
         for file in files:
-            result.append(
-                {
-                    "id": str(file.id) if file.id else None,
-                    "name": file.name,
-                    "status": file.status,
-                    "size": file.size,
-                    "type": file.type,
-                    "modelId": str(file.model_id) if file.model_id else None,
-                    "created": file.created.isoformat() if hasattr(file, "created") and file.created else None,
-                    "modified": file.modified.isoformat() if hasattr(file, "modified") and file.modified else None,
-                }
-            )
+            result.append({
+                "id": str(file.id) if file.id else None,
+                "name": file.name,
+                "status": file.status,
+                "size": file.size,
+                "type": file.type,
+                "modelId": str(file.model_id) if file.model_id else None,
+                "created": file.created.isoformat() if hasattr(file, "created") and file.created else None,
+                "modified": file.modified.isoformat() if hasattr(file, "modified") and file.modified else None,
+            })
 
         logger.info(f"Retrieved status for {len(result)} files")
         return result
@@ -152,18 +150,16 @@ def get_uploaded_files_info_post(
         # Format response
         result = []
         for file in files:
-            result.append(
-                {
-                    "id": str(file.id) if file.id else None,
-                    "name": file.name,
-                    "status": file.status,
-                    "size": file.size,
-                    "type": file.type,
-                    "modelId": str(file.model_id) if file.model_id else None,
-                    "created": file.created.isoformat() if hasattr(file, "created") and file.created else None,
-                    "modified": file.modified.isoformat() if hasattr(file, "modified") and file.modified else None,
-                }
-            )
+            result.append({
+                "id": str(file.id) if file.id else None,
+                "name": file.name,
+                "status": file.status,
+                "size": file.size,
+                "type": file.type,
+                "modelId": str(file.model_id) if file.model_id else None,
+                "created": file.created.isoformat() if hasattr(file, "created") and file.created else None,
+                "modified": file.modified.isoformat() if hasattr(file, "modified") and file.modified else None,
+            })
 
         logger.info(f"Retrieved status for {len(result)} files")
         return result

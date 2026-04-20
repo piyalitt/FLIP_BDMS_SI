@@ -68,14 +68,8 @@ def _make_import_response(accession_number: str = "ACC1", status: str = "QUEUED"
 @patch("imaging_api.services.retrieval.encrypt")
 @patch("imaging_api.services.retrieval.get_project")
 async def test_retrieve_images_success(
-    mock_get_project,
-    mock_encrypt,
-    mock_get_dataframe,
-    mock_query,
-    mock_queue,
-    headers,
-    tmp_path,
-    monkeypatch,
+    mock_get_project, mock_encrypt, mock_get_dataframe,
+    mock_query, mock_queue, headers, tmp_path, monkeypatch,
 ):
     monkeypatch.chdir(tmp_path)
     mock_get_project.return_value = MagicMock()
@@ -120,12 +114,7 @@ async def test_retrieve_images_project_generic_error(mock_get_project, headers):
 @patch("imaging_api.services.retrieval.encrypt")
 @patch("imaging_api.services.retrieval.get_project")
 async def test_retrieve_images_missing_accession_column(
-    mock_get_project,
-    mock_encrypt,
-    mock_get_dataframe,
-    headers,
-    tmp_path,
-    monkeypatch,
+    mock_get_project, mock_encrypt, mock_get_dataframe, headers, tmp_path, monkeypatch,
 ):
     monkeypatch.chdir(tmp_path)
     mock_get_project.return_value = MagicMock()
@@ -144,13 +133,8 @@ async def test_retrieve_images_missing_accession_column(
 @patch("imaging_api.services.retrieval.encrypt")
 @patch("imaging_api.services.retrieval.get_project")
 async def test_retrieve_images_no_studies_found(
-    mock_get_project,
-    mock_encrypt,
-    mock_get_dataframe,
-    mock_query,
-    headers,
-    tmp_path,
-    monkeypatch,
+    mock_get_project, mock_encrypt, mock_get_dataframe, mock_query,
+    headers, tmp_path, monkeypatch,
 ):
     monkeypatch.chdir(tmp_path)
     mock_get_project.return_value = MagicMock()
@@ -168,13 +152,8 @@ async def test_retrieve_images_no_studies_found(
 @patch("imaging_api.services.retrieval.encrypt")
 @patch("imaging_api.services.retrieval.get_project")
 async def test_retrieve_images_query_exception_skips_study(
-    mock_get_project,
-    mock_encrypt,
-    mock_get_dataframe,
-    mock_query,
-    headers,
-    tmp_path,
-    monkeypatch,
+    mock_get_project, mock_encrypt, mock_get_dataframe, mock_query,
+    headers, tmp_path, monkeypatch,
 ):
     monkeypatch.chdir(tmp_path)
     mock_get_project.return_value = MagicMock()
@@ -193,14 +172,8 @@ async def test_retrieve_images_query_exception_skips_study(
 @patch("imaging_api.services.retrieval.encrypt")
 @patch("imaging_api.services.retrieval.get_project")
 async def test_retrieve_images_partial_queue_failure(
-    mock_get_project,
-    mock_encrypt,
-    mock_get_dataframe,
-    mock_query,
-    mock_queue,
-    headers,
-    tmp_path,
-    monkeypatch,
+    mock_get_project, mock_encrypt, mock_get_dataframe,
+    mock_query, mock_queue, headers, tmp_path, monkeypatch,
 ):
     monkeypatch.chdir(tmp_path)
     mock_get_project.return_value = MagicMock()
@@ -220,14 +193,8 @@ async def test_retrieve_images_partial_queue_failure(
 @patch("imaging_api.services.retrieval.encrypt")
 @patch("imaging_api.services.retrieval.get_project")
 async def test_retrieve_images_multiple_studies_for_accession(
-    mock_get_project,
-    mock_encrypt,
-    mock_get_dataframe,
-    mock_query,
-    mock_queue,
-    headers,
-    tmp_path,
-    monkeypatch,
+    mock_get_project, mock_encrypt, mock_get_dataframe,
+    mock_query, mock_queue, headers, tmp_path, monkeypatch,
 ):
     """When multiple studies match an accession number, only the first is used."""
     monkeypatch.chdir(tmp_path)
@@ -264,21 +231,12 @@ def _mock_get_session(direct_archive=None, executed=None, queued=None):
 
     return (
         patch("imaging_api.services.retrieval.get_session", side_effect=lambda: fake_session()),
-        patch(
-            "imaging_api.services.retrieval.get_direct_archive_sessions_by_project",
-            new_callable=AsyncMock,
-            return_value=direct_archive or [],
-        ),
-        patch(
-            "imaging_api.services.retrieval.get_executed_pacs_request_by_project",
-            new_callable=AsyncMock,
-            return_value=executed or [],
-        ),
-        patch(
-            "imaging_api.services.retrieval.get_queued_pacs_request_by_project",
-            new_callable=AsyncMock,
-            return_value=queued or [],
-        ),
+        patch("imaging_api.services.retrieval.get_direct_archive_sessions_by_project",
+              new_callable=AsyncMock, return_value=direct_archive or []),
+        patch("imaging_api.services.retrieval.get_executed_pacs_request_by_project",
+              new_callable=AsyncMock, return_value=executed or []),
+        patch("imaging_api.services.retrieval.get_queued_pacs_request_by_project",
+              new_callable=AsyncMock, return_value=queued or []),
     )
 
 
@@ -287,35 +245,16 @@ def _mock_get_session(direct_archive=None, executed=None, queued=None):
 @patch("imaging_api.services.retrieval.get_dataframe", new_callable=AsyncMock)
 @patch("imaging_api.services.retrieval.encrypt")
 async def test_get_import_status_all_successful(
-    mock_encrypt,
-    mock_get_dataframe,
-    mock_get_experiments,
-    headers,
-    tmp_path,
-    monkeypatch,
+    mock_encrypt, mock_get_dataframe, mock_get_experiments, headers, tmp_path, monkeypatch,
 ):
     monkeypatch.chdir(tmp_path)
     mock_encrypt.return_value = "encrypted_id"
     mock_get_dataframe.return_value = pd.DataFrame({"accession_id": ["ACC1", "ACC2"]})
     mock_get_experiments.return_value = [
-        Experiment(
-            ID="e1",
-            label="ACC1",
-            date="2023-01-01",
-            project="proj1",
-            insert_date="2023-01-01",
-            xsiType="xnat:ctScanData",
-            URI="/exp/e1",
-        ),
-        Experiment(
-            ID="e2",
-            label="ACC2",
-            date="2023-01-01",
-            project="proj1",
-            insert_date="2023-01-01",
-            xsiType="xnat:ctScanData",
-            URI="/exp/e2",
-        ),
+        Experiment(ID="e1", label="ACC1", date="2023-01-01", project="proj1",
+                   insert_date="2023-01-01", xsiType="xnat:ctScanData", URI="/exp/e1"),
+        Experiment(ID="e2", label="ACC2", date="2023-01-01", project="proj1",
+                   insert_date="2023-01-01", xsiType="xnat:ctScanData", URI="/exp/e2"),
     ]
 
     p_session, p_direct, p_executed, p_queued = _mock_get_session()
@@ -333,50 +272,24 @@ async def test_get_import_status_all_successful(
 @patch("imaging_api.services.retrieval.get_dataframe", new_callable=AsyncMock)
 @patch("imaging_api.services.retrieval.encrypt")
 async def test_get_import_status_mixed(
-    mock_encrypt,
-    mock_get_dataframe,
-    mock_get_experiments,
-    headers,
-    tmp_path,
-    monkeypatch,
+    mock_encrypt, mock_get_dataframe, mock_get_experiments, headers, tmp_path, monkeypatch,
 ):
     monkeypatch.chdir(tmp_path)
     mock_encrypt.return_value = "encrypted_id"
-    mock_get_dataframe.return_value = pd.DataFrame(
-        {
-            "accession_id": ["ACC_OK", "ACC_EXEC", "ACC_QUEUED", "ACC_UNKNOWN"],
-        }
-    )
+    mock_get_dataframe.return_value = pd.DataFrame({
+        "accession_id": ["ACC_OK", "ACC_EXEC", "ACC_QUEUED", "ACC_UNKNOWN"],
+    })
     mock_get_experiments.return_value = [
-        Experiment(
-            ID="e1",
-            label="ACC_OK",
-            date="2023-01-01",
-            project="proj1",
-            insert_date="2023-01-01",
-            xsiType="xnat:ctScanData",
-            URI="/exp/e1",
-        ),
+        Experiment(ID="e1", label="ACC_OK", date="2023-01-01", project="proj1",
+                   insert_date="2023-01-01", xsiType="xnat:ctScanData", URI="/exp/e1"),
     ]
 
-    executed = [
-        ExecutedPacsRequest(
-            id=1,
-            created=datetime(2023, 1, 1),
-            accession_number="ACC_EXEC",
-            status="EXECUTING",
-            xnat_project="proj1",
-        )
-    ]
-    queued = [
-        QueuedPacsRequest(
-            id=2,
-            created=datetime(2023, 1, 1),
-            accession_number="ACC_QUEUED",
-            status="QUEUED",
-            xnat_project="proj1",
-        )
-    ]
+    executed = [ExecutedPacsRequest(
+        id=1, created=datetime(2023, 1, 1), accession_number="ACC_EXEC", status="EXECUTING", xnat_project="proj1",
+    )]
+    queued = [QueuedPacsRequest(
+        id=2, created=datetime(2023, 1, 1), accession_number="ACC_QUEUED", status="QUEUED", xnat_project="proj1",
+    )]
 
     p_session, p_direct, p_executed, p_queued = _mock_get_session(executed=executed, queued=queued)
     with p_session, p_direct, p_executed, p_queued:
@@ -392,11 +305,7 @@ async def test_get_import_status_mixed(
 @patch("imaging_api.services.retrieval.get_dataframe", new_callable=AsyncMock)
 @patch("imaging_api.services.retrieval.encrypt")
 async def test_get_import_status_missing_accession_column(
-    mock_encrypt,
-    mock_get_dataframe,
-    headers,
-    tmp_path,
-    monkeypatch,
+    mock_encrypt, mock_get_dataframe, headers, tmp_path, monkeypatch,
 ):
     monkeypatch.chdir(tmp_path)
     mock_encrypt.return_value = "encrypted_id"
@@ -412,12 +321,7 @@ async def test_get_import_status_missing_accession_column(
 @patch("imaging_api.services.retrieval.get_dataframe", new_callable=AsyncMock)
 @patch("imaging_api.services.retrieval.encrypt")
 async def test_get_import_status_no_experiments(
-    mock_encrypt,
-    mock_get_dataframe,
-    mock_get_experiments,
-    headers,
-    tmp_path,
-    monkeypatch,
+    mock_encrypt, mock_get_dataframe, mock_get_experiments, headers, tmp_path, monkeypatch,
 ):
     monkeypatch.chdir(tmp_path)
     mock_encrypt.return_value = "encrypted_id"
@@ -443,11 +347,7 @@ async def test_get_import_status_no_experiments(
 async def test_retry_no_failures(mock_get_project, mock_get_status, headers):
     mock_get_project.return_value = MagicMock()
     mock_get_status.return_value = ImportStatus(
-        successful=["ACC1"],
-        failed=[],
-        queue_failed=[],
-        queued=[],
-        processing=[],
+        successful=["ACC1"], failed=[], queue_failed=[], queued=[], processing=[],
     )
 
     result = await retry_retrieve_images_for_project("proj1", "SELECT *", headers)
@@ -480,19 +380,12 @@ async def test_retry_project_generic_error(mock_get_project, headers):
 @patch("imaging_api.services.retrieval.get_import_status", new_callable=AsyncMock)
 @patch("imaging_api.services.retrieval.get_project")
 async def test_retry_requeues_failed_studies(
-    mock_get_project,
-    mock_get_status,
-    mock_query,
-    mock_queue,
-    headers,
+    mock_get_project, mock_get_status, mock_query, mock_queue, headers,
 ):
     mock_get_project.return_value = MagicMock()
     mock_get_status.return_value = ImportStatus(
-        successful=["ACC_OK"],
-        failed=["ACC_FAIL"],
-        queue_failed=["ACC_QF"],
-        queued=[],
-        processing=[],
+        successful=["ACC_OK"], failed=["ACC_FAIL"], queue_failed=["ACC_QF"],
+        queued=[], processing=[],
     )
     mock_query.side_effect = [
         [_make_study("ACC_FAIL", "1.2.3.1")],
@@ -517,11 +410,7 @@ async def test_retry_requeues_failed_studies(
 async def test_retry_all_queries_fail(mock_get_project, mock_get_status, mock_query, headers):
     mock_get_project.return_value = MagicMock()
     mock_get_status.return_value = ImportStatus(
-        successful=[],
-        failed=["ACC1"],
-        queue_failed=[],
-        queued=[],
-        processing=[],
+        successful=[], failed=["ACC1"], queue_failed=[], queued=[], processing=[],
     )
     mock_query.side_effect = Exception("PACS down")
 
@@ -535,19 +424,11 @@ async def test_retry_all_queries_fail(mock_get_project, mock_get_status, mock_qu
 @patch("imaging_api.services.retrieval.get_import_status", new_callable=AsyncMock)
 @patch("imaging_api.services.retrieval.get_project")
 async def test_retry_partial_queue_failure(
-    mock_get_project,
-    mock_get_status,
-    mock_query,
-    mock_queue,
-    headers,
+    mock_get_project, mock_get_status, mock_query, mock_queue, headers,
 ):
     mock_get_project.return_value = MagicMock()
     mock_get_status.return_value = ImportStatus(
-        successful=[],
-        failed=["ACC1"],
-        queue_failed=[],
-        queued=[],
-        processing=[],
+        successful=[], failed=["ACC1"], queue_failed=[], queued=[], processing=[],
     )
     mock_query.return_value = [_make_study("ACC1")]
     mock_queue.return_value = [_make_import_response("ACC1", status="FAILED")]
@@ -563,11 +444,7 @@ async def test_retry_partial_queue_failure(
 async def test_retry_no_study_found_for_accession(mock_get_project, mock_get_status, mock_query, headers):
     mock_get_project.return_value = MagicMock()
     mock_get_status.return_value = ImportStatus(
-        successful=[],
-        failed=["ACC1"],
-        queue_failed=[],
-        queued=[],
-        processing=[],
+        successful=[], failed=["ACC1"], queue_failed=[], queued=[], processing=[],
     )
     mock_query.return_value = []
 
@@ -581,19 +458,11 @@ async def test_retry_no_study_found_for_accession(mock_get_project, mock_get_sta
 @patch("imaging_api.services.retrieval.get_import_status", new_callable=AsyncMock)
 @patch("imaging_api.services.retrieval.get_project")
 async def test_retry_multiple_studies_uses_first(
-    mock_get_project,
-    mock_get_status,
-    mock_query,
-    mock_queue,
-    headers,
+    mock_get_project, mock_get_status, mock_query, mock_queue, headers,
 ):
     mock_get_project.return_value = MagicMock()
     mock_get_status.return_value = ImportStatus(
-        successful=[],
-        failed=["ACC1"],
-        queue_failed=[],
-        queued=[],
-        processing=[],
+        successful=[], failed=["ACC1"], queue_failed=[], queued=[], processing=[],
     )
     mock_query.return_value = [_make_study("ACC1", "1.2.3.1"), _make_study("ACC1", "1.2.3.2")]
     mock_queue.return_value = [_make_import_response("ACC1")]

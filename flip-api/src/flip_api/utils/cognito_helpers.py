@@ -128,7 +128,9 @@ def get_cognito_users(params: dict[str, Any] | None = None) -> list[CognitoUser]
         )
 
 
-def get_user_by_email_or_id(user_pool_id: str, email: str | None = None, user_id: UUID | None = None) -> CognitoUser:
+def get_user_by_email_or_id(
+    user_pool_id: str, email: str | None = None, user_id: UUID | None = None
+) -> CognitoUser:
     """
     Get a user from Cognito by email or ID.
 

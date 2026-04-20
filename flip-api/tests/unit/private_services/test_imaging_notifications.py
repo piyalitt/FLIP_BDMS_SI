@@ -29,14 +29,12 @@ def _make_task(created_users, added_users=None, project_id=PROJECT_ID):
     task = MagicMock()
     task.trust_id = TRUST_ID
     task.payload = json.dumps({"project_id": project_id})
-    task.result = json.dumps(
-        {
-            "ID": IMAGING_PROJECT_ID,
-            "name": "Test Imaging Project",
-            "created_users": created_users,
-            "added_users": added_users or [],
-        }
-    )
+    task.result = json.dumps({
+        "ID": IMAGING_PROJECT_ID,
+        "name": "Test Imaging Project",
+        "created_users": created_users,
+        "added_users": added_users or [],
+    })
     return task
 
 

@@ -10,7 +10,6 @@
 # limitations under the License.
 #
 
-
 class NotFoundError(Exception):
     """Raised when a requested resource is not found."""
 

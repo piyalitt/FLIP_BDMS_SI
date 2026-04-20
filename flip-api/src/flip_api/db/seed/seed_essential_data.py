@@ -54,15 +54,13 @@ def main() -> None:
             fl_scheduler = seed_fl_scheduler(session, fl_nets)
 
             logger.debug("Seeding completed successfully")
-            logger.debug(
-                {
-                    "roles": roles,
-                    "permissions": permissions,
-                    "trusts": trusts,
-                    "fl_nets": fl_nets,
-                    "fl_scheduler": fl_scheduler,
-                }
-            )
+            logger.debug({
+                "roles": roles,
+                "permissions": permissions,
+                "trusts": trusts,
+                "fl_nets": fl_nets,
+                "fl_scheduler": fl_scheduler,
+            })
             session.commit()
             session.flush()
 

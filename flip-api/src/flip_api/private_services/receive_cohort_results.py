@@ -52,12 +52,10 @@ def _save_individual_result(db: Session, cohort_results: OmopCohortResults) -> N
     )
 
     # Data to be stored in QueryResult.data column (as JSON string)
-    data_to_store = json.dumps(
-        {
-            "record_count": cohort_results.record_count,
-            "data": [d.model_dump() for d in cohort_results.data],
-        }
-    )
+    data_to_store = json.dumps({
+        "record_count": cohort_results.record_count,
+        "data": [d.model_dump() for d in cohort_results.data],
+    })
 
     # Try to retrieve existing result
     stmt = select(QueryResult).where(

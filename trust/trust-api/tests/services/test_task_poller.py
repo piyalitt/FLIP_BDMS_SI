@@ -161,8 +161,7 @@ async def test_report_task_result_includes_error_in_result():
     mock_client.post.return_value = mock_response
 
     await _report_task_result(
-        mock_client,
-        "task-123",
+        mock_client, "task-123",
         {"success": False, "error": "Something went wrong"},
     )
 

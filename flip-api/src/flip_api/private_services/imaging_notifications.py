@@ -152,7 +152,10 @@ def _get_latest_query_id(project_id: UUID, db: Session) -> UUID | None:
         UUID | None: The query ID, or None if no queries exist.
     """
     query = db.exec(
-        select(Queries).where(Queries.project_id == project_id).order_by(col(Queries.created).desc()).limit(1)
+        select(Queries)
+        .where(Queries.project_id == project_id)
+        .order_by(col(Queries.created).desc())
+        .limit(1)
     ).first()
     return query.id if query else None
 

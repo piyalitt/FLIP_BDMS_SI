@@ -199,12 +199,10 @@ def verify_cardinality(df: pd.DataFrame, threshold: float = 0.05) -> bool:
         unique_count = df[col].nunique()
         percentage_unique = unique_count / len(df) if len(df) > 0 else 0
         logger.info(f"Column '{col}' has {unique_count} unique values ({percentage_unique:.2%} of total)")
-        if all(
-            [
-                unique_count < COHORT_QUERY_THRESHOLD,  # Absolute threshold
-                percentage_unique < threshold,  # Relative threshold
-            ]
-        ):
+        if all([
+            unique_count < COHORT_QUERY_THRESHOLD,  # Absolute threshold
+            percentage_unique < threshold,  # Relative threshold
+        ]):
             logger.info(f"Column '{col}' has insufficient unique values ({threshold=}, {unique_count=})")
             return False
     return True
@@ -262,7 +260,9 @@ def get_statistics(df: pd.DataFrame, query_input: CohortQueryInput, threshold: i
     )
 
     if record_count < COHORT_QUERY_THRESHOLD:
-        logger.info(f"Query returned insufficient results ({COHORT_QUERY_THRESHOLD}, {record_count})")
+        logger.info(
+            f"Query returned insufficient results ({COHORT_QUERY_THRESHOLD}, {record_count})"
+        )
         raise HTTPException(
             status_code=400,
             detail=f"Query returned insufficient results ({COHORT_QUERY_THRESHOLD}, {record_count})",

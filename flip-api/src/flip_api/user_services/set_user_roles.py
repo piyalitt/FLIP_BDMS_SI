@@ -106,4 +106,6 @@ def set_user_roles(
         raise
     except Exception as e:
         logger.error(f"Error setting user roles: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error"
+        )

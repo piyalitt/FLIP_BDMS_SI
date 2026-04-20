@@ -1209,7 +1209,9 @@ class TestResetUserMfa:
             UserPoolId=user_pool_id,
             Username=username,
         )
-        mock_logger.info.assert_called_once_with(f"Successfully reset MFA and revoked sessions for user: {username}")
+        mock_logger.info.assert_called_once_with(
+            f"Successfully reset MFA and revoked sessions for user: {username}"
+        )
 
     def test_client_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
         """A boto3 ClientError on either sub-call surfaces as HTTP 500."""
@@ -1277,7 +1279,9 @@ class TestIsMfaEnabled:
         }
 
         assert is_mfa_enabled("user@example.com", "pool-id") is True
-        mock_client_instance.admin_get_user.assert_called_once_with(UserPoolId="pool-id", Username="user@example.com")
+        mock_client_instance.admin_get_user.assert_called_once_with(
+            UserPoolId="pool-id", Username="user@example.com"
+        )
 
     def test_empty_mfa_list_returns_false(self, mock_boto3_client, mock_settings):
         mock_client_instance = mock_boto3_client.return_value
