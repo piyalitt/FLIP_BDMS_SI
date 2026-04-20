@@ -34,10 +34,13 @@ include ../deploy/fl_backend.mk
 COMMON_COMPOSE_FILE := compose_trust.$(__DCKR_SUFFIX).yml
 FL_BACKEND_COMPOSE_FILE := compose_trust.$(__DCKR_SUFFIX).$(FL_BACKEND).yml
 
-# Resolve FL_PROVISIONED_DIR (from .env) to an absolute path relative to the repo root
-# Docker requires absolute paths for volume mounts; the .env value may be relative
+# Resolve FL_PROVISIONED_DIR (from .env) to an absolute path relative to the repo root.
+# Docker requires absolute paths for volume mounts; the .env value may be relative.
+# Skip if already absolute (the parent Makefile resolves it before invoking sub-make).
 MAKEFILE_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
+ifeq ($(patsubst /%,,$(FL_PROVISIONED_DIR)),$(FL_PROVISIONED_DIR))
 override FL_PROVISIONED_DIR := $(abspath $(MAKEFILE_DIR)/../$(FL_PROVISIONED_DIR))
+endif
 
 network1 = deploy_trust-network-1
 network2 = deploy_trust-network-2
