@@ -181,7 +181,6 @@ Replace each `<…>` with the matching value from the FLIP AWS account directory
 
 If your local profile names differ, override the defaults via `PROD_AWS_PROFILE`, `STAG_AWS_PROFILE`, or `DEV_AWS_PROFILE` (in your env file or on the make command line).
 
-
 **Dev account (Cognito + SES only):**
 
 The dev AWS account runs only the services that cannot reasonably run locally (Cognito for auth, SES for email). A separate, minimal Terraform root lives in [`dev/`](./dev/README.md) and calls the same `modules/cognito` and `modules/ses` as this stack, so a change to either service lands in both environments from one place. The dev stack reuses `.env.development` — the same env file the local Docker Compose dev stack consumes — so there is no extra file to maintain.
@@ -267,6 +266,7 @@ The Trust EC2 is in a private subnet with no inbound ports open. All Trust web U
 
 1. AWS CLI installed and configured (`aws configure sso`)
 2. AWS SSM Session Manager plugin installed:
+
    ```bash
    curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o /tmp/session-manager-plugin.deb
    sudo dpkg -i /tmp/session-manager-plugin.deb
