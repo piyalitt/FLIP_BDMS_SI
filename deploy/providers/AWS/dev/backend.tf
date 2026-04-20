@@ -18,8 +18,10 @@
 
 terraform {
   backend "s3" {
+    # bucket and region are supplied at init time via `-backend-config`
+    # (see Makefile's `init` target). Keeping them out of the file lets
+    # operators in different AWS regions reuse the same Terraform code.
     key          = "flip/dev/terraform.tfstate"
-    region       = "eu-west-2"
     encrypt      = true
     use_lockfile = true
   }

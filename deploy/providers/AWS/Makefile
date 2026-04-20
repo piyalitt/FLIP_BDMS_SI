@@ -24,20 +24,27 @@ export $(shell sed 's/=.*//' $(MAIN_ENV_FILE))
 endif
 
 LOCK ?= true
+PRESERVE_VPC ?= true
 
 # Export PROD so child processes (e.g. check_status.py) can determine the environment
 export PROD
 
-# If PROD=true, check that the AWS_PROFILE=FlipDeveloperAccess-046651569599
-# else we're in staging, check AWS_PROFILE=FlipDeveloperAccess-080369786334
-# TODO remove AWS account numbers from Makefile and use a more robust method of ensuring correct AWS account is used
+# Logical AWS profile names. Defaults match the short-alias pattern recommended
+# in deploy/providers/AWS/README.md (operators add `[profile prod]` / `[profile stag]`
+# blocks to their ~/.aws/config that point at the FLIP SSO accounts). Override via
+# the env file or on the command line if your local profile names differ.
+PROD_AWS_PROFILE ?= prod
+STAG_AWS_PROFILE ?= stag
+
+# Refuse to operate against an unintended AWS account. Profile name is the safety
+# guard because Make has no easy way to read the account ID without an `aws` call.
 ifeq ($(PROD),true)
-ifneq ($(AWS_PROFILE),FlipDeveloperAccess-046651569599)
-$(error "For production deployments, AWS_PROFILE must be set to 'FlipDeveloperAccess-046651569599'")
+ifneq ($(AWS_PROFILE),$(PROD_AWS_PROFILE))
+$(error "For production deployments, AWS_PROFILE must be set to '$(PROD_AWS_PROFILE)' (override via PROD_AWS_PROFILE)")
 endif
 else
-ifneq ($(AWS_PROFILE),FlipDeveloperAccess-080369786334)
-$(error "For staging deployments, AWS_PROFILE must be set to 'FlipDeveloperAccess-080369786334'")
+ifneq ($(AWS_PROFILE),$(STAG_AWS_PROFILE))
+$(error "For staging deployments, AWS_PROFILE must be set to '$(STAG_AWS_PROFILE)' (override via STAG_AWS_PROFILE)")
 endif
 endif
 
@@ -72,8 +79,8 @@ export TF_VAR_ADMIN_USER_PASSWORD=${ADMIN_USER_PASSWORD}
 export TF_VAR_SES_VERIFIED_EMAIL=${SES_VERIFIED_EMAIL}
 export TF_VAR_flip_alb_subdomain=${ALB_SUBDOMAIN}
 export TF_VAR_flip_nlb_subdomain=${NLB_SUBDOMAIN}
+export TF_VAR_FLIP_UI_BUCKET_NAME=${FLIP_UI_BUCKET_NAME}
 CENTRALHUB_IMAGES = \
-	$(DOCKER_REGISTRY)flip-ui:$(DOCKER_TAG) \
 	$(DOCKER_REGISTRY)flip-api:$(DOCKER_TAG)
 
 TRUST_IMAGES = \
@@ -91,6 +98,15 @@ trigger-builds: ## Trigger all GitHub Actions "Build and Push" workflows for the
 	  gh workflow run "$$id" --ref "$$branch"; \
 	done
 	@echo "✅ Build workflows triggered!"
+
+.PHONY: check-ssm-ready
+check-ssm-ready: ## Verify SSM Session Manager prerequisites are installed
+	@echo "🔍 Checking SSM Session Manager prerequisites..."
+	@command -v aws >/dev/null 2>&1 || { echo "❌ AWS CLI not found. Install: brew install awscli or apt-get install awscli"; exit 1; }
+	@session-manager-plugin --version >/dev/null 2>&1 || { echo "❌ Session Manager plugin not found. Install: brew install session-manager-plugin (macOS) or see README.md"; exit 1; }
+	@ssh-add -l >/dev/null 2>&1 || echo "⚠️  SSH agent has no keys (this is OK, SSM uses AWS credentials instead)"
+	@[ -f ~/.ssh/host-aws ] || { echo "⚠️  SSH key ~/.ssh/host-aws not found (will be needed for Ansible)"; }
+	@echo "✅ SSM prerequisites verified!"
 
 prettier:
 	terraform fmt -recursive
@@ -121,7 +137,11 @@ init: ## Initialize Terraform configuration
 	@echo "🔧 Initializing Terraform..."
 	@echo "Using AWS profile: $(AWS_PROFILE)"
 	@echo "Using backend bucket: $(FLIP_TFSTATE_BUCKET_NAME)"
-	@terraform init -backend-config="bucket=$(FLIP_TFSTATE_BUCKET_NAME)" -reconfigure
+	@echo "Using AWS region: $(AWS_REGION)"
+	@terraform init \
+		-backend-config="bucket=$(FLIP_TFSTATE_BUCKET_NAME)" \
+		-backend-config="region=$(AWS_REGION)" \
+		-reconfigure
 
 
 .PHONY: import-persistent
@@ -135,11 +155,7 @@ force-unlock: ## Force unlock Terraform state - provide LOCK_ID=<id> as argument
 		echo "❌ LOCK_ID not provided. Usage: make force-unlock LOCK_ID=<lock-id>"; \
 		exit 1; \
 	fi
-	@bash scripts/manage-aws.sh force-unlock $(LOCK_ID)
-
-.PHONY: delete-flip-keypair
-delete-flip-keypair: ## Delete the flip-keypair from AWS (run before apply if it exists)
-	@bash scripts/manage-aws.sh delete-keypair flip-keypair
+	@bash scripts/force-unlock.sh $(LOCK_ID)
 
 .PHONY: plan
 plan: ## Plan Terraform changes (with environment file loaded)
@@ -163,6 +179,20 @@ destroy-cert: ## Destroy only the ACM certificate (use with caution - will break
 	@terraform destroy -target=aws_acm_certificate.flip -target=aws_acm_certificate_validation.flip -target=aws_route53_record.cert_validation
 	@echo "✅ Certificate destroyed! Now run 'make plan' and 'make apply' to remove DNS validation."
 
+.PHONY: plan-cloudfront-certs
+plan-cloudfront-certs: ## Plan the CloudFront viewer cert (us-east-1) and ALB API-origin cert
+	@echo "📋 Planning CloudFront + API-origin certificates..."
+	@terraform plan \
+		-target=aws_acm_certificate.flip_cloudfront \
+		-target=aws_acm_certificate.flip_api \
+		-out=plan-cloudfront-certs.tfplan
+
+.PHONY: apply-cloudfront-certs
+apply-cloudfront-certs: ## Apply the CloudFront viewer cert (us-east-1) and ALB API-origin cert
+	@echo "🔒 Applying CloudFront + API-origin certificates (Step 1/2 for CloudFront)..."
+	@terraform apply -target=aws_acm_certificate.flip_cloudfront -target=aws_acm_certificate.flip_api -auto-approve
+	@echo "✅ Certificates created. Run 'make plan' and 'make apply' to deploy DNS validation + CloudFront."
+
 .PHONY: refresh
 refresh: ## Refresh Terraform state to sync with actual AWS resources
 	@echo "🔄 Refreshing Terraform state..."
@@ -180,11 +210,10 @@ forward-trust: ## SSM port-forward all Trust web UIs and API swagger docs (Ctrl+
 	@bash scripts/forward-trust-all.sh
 
 .PHONY: ssh-config
-ssh-config: ## Update local .ssh/config for flip contexts
+ssh-config: check-ssm-ready ## Update local .ssh/config for flip contexts (requires SSM plugin)
 	@echo "⚙️  Configure .ssh/config for flip context..."
-	@set -x AWS_PROFILE ${AWS_PROFILE}
-	@terraform output
-	@uv run ./update_ssh_config.py --aws-profile ${AWS_PROFILE} || true
+	@AWS_PROFILE=${AWS_PROFILE} terraform output
+	@AWS_PROFILE=${AWS_PROFILE} uv run ./update_ssm_ssh_config.py --aws-profile ${AWS_PROFILE}
 	@echo "✅ .ssh/config updated!"
 
 .PHONY: update-env
@@ -201,7 +230,7 @@ ansible-init: ## Initialize Ansible configuration on EC2 instances (if failed tr
 	@uv run ansible-playbook site.yml -e flip_aicentre_bucket=$(AICENTRE_BUCKET_NAME) -e fl_kit_date=$(FL_KIT_DATE) -e pgdata_archive=trust1_pgdata_20260106.tar.gz
 
 .PHONY: deploy-centralhub
-deploy-centralhub: ## Deploy FLIP containers to flip context with environment from Terraform
+deploy-centralhub: ssh-config ## Deploy FLIP containers to flip context with environment from Terraform
 	@echo "🔍 Checking central hub images (tag: $(DOCKER_TAG))..."
 	@missing=false; \
 	for image in $(CENTRALHUB_IMAGES); do \
@@ -232,13 +261,40 @@ deploy-centralhub: ## Deploy FLIP containers to flip context with environment fr
 	@echo "✅ Deployment complete!"
 	@docker context use default
 
+.PHONY: deploy-ui
+deploy-ui: ## Build flip-ui from the working tree and deploy it to S3 + invalidate CloudFront
+	@echo "🖼️  Building flip-ui from working tree..."
+	@# Uses build:deploy (vite build only). The type-checked `npm run build` fails
+	@# on pre-existing TypeScript errors in the repo — tracked separately.
+	@cd ../../../flip-ui && npm ci && npm run build:deploy
+	@echo "🔧 Generating window.js from $(MAIN_ENV_FILE)..."
+	@cd ../../../flip-ui && sh scripts/generate-window-js.sh > dist/js/window.js
+	@echo "📦 Syncing static assets to s3://$(FLIP_UI_BUCKET_NAME)/ ..."
+	@# Hashed bundles are content-addressed and safe to cache forever.
+	@AWS_PROFILE=$(AWS_PROFILE) aws s3 sync ../../../flip-ui/dist/ s3://$(FLIP_UI_BUCKET_NAME)/ \
+		--delete \
+		--cache-control "public, max-age=31536000, immutable" \
+		--exclude "index.html" --exclude "js/window.js"
+	@# index.html and window.js must never be cached long — they reference the hashed bundles.
+	@AWS_PROFILE=$(AWS_PROFILE) aws s3 cp ../../../flip-ui/dist/index.html s3://$(FLIP_UI_BUCKET_NAME)/index.html \
+		--cache-control "no-cache, no-store, must-revalidate" \
+		--content-type "text/html; charset=utf-8"
+	@AWS_PROFILE=$(AWS_PROFILE) aws s3 cp ../../../flip-ui/dist/js/window.js s3://$(FLIP_UI_BUCKET_NAME)/js/window.js \
+		--cache-control "no-cache, no-store, must-revalidate" \
+		--content-type "application/javascript; charset=utf-8"
+	@echo "🧹 Invalidating CloudFront..."
+	@AWS_PROFILE=$(AWS_PROFILE) aws cloudfront create-invalidation \
+		--distribution-id $$(AWS_PROFILE=$(AWS_PROFILE) terraform output -raw CloudfrontDistributionId) \
+		--paths "/*" >/dev/null
+	@echo "✅ deploy-ui complete."
+
 # Default SSH user for on-premises trust hosts (override with LOCAL_TRUST_SSH_USER=<user>)
 LOCAL_TRUST_SSH_USER ?= ubuntu
 # Trust kit for the local (on-prem) trust FL client (default Trust_2; EC2 trust uses Trust_1)
 LOCAL_TRUST_NAME ?= Trust_2
 
 .PHONY: deploy-trust
-deploy-trust: update-env ## Deploy trust relationships after central hub is deployed
+deploy-trust: ssh-config update-env ## Deploy trust relationships after central hub is deployed
 	@echo "🔍 Checking trust images (tag: $(DOCKER_TAG))..."
 	@missing=false; \
 	for image in $(TRUST_IMAGES); do \
@@ -254,11 +310,6 @@ deploy-trust: update-env ## Deploy trust relationships after central hub is depl
 	else \
 	  echo "   ✅ All trust images found."; \
 	fi
-	@echo "⚙️  Configure .ssh/config for flip context..."
-	@set -x AWS_PROFILE ${AWS_PROFILE}
-	@terraform output
-	@uv run ./update_ssh_config.py --aws-profile ${AWS_PROFILE} || true
-	@echo "✅ .ssh/config updated!"
 	@echo "👷 Create docker context if not exists, pointing to flip-trust to ssh://flip-trust"
 	@docker context create flip-trust --docker "host=ssh://flip-trust" || echo "   Context 'flip-trust' already exists"
 	@echo "🔄 Switching to flip-trust Docker context..."
@@ -376,22 +427,22 @@ check:
 
 
 .PHONY: destroy
-destroy: ## Destroy ephemeral infrastructure (EC2, RDS, VPC) - preserves Cognito, Secrets, S3
+destroy: ## Destroy ephemeral infrastructure (EC2, RDS, optional VPC) - preserves Cognito, Secrets, S3
 	@echo ""
 	@echo "⚠️  SELECTIVE DESTRUCTION - PRESERVING:"
 	@echo "   ✓ Cognito user pool and identities"
 	@echo "   ✓ AWS Secrets Manager (FLIP_API secret)"
 	@echo "   ✓ S3 buckets (FLIP + AI Centre data)"
 	@echo "   ✓ ACM certificates and Route53 records"
-ifeq ($(PROD),true)
-	@echo "   ✓ VPC (Transit Gateway attachment - production)"
+ifneq ($(filter true,$(PROD) $(PRESERVE_VPC)),)
+	@echo "   ✓ VPC (preserved)"
 endif
 	@echo ""
 	@echo "🗑️  DESTROYING:"
 	@echo "   • EC2 instances (flip, trust)"
 	@echo "   • RDS database (PostgreSQL)"
 	@echo "   • Security groups"
-ifneq ($(PROD),true)
+ifeq ($(filter true,$(PROD) $(PRESERVE_VPC)),)
 	@echo "   • VPC"
 endif
 	@echo "   • ALB/NLB load balancers"
@@ -400,7 +451,7 @@ endif
 	@echo ""
 	@bash -c 'read -p "Type '\''yes'\'' to confirm destruction: " confirm && [ "$$confirm" = "yes" ] || { echo "Aborted."; exit 1; }'
 	@echo ""
-	@bash scripts/destroy-selective.sh
+	@PRESERVE_VPC=$(PRESERVE_VPC) bash scripts/destroy-selective.sh
 
 
 .PHONY: help

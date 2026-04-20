@@ -29,14 +29,25 @@ ifndef AWS_PROFILE
 $(error AWS_PROFILE is not set. Add it to $(ENV_FILE))
 endif
 
-# Safety guard: refuse to run against the prod or stag account by accident.
-# The prod/stag profiles are hard-coded in the parent Makefile's guard; the
-# same account numbers are rejected here.
-ifeq ($(AWS_PROFILE),FlipDeveloperAccess-046651569599)
+# Logical AWS profile names. Defaults match the short-alias pattern recommended
+# in deploy/providers/AWS/README.md (operators add `[profile dev]` / `[profile stag]`
+# / `[profile prod]` blocks to ~/.aws/config). Override via the env file or on the
+# command line if your local profile names differ.
+DEV_AWS_PROFILE  ?= dev
+STAG_AWS_PROFILE ?= stag
+PROD_AWS_PROFILE ?= prod
+
+# Safety guards: refuse to touch the prod or stag account from this dev stack,
+# and require the dev profile so a typo cannot land the dev stack against an
+# unintended profile.
+ifeq ($(AWS_PROFILE),$(PROD_AWS_PROFILE))
 $(error AWS_PROFILE is the PROD account — refuse to run dev-stack commands against prod)
 endif
-ifeq ($(AWS_PROFILE),FlipDeveloperAccess-080369786334)
+ifeq ($(AWS_PROFILE),$(STAG_AWS_PROFILE))
 $(error AWS_PROFILE is the STAG account — refuse to run dev-stack commands against stag)
+endif
+ifneq ($(AWS_PROFILE),$(DEV_AWS_PROFILE))
+$(error AWS_PROFILE='$(AWS_PROFILE)' is not the expected dev profile '$(DEV_AWS_PROFILE)' (override via DEV_AWS_PROFILE))
 endif
 
 # Backend bucket for dev state. The bucket name comes from the shared
@@ -83,7 +94,10 @@ create-backend:
 	@TFSTATE_BUCKET_NAME="$(FLIP_TFSTATE_BUCKET_NAME)" TFSTATE_KEY="flip/dev/terraform.tfstate" TFSTATE_REGION="$(AWS_REGION)" ../scripts/create-backend.sh
 
 init:
-	terraform init -backend-config="bucket=$(FLIP_TFSTATE_BUCKET_NAME)" -reconfigure
+	terraform init \
+		-backend-config="bucket=$(FLIP_TFSTATE_BUCKET_NAME)" \
+		-backend-config="region=$(AWS_REGION)" \
+		-reconfigure
 
 validate:
 	terraform validate
