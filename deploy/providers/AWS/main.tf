@@ -249,14 +249,23 @@ data "aws_ec2_managed_prefix_list" "cloudfront_origin_facing" {
 
 # Application Load Balancer
 #
-# Ingress is restricted to CloudFront's origin-facing prefix list on HTTPS/HTTP.
-# The HTTP API ports (var.API_PORT, var.FL_API_PORT) have no external consumer:
-# - flip-api is reached via CloudFront → ALB /api/* rule on HTTPS:443.
-# - the FL API is an internal docker-network-only service used by flip-api; the
-#   `fl-api-listener` on the ALB has no caller (see check_status.py, which
-#   `docker exec`s into the container for health checks).
-# Those listeners still exist for potential future internal use, but they are
-# unreachable from the internet.
+# Only HTTPS (443) ingress is configured. The security group denies everything
+# else from the internet by default:
+# - Port 80 (ALB_HTTP_PORT): CloudFront already redirects viewer HTTP to HTTPS
+#   at the edge (default_cache_behavior.viewer_protocol_policy=redirect-to-https)
+#   and never dials the origin over HTTP (origin_protocol_policy=https-only).
+#   The http-redirect listener still exists as a belt-and-braces fallback but
+#   is intentionally unreachable externally.
+# - API_PORT / FL_API_PORT: no external consumer. flip-api is reached via
+#   CloudFront → ALB /api/* rule on HTTPS:443; the FL API is docker-network-only
+#   (see check_status.py — health checks `docker exec` into the container, and
+#   NET_ENDPOINTS uses the internal docker hostname).
+#
+# The 443 rule references the AWS-managed `com.amazonaws.global.cloudfront.origin-facing`
+# prefix list. AWS counts an SG rule referencing a managed prefix list against
+# the per-SG rule quota using the list's `MaxEntries`, not its current size —
+# so a single reference consumes the majority of the default 60-rule quota.
+# That's why we can only afford one prefix-list-backed ingress rule here.
 module "alb_security_group" {
   source      = "./modules/secgroup"
   name        = "alb-security-group"
@@ -266,11 +275,6 @@ module "alb_security_group" {
     {
       port            = var.ALB_HTTPS_PORT
       description     = "HTTPS traffic from CloudFront"
-      prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront_origin_facing.id]
-    },
-    {
-      port            = var.ALB_HTTP_PORT
-      description     = "HTTP traffic (redirect to HTTPS) from CloudFront"
       prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront_origin_facing.id]
     }
   ]

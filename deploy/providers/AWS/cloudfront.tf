@@ -321,16 +321,26 @@ locals {
 
 # Custom origin-request policy for /api/*. The managed AllViewer policy
 # forwards everything (all headers, cookies, query strings); this narrows
-# to the minimum the API actually needs:
-# - Authorization: carries both Cognito access tokens (user → API) and
-#   trust API keys (TRUST_API_KEY_HEADER=Authorization).
+# to the minimum the API actually needs.
+#
+# Forwarded explicitly:
 # - Content-Type: for JSON/multipart requests.
 # - Origin: for CORS preflight.
-# X-Internal-Service-Key is intentionally excluded: fl-server → flip-api
-# traffic is docker-network-internal on the Central Hub and never crosses
-# CloudFront. Cookies are not used (API is JWT/stateless). Query strings
-# pass through untouched because endpoints use them for filters/pagination
-# without a central allowlist.
+#
+# NOT in the whitelist (because CloudFront forwards it automatically and
+# the CreateOriginRequestPolicy API rejects it as a reserved parameter):
+# - Authorization: always forwarded to custom origins. Carries both
+#   Cognito access tokens (user → API) and trust API keys
+#   (TRUST_API_KEY_HEADER=Authorization).
+#
+# Deliberately excluded:
+# - X-Internal-Service-Key: fl-server → flip-api traffic is
+#   docker-network-internal on the Central Hub and never crosses
+#   CloudFront.
+#
+# Cookies are dropped (API is JWT/stateless). Query strings pass through
+# untouched because endpoints use them for filters/pagination and there's
+# no central allowlist to vet against.
 resource "aws_cloudfront_origin_request_policy" "flip_api" {
   name    = "flip-api-origin-request-${replace(var.flip_alb_subdomain, "/[^a-zA-Z0-9]/", "-")}"
   comment = "Least-privilege origin-request policy for /api/* on ${var.flip_alb_subdomain}"
@@ -338,7 +348,7 @@ resource "aws_cloudfront_origin_request_policy" "flip_api" {
   headers_config {
     header_behavior = "whitelist"
     headers {
-      items = ["Authorization", "Content-Type", "Origin"]
+      items = ["Content-Type", "Origin"]
     }
   }
 
