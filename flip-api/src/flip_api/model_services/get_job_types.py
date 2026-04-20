@@ -12,7 +12,6 @@
 
 """Endpoint for retrieving available job types and their required files (moved to model_services)."""
 
-
 from fastapi import APIRouter
 
 from flip_api.domain.interfaces.fl import JobRequiredFiles

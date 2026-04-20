@@ -107,11 +107,13 @@ def update_site_details(site_details: ISiteDetails, db: Session) -> None:
 
         db.commit()
 
-        logger.info({
-            "message": "We updated the site details...",
-            "bannerUpdated": bool(site_details.banner),
-            "deploymentMode": site_details.deploymentMode,
-        })
+        logger.info(
+            {
+                "message": "We updated the site details...",
+                "bannerUpdated": bool(site_details.banner),
+                "deploymentMode": site_details.deploymentMode,
+            }
+        )
 
         return
 

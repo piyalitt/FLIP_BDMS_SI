@@ -176,9 +176,7 @@ def submit_cohort_query(
                 )
 
             except Exception as e:
-                logger.error(
-                    f"Unable to queue cohort query task for trust {trust.name}: {str(e)}"
-                )
+                logger.error(f"Unable to queue cohort query task for trust {trust.name}: {str(e)}")
                 result.append(TrustDetails(name=trust.name, statusCode=500, message=str(e)))
 
             logger.info(f"Trust: {trust.name} processed")

@@ -37,8 +37,7 @@ class TestFormatDownloadUrl:
     def test_scan_type(self):
         url = format_download_url("PROJ1", "SUBJ1", "EXP1", assessor_type="scan", resource_type="NIFTI")
         expected = (
-            f"{XNAT_URL}/data/projects/PROJ1/subjects/SUBJ1/"
-            "experiments/EXP1/scans/ALL/resources/NIFTI/files?format=zip"
+            f"{XNAT_URL}/data/projects/PROJ1/subjects/SUBJ1/experiments/EXP1/scans/ALL/resources/NIFTI/files?format=zip"
         )
         assert url == expected
 

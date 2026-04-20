@@ -246,8 +246,10 @@ class TestCanModifyModel:
         mock_model.project_id = mock_project_id
         db.exec.return_value.first.return_value = mock_model
 
-        with patch(PATCH_HAS_PERMISSIONS, return_value=False), \
-             patch(PATCH_CAN_MODIFY_PROJECT, return_value=True) as mock_cmp:
+        with (
+            patch(PATCH_HAS_PERMISSIONS, return_value=False),
+            patch(PATCH_CAN_MODIFY_PROJECT, return_value=True) as mock_cmp,
+        ):
             result = can_modify_model(user_id, model_id, db)
 
         assert result is True
@@ -262,8 +264,10 @@ class TestCanModifyModel:
         mock_model.project_id = mock_project_id
         db.exec.return_value.first.return_value = mock_model
 
-        with patch(PATCH_HAS_PERMISSIONS, return_value=False), \
-             patch(PATCH_CAN_MODIFY_PROJECT, return_value=False) as mock_cmp:
+        with (
+            patch(PATCH_HAS_PERMISSIONS, return_value=False),
+            patch(PATCH_CAN_MODIFY_PROJECT, return_value=False) as mock_cmp,
+        ):
             result = can_modify_model(user_id, model_id, db)
 
         assert result is False

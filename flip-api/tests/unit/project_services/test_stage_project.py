@@ -243,9 +243,7 @@ def test_stage_project_generic_exception(
     with (
         patch("flip_api.project_services.stage_project.can_modify_project", return_value=True),
         patch("flip_api.project_services.stage_project.get_project", return_value=mock_project_data),
-        patch(
-            "flip_api.project_services.stage_project.stage_project_service", side_effect=Exception("Database error")
-        ),
+        patch("flip_api.project_services.stage_project.stage_project_service", side_effect=Exception("Database error")),
     ):
         # Act
         response = client.post(f"/api/projects/{test_project_id}/stage", json=stage_request_payload)

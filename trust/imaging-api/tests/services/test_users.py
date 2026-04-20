@@ -105,13 +105,21 @@ def test_user_exists_false(mock_get_xnat_users, headers):
 def test_get_xnat_users_success(mock_get, headers):
     mock_get.return_value = MagicMock(
         status_code=200,
-        json=MagicMock(return_value=[
-            {
-                "lastModified": 123, "username": "alice", "enabled": True,
-                "id": 1, "secured": False, "email": "alice@test.com",
-                "verified": True, "firstName": "Alice", "lastName": "A",
-            },
-        ]),
+        json=MagicMock(
+            return_value=[
+                {
+                    "lastModified": 123,
+                    "username": "alice",
+                    "enabled": True,
+                    "id": 1,
+                    "secured": False,
+                    "email": "alice@test.com",
+                    "verified": True,
+                    "firstName": "Alice",
+                    "lastName": "A",
+                },
+            ]
+        ),
     )
     users = get_xnat_users(headers)
     assert len(users) == 1
@@ -189,9 +197,15 @@ def test_to_create_imaging_user_fetch_error(mock_get_users, headers):
 # create_user
 # ---------------------------------------------------------------------------
 _SAMPLE_USER_DICT = {
-    "lastModified": 123, "username": "alice", "enabled": True,
-    "id": 1, "secured": False, "email": "alice@test.com",
-    "verified": True, "firstName": "Alice", "lastName": "A",
+    "lastModified": 123,
+    "username": "alice",
+    "enabled": True,
+    "id": 1,
+    "secured": False,
+    "email": "alice@test.com",
+    "verified": True,
+    "firstName": "Alice",
+    "lastName": "A",
 }
 
 
@@ -202,8 +216,11 @@ def test_create_user_success(mock_post, mock_get_profile, headers):
     mock_get_profile.return_value = User(**_SAMPLE_USER_DICT)
 
     user_req = CreateUser(
-        username="alice", password="pass", firstName="Alice",
-        lastName="A", email="alice@test.com",
+        username="alice",
+        password="pass",
+        firstName="Alice",
+        lastName="A",
+        email="alice@test.com",
     )
     profile = create_user(user_req, headers)
     assert profile.username == "alice"
@@ -214,8 +231,11 @@ def test_create_user_conflict(mock_post, headers):
     mock_post.return_value = MagicMock(status_code=409, text="conflict")
 
     user_req = CreateUser(
-        username="alice", password="pass", firstName="Alice",
-        lastName="A", email="alice@test.com",
+        username="alice",
+        password="pass",
+        firstName="Alice",
+        lastName="A",
+        email="alice@test.com",
     )
     with pytest.raises(AlreadyExistsError, match="already exists"):
         create_user(user_req, headers)
@@ -226,8 +246,11 @@ def test_create_user_server_error(mock_post, headers):
     mock_post.return_value = MagicMock(status_code=500, text="Server Error")
 
     user_req = CreateUser(
-        username="alice", password="pass", firstName="Alice",
-        lastName="A", email="alice@test.com",
+        username="alice",
+        password="pass",
+        firstName="Alice",
+        lastName="A",
+        email="alice@test.com",
     )
     with pytest.raises(Exception, match="XNAT user creation failed"):
         create_user(user_req, headers)
@@ -241,8 +264,11 @@ def test_create_user_server_error(mock_post, headers):
 @patch("imaging_api.services.users.to_create_imaging_user")
 def test_create_user_from_central_hub_user(mock_to_create, mock_create, mock_encrypt, headers):
     mock_to_create.return_value = CreateUser(
-        username="alice", password="secret", firstName="Alice",
-        lastName="A", email="alice@test.com",
+        username="alice",
+        password="secret",
+        firstName="Alice",
+        lastName="A",
+        email="alice@test.com",
     )
     mock_create.return_value = User(**_SAMPLE_USER_DICT)
 

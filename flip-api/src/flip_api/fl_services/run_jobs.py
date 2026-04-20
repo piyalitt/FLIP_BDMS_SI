@@ -69,28 +69,34 @@ def run_jobs_core(db: Session) -> None:
         job = check_for_queued_jobs(scheduler.id, db)
 
         if not job or not job.id:
-            logger.info({
-                "message": "No jobs waiting, will check again soon... 🔃",
-                "net": scheduler.netId,
-            })
+            logger.info(
+                {
+                    "message": "No jobs waiting, will check again soon... 🔃",
+                    "net": scheduler.netId,
+                }
+            )
             return
 
         # Step 3: Prepare and start training
-        logger.info({
-            "message": "About to prepare & start training... 📦",
-            "net": scheduler.netId,
-            "job": job.id,
-            "model": job.model_id,
-        })
+        logger.info(
+            {
+                "message": "About to prepare & start training... 📦",
+                "net": scheduler.netId,
+                "job": job.id,
+                "model": job.model_id,
+            }
+        )
 
         prepare_and_start_training(job.model_id, job.id, job.clients, db)
 
-        logger.info({
-            "message": "Training started successfully! 🚀",
-            "net": scheduler.netId,
-            "job": job.id,
-            "model": job.model_id,
-        })
+        logger.info(
+            {
+                "message": "Training started successfully! 🚀",
+                "net": scheduler.netId,
+                "job": job.id,
+                "model": job.model_id,
+            }
+        )
         return
 
     except Exception as e:

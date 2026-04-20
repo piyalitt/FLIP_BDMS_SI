@@ -83,9 +83,7 @@ def test_seed_trusts_skips_existing(mock_get_settings, mock_session):
 @patch("flip_api.db.seed.trusts.get_settings")
 def test_seed_trusts_raises_on_lookup_exception(mock_get_settings, mock_session):
     """Test that trust lookup errors are raised and stop seeding."""
-    mock_get_settings.return_value = SimpleNamespace(
-        ENV="development", TRUST_NAMES=["Broken Trust"]
-    )
+    mock_get_settings.return_value = SimpleNamespace(ENV="development", TRUST_NAMES=["Broken Trust"])
 
     mock_session.exec.side_effect = Exception("lookup failed")
 
