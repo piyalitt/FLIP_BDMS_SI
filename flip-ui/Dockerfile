@@ -23,13 +23,17 @@ RUN apk add --no-cache python3 make g++ xdg-utils
 COPY docker/ui-entrypoint.sh /usr/local/bin/ui-entrypoint.sh
 RUN chmod +x /usr/local/bin/ui-entrypoint.sh
 
+# Set working directory
 WORKDIR /app
 
+# Copy package files
 COPY package*.json ./
 
+# Install dependencies
 RUN npm install
 
 ARG UI_PORT
+# Expose port
 EXPOSE $UI_PORT
 
 ENTRYPOINT ["/usr/local/bin/ui-entrypoint.sh"]
