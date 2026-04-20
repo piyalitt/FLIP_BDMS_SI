@@ -16,6 +16,10 @@ FROM node:22-alpine AS development
 # Install dependencies for building node modules
 RUN apk add --no-cache python3 make g++ xdg-utils
 
+# Install bootstrap entrypoint outside /app so bind mounts don't replace it
+COPY docker/ui-entrypoint.sh /usr/local/bin/ui-entrypoint.sh
+RUN chmod +x /usr/local/bin/ui-entrypoint.sh
+
 # Set working directory
 WORKDIR /app
 
@@ -28,6 +32,8 @@ RUN npm install
 ARG UI_PORT
 # Expose port
 EXPOSE $UI_PORT
+
+ENTRYPOINT ["/usr/local/bin/ui-entrypoint.sh"]
 
 # Default command for development (used with volume mounts)
 CMD ["npm", "run", "dev"]
