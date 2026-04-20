@@ -239,7 +239,24 @@ resource "aws_instance" "ec2_instance" {
   }
 }
 
+# AWS-managed prefix list containing CloudFront origin-facing egress IPs.
+# Used to restrict ALB ingress to CloudFront only, so the ALB cannot be
+# reached directly from the internet — a WAF attached to the distribution
+# cannot be bypassed if CloudFront is the only path to the ALB.
+data "aws_ec2_managed_prefix_list" "cloudfront_origin_facing" {
+  name = "com.amazonaws.global.cloudfront.origin-facing"
+}
+
 # Application Load Balancer
+#
+# Ingress is restricted to CloudFront's origin-facing prefix list on HTTPS/HTTP.
+# The HTTP API ports (var.API_PORT, var.FL_API_PORT) have no external consumer:
+# - flip-api is reached via CloudFront → ALB /api/* rule on HTTPS:443.
+# - the FL API is an internal docker-network-only service used by flip-api; the
+#   `fl-api-listener` on the ALB has no caller (see check_status.py, which
+#   `docker exec`s into the container for health checks).
+# Those listeners still exist for potential future internal use, but they are
+# unreachable from the internet.
 module "alb_security_group" {
   source      = "./modules/secgroup"
   name        = "alb-security-group"
@@ -247,20 +264,14 @@ module "alb_security_group" {
   description = "Security group for FLIP ALB"
   ingress_rules = [
     {
-      port        = var.ALB_HTTPS_PORT
-      description = "HTTPS traffic"
+      port            = var.ALB_HTTPS_PORT
+      description     = "HTTPS traffic from CloudFront"
+      prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront_origin_facing.id]
     },
     {
-      port        = var.API_PORT
-      description = "API traffic"
-    },
-    {
-      port        = var.FL_API_PORT
-      description = "FL API traffic"
-    },
-    {
-      port        = var.ALB_HTTP_PORT
-      description = "HTTP traffic (redirect to HTTPS)"
+      port            = var.ALB_HTTP_PORT
+      description     = "HTTP traffic (redirect to HTTPS) from CloudFront"
+      prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront_origin_facing.id]
     }
   ]
 }

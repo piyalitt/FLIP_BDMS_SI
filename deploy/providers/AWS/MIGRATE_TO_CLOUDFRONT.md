@@ -84,15 +84,28 @@ DNS validation typically completes in < 60 s; both certificates reach `ISSUED` b
 make plan PROD=stag
 ```
 
-Review the plan. Expect **new** resources: CloudFront distribution, S3 UI bucket, OAC, S3 bucket policy, Route53 record for `api.<subdomain>`, additional ALB listener certificate, CloudFront logging bucket.
+Review the plan. Expect **new** resources:
+
+- CloudFront distribution, S3 UI bucket, OAC, S3 bucket policy.
+- Route53 record for `api.<subdomain>`.
+- Additional ALB listener certificate (`aws_acm_certificate.flip_api`).
+- CloudFront logging bucket (`aws_s3_bucket.cloudfront_logs`).
+- `data.aws_ec2_managed_prefix_list.cloudfront_origin_facing` (no cost; read-only lookup).
+- `aws_cloudfront_origin_request_policy.flip_api` (narrow `/api/*` origin-request policy).
+- `aws_cloudfront_response_headers_policy.flip_ui_spa` (HSTS + CSP report-only etc. for the SPA).
+- `aws_wafv2_web_acl.flip_ui_cloudfront` + `aws_wafv2_web_acl_logging_configuration.flip_ui_cloudfront` + `aws_cloudwatch_log_group.flip_ui_waf` (all in us-east-1). All WAF rules start in count (shadow) mode.
 
 Also expect **destructive** changes:
 
-- `module.alb.aws_lb_target_group["ec2-instance-ui"]` will be destroyed.
-- `module.alb.aws_lb_target_group_attachment["ec2-instance-ui"]` will be destroyed.
-- `module.ec2_security_group.aws_security_group_rule.ingress["443"]` will be destroyed.
-- `module.alb.aws_lb_listener["https-listener"]` will update in-place (default action `forward → ec2-instance-ui` → `fixed_response 404`).
-- `aws_route53_record.alb` will update in-place (alias swings from ALB to CloudFront).
+- `module.alb.aws_lb_target_group["ec2-instance-ui"]` destroyed.
+- `module.alb.aws_lb_target_group_attachment["ec2-instance-ui"]` destroyed.
+- `module.ec2_security_group.aws_security_group_rule.ingress["443"]` destroyed.
+- `module.alb.aws_lb_listener["https-listener"]` updates in-place (default action `forward → ec2-instance-ui` → `fixed_response 404`).
+- `aws_route53_record.alb` updates in-place (alias swings from ALB to CloudFront).
+- `module.alb_security_group.aws_security_group_rule.ingress[<API_PORT>]` destroyed (rule removed; the listener still exists but is unreachable from the internet).
+- `module.alb_security_group.aws_security_group_rule.ingress[<FL_API_PORT>]` destroyed (same rationale — FL API is docker-network-only).
+- `module.alb_security_group.aws_security_group_rule.ingress["443"]` replaced: `cidr_blocks=["0.0.0.0/0"]` → `prefix_list_ids=[<CloudFront origin-facing>]`.
+- `module.alb_security_group.aws_security_group_rule.ingress["80"]` replaced with the same prefix-list swap.
 
 If the plan looks right:
 

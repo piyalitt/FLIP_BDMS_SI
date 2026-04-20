@@ -317,7 +317,241 @@ resource "aws_cloudfront_function" "spa_rewrite" {
 locals {
   cloudfront_policy_caching_optimized = "658327ea-f89d-4fab-a63d-7e88639e58f6"
   cloudfront_policy_caching_disabled  = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-  cloudfront_policy_all_viewer        = "216adef6-5c7f-47e4-b989-5492eafa07d3"
+}
+
+# Custom origin-request policy for /api/*. The managed AllViewer policy
+# forwards everything (all headers, cookies, query strings); this narrows
+# to the minimum the API actually needs:
+# - Authorization: carries both Cognito access tokens (user → API) and
+#   trust API keys (TRUST_API_KEY_HEADER=Authorization).
+# - Content-Type: for JSON/multipart requests.
+# - Origin: for CORS preflight.
+# X-Internal-Service-Key is intentionally excluded: fl-server → flip-api
+# traffic is docker-network-internal on the Central Hub and never crosses
+# CloudFront. Cookies are not used (API is JWT/stateless). Query strings
+# pass through untouched because endpoints use them for filters/pagination
+# without a central allowlist.
+resource "aws_cloudfront_origin_request_policy" "flip_api" {
+  name    = "flip-api-origin-request-${replace(var.flip_alb_subdomain, "/[^a-zA-Z0-9]/", "-")}"
+  comment = "Least-privilege origin-request policy for /api/* on ${var.flip_alb_subdomain}"
+
+  headers_config {
+    header_behavior = "whitelist"
+    headers {
+      items = ["Authorization", "Content-Type", "Origin"]
+    }
+  }
+
+  cookies_config {
+    cookie_behavior = "none"
+  }
+
+  query_strings_config {
+    query_string_behavior = "all"
+  }
+}
+
+############################
+# WAFv2 Web ACL (CloudFront-scoped, us-east-1)
+############################
+
+# CloudFront-scoped WAFs must live in us-east-1 regardless of where the
+# distribution serves traffic, same constraint as the viewer cert.
+#
+# Every rule starts in count (shadow) mode so we observe what each rule
+# would block before accidentally paging ourselves. The sampled-request
+# console (and the CloudWatch log group below) show which requests each
+# rule matches; once a rule has been in count mode across a release cycle
+# with no false positives, flip its `override_action` (for managed groups)
+# or `action` (for the custom rate-limit) to `block` / `none` + `block`.
+resource "aws_wafv2_web_acl" "flip_ui_cloudfront" {
+  provider = aws.us_east_1
+  name     = "flip-ui-${replace(var.flip_alb_subdomain, "/[^a-zA-Z0-9]/", "-")}"
+  scope    = "CLOUDFRONT"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "AWSManagedRulesCommonRuleSet"
+    priority = 10
+
+    override_action {
+      count {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "flipUiCommonRuleSet"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  rule {
+    name     = "AWSManagedRulesKnownBadInputsRuleSet"
+    priority = 20
+
+    override_action {
+      count {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesKnownBadInputsRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "flipUiKnownBadInputs"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  rule {
+    name     = "AWSManagedRulesAmazonIpReputationList"
+    priority = 30
+
+    override_action {
+      count {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesAmazonIpReputationList"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "flipUiIpReputation"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  rule {
+    name     = "RateLimitPerIp"
+    priority = 100
+
+    # Starts in count mode; flip to `block {}` once sampled traffic confirms
+    # no legitimate client (including trust pollers) trips the threshold.
+    action {
+      count {}
+    }
+
+    statement {
+      rate_based_statement {
+        limit              = 2000
+        aggregate_key_type = "IP"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "flipUiRateLimit"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "flipUiWebAcl"
+    sampled_requests_enabled   = true
+  }
+
+  tags = {
+    Name = "flip-ui-waf-${var.flip_alb_subdomain}"
+  }
+}
+
+# WAF logging destination. Name MUST start with `aws-waf-logs-` per AWS —
+# otherwise PutLoggingConfiguration rejects it.
+resource "aws_cloudwatch_log_group" "flip_ui_waf" {
+  provider          = aws.us_east_1
+  name              = "aws-waf-logs-flip-ui-${replace(var.flip_alb_subdomain, "/[^a-zA-Z0-9]/", "-")}"
+  retention_in_days = 30
+}
+
+resource "aws_wafv2_web_acl_logging_configuration" "flip_ui_cloudfront" {
+  provider                = aws.us_east_1
+  resource_arn            = aws_wafv2_web_acl.flip_ui_cloudfront.arn
+  log_destination_configs = [aws_cloudwatch_log_group.flip_ui_waf.arn]
+}
+
+############################
+# Response headers policy (static / SPA behavior only)
+############################
+
+# Attached to the default (S3) cache behavior only. Do NOT attach to /api/*
+# — per the viewer-request-function caveat above, distribution-level or
+# api-behavior-level headers can leak into API responses and break API
+# consumers that do not expect them.
+#
+# HSTS omits `preload` deliberately: joining the HSTS preload list is a
+# one-way door across every subdomain of the apex and belongs in its own
+# coordinated PR, not here.
+#
+# CSP ships in report-only initially so legitimate violations surface in
+# browser console + `Content-Security-Policy-Report-Only` response headers
+# without blocking traffic. After one release cycle with no real-user
+# violations, move the policy body from `content_security_policy_report_only`
+# to `content_security_policy` (enforcing).
+resource "aws_cloudfront_response_headers_policy" "flip_ui_spa" {
+  name    = "flip-ui-spa-${replace(var.flip_alb_subdomain, "/[^a-zA-Z0-9]/", "-")}"
+  comment = "Security response headers for the flip-ui SPA at ${var.flip_alb_subdomain}"
+
+  security_headers_config {
+    strict_transport_security {
+      access_control_max_age_sec = 31536000
+      include_subdomains         = true
+      preload                    = false
+      override                   = true
+    }
+
+    content_type_options {
+      override = true
+    }
+
+    referrer_policy {
+      referrer_policy = "strict-origin-when-cross-origin"
+      override        = true
+    }
+
+    frame_options {
+      frame_option = "DENY"
+      override     = true
+    }
+    # `security_headers_config.content_security_policy` is enforce-only; we
+    # ship CSP as `Content-Security-Policy-Report-Only` below in
+    # custom_headers_config until a release cycle confirms no false
+    # positives, then move the body here and delete the custom header.
+  }
+
+  custom_headers_config {
+    items {
+      header = "Content-Security-Policy-Report-Only"
+      value = join(" ", [
+        "default-src 'self';",
+        "connect-src 'self' https://cognito-idp.*.amazonaws.com https://cognito-identity.*.amazonaws.com;",
+        "img-src 'self' data:;",
+        "style-src 'self' 'unsafe-inline';",
+        "script-src 'self';",
+        "object-src 'none';",
+        "frame-ancestors 'none';",
+      ])
+      override = true
+    }
+  }
 }
 
 resource "aws_cloudfront_distribution" "flip_ui" {
@@ -328,6 +562,7 @@ resource "aws_cloudfront_distribution" "flip_ui" {
   price_class         = "PriceClass_100"
   aliases             = [var.flip_alb_subdomain]
   comment             = "flip-ui at ${var.flip_alb_subdomain}"
+  web_acl_id          = aws_wafv2_web_acl.flip_ui_cloudfront.arn
 
   origin {
     domain_name              = aws_s3_bucket.flip_ui.bucket_regional_domain_name
@@ -348,12 +583,13 @@ resource "aws_cloudfront_distribution" "flip_ui" {
   }
 
   default_cache_behavior {
-    target_origin_id       = "s3-flip-ui"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = true
-    cache_policy_id        = local.cloudfront_policy_caching_optimized
+    target_origin_id           = "s3-flip-ui"
+    viewer_protocol_policy     = "redirect-to-https"
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    compress                   = true
+    cache_policy_id            = local.cloudfront_policy_caching_optimized
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.flip_ui_spa.id
 
     # Attached to the S3 default behavior only — /api/* has its own
     # cache behavior and never invokes this function.
@@ -371,7 +607,7 @@ resource "aws_cloudfront_distribution" "flip_ui" {
     cached_methods           = ["GET", "HEAD"]
     compress                 = true
     cache_policy_id          = local.cloudfront_policy_caching_disabled
-    origin_request_policy_id = local.cloudfront_policy_all_viewer
+    origin_request_policy_id = aws_cloudfront_origin_request_policy.flip_api.id
   }
 
   restrictions {
