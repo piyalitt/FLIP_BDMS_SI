@@ -94,8 +94,6 @@ The UI is served from S3 behind CloudFront at the canonical user-facing subdomai
 
 **Subsequent UI deploys**: just `make deploy-ui PROD=stag|true` — builds the UI from the working tree, regenerates `window.js`, syncs to S3, invalidates CloudFront. No Terraform involved.
 
-**First-time rollout in an account** — see [`MIGRATE_TO_CLOUDFRONT.md`](MIGRATE_TO_CLOUDFRONT.md) for the step-by-step migration from the legacy EC2-ALB path to CloudFront. Prod migrated on 2026-04-19; stag migration is tracked in that doc.
-
 ### Manual Step-by-Step Deployment
 
 For debugging or selective deployment, run individual steps:
