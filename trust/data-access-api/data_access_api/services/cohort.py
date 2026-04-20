@@ -11,11 +11,15 @@
 #
 
 import datetime
+from collections.abc import Mapping
+from typing import Any
 
 import pandas as pd
 from fastapi import HTTPException
 from psycopg2 import errors as pg_errors
+from sqlalchemy import bindparam, text
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
+from sqlalchemy.sql.elements import TextClause
 
 from data_access_api.config import get_settings
 from data_access_api.db.database import engine
@@ -58,12 +62,18 @@ def validate_query(query: str) -> bool:
     return True
 
 
-def get_records(query: str) -> pd.DataFrame:
+def get_records(
+    query: str | TextClause,
+    params: Mapping[str, Any] | None = None,
+) -> pd.DataFrame:
     """
-    Executes a raw SQL query and returns results.
+    Executes a SQL query and returns results.
 
     Args:
-        query (str): The SQL query to execute.
+        query (str | TextClause): The SQL query to execute. Pass a ``TextClause`` with bind
+            parameters when the query is parameterized.
+        params (Mapping[str, Any] | None): Optional mapping of bind parameter names to values
+            for parameterized queries.
 
     Returns:
         pd.DataFrame: The results of the query as a DataFrame.
@@ -73,7 +83,7 @@ def get_records(query: str) -> pd.DataFrame:
     """
     logger.info("Executing SQL query")
 
-    cached = get_cached_result(query)
+    cached = get_cached_result(query, params)
     if cached is not None:
         return cached
 
@@ -84,8 +94,8 @@ def get_records(query: str) -> pd.DataFrame:
         # Therefore, we need to validate the query is safe, e.g. only SELECT queries, and does not contain sensitive
         # data.
         # TODO check if we can check column types -- could be used to exclude primary keys, foreign keys, etc.
-        df = pd.read_sql(query, engine)
-        set_cached_result(query, df)
+        df = pd.read_sql(query, engine, params=params)
+        set_cached_result(query, df, params)
         return df
 
     except DBAPIError as e:
@@ -142,16 +152,19 @@ def get_sex_distribution(df: pd.DataFrame) -> dict:
     if "person_id" not in df.columns:
         return {"name": "Sex Distribution", "results": []}
 
-    sex_counts_database_query = f"""
+    person_ids = [int(pid) for pid in df["person_id"].unique()]
+
+    sex_counts_database_query = text("""
     SELECT
     p.gender_source_value,
     COUNT(*) AS count
     FROM omop.person p
-    WHERE p.person_id IN ({", ".join(df["person_id"].unique().astype(str).tolist())})
+    WHERE p.person_id IN :person_ids
     GROUP BY p.gender_source_value
-    """
+    """).bindparams(bindparam("person_ids", expanding=True))
     sex_counts = get_records(
         query=sex_counts_database_query,
+        params={"person_ids": person_ids},
     )
     return {
         "name": "Sex Distribution",
@@ -169,17 +182,20 @@ def get_age_distribution(df: pd.DataFrame) -> dict:
     if "person_id" not in df.columns:
         return {"name": "Age Distribution", "results": []}
 
-    age_distribution_database_query = f"""
+    person_ids = [int(pid) for pid in df["person_id"].unique()]
+
+    age_distribution_database_query = text("""
     SELECT
     FLOOR(DATE_PART('year', AGE(CURRENT_DATE, p.birth_datetime)) / 10) * 10 AS age_group,
     COUNT(*) AS count
     FROM omop.person p
-    WHERE p.person_id IN ({", ".join(df["person_id"].unique().astype(str).tolist())})
+    WHERE p.person_id IN :person_ids
     GROUP BY age_group
     ORDER BY age_group
-    """
+    """).bindparams(bindparam("person_ids", expanding=True))
     age_distribution = get_records(
         query=age_distribution_database_query,
+        params={"person_ids": person_ids},
     )
     return {
         "name": "Age Distribution",
