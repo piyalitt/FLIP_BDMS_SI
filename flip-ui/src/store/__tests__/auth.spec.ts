@@ -14,6 +14,7 @@
 import {
     confirmResetPassword,
     confirmSignIn,
+    fetchAuthSession,
     fetchUserAttributes,
     getCurrentUser,
     resetPassword,
@@ -35,6 +36,7 @@ import { useAuthStore } from "@/store/auth";
 vi.mock("aws-amplify/auth", () => ({
     confirmResetPassword: vi.fn(),
     confirmSignIn: vi.fn(),
+    fetchAuthSession: vi.fn(),
     fetchUserAttributes: vi.fn(),
     getCurrentUser: vi.fn(),
     resetPassword: vi.fn(),
@@ -77,6 +79,13 @@ describe("authStore", () => {
         vi.mocked(getMfaStatus).mockReset();
         vi.mocked(getUserPermissions).mockReset();
         vi.mocked(routeChange.gotoLogin).mockReset();
+        vi.mocked(fetchAuthSession).mockReset();
+        // Default: tokens are visible immediately so waitForSessionTokens
+        // resolves without triggering the forceRefresh fallback. Tests that
+        // exercise the race re-arm this with mockResolvedValueOnce.
+        vi.mocked(fetchAuthSession).mockResolvedValue({
+            tokens: { idToken: { toString: () => "id-token" } as never, accessToken: {} as never }
+        } as never);
     });
 
     describe("initial state & getters", () => {
@@ -359,6 +368,71 @@ describe("authStore", () => {
 
             expect(store.signInStep).toBeNull();
             expect(getCurrentUser).not.toHaveBeenCalled();
+        });
+
+        it("forces a session refresh when tokens are not yet visible after signIn", async () => {
+            // Amplify v6 can resolve signIn before fetchAuthSession sees the
+            // cached tokens; this race used to surface as a 401 on the very
+            // first post-signIn backend call. Arm fetchAuthSession to return
+            // empty on the first read, then populated on the forceRefresh
+            // retry, and confirm hydrate still runs to completion.
+            vi.mocked(fetchAuthSession)
+                .mockReset()
+                .mockResolvedValueOnce({ tokens: undefined } as never)
+                .mockResolvedValueOnce({
+                    tokens: { idToken: { toString: () => "id" } as never }
+                } as never);
+            vi.mocked(signIn).mockResolvedValue({
+                isSignedIn: true,
+                nextStep: { signInStep: "DONE" }
+            } as never);
+            vi.mocked(getCurrentUser).mockResolvedValue({
+                username: "u",
+                userId: "id"
+            } as never);
+            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: true });
+            vi.mocked(fetchUserAttributes).mockResolvedValue({
+                sub: "s",
+                email: "e@f.com"
+            } as never);
+            vi.mocked(getUserPermissions).mockResolvedValue({ permissions: [] });
+
+            await store.signIn({ username: "u", password: "p" });
+
+            expect(fetchAuthSession).toHaveBeenCalledTimes(2);
+            expect(fetchAuthSession).toHaveBeenNthCalledWith(2, { forceRefresh: true });
+            expect(store.user?.username).toBe("u");
+        });
+
+        it("rethrows post-signIn hydrate failures so Login.vue surfaces them", async () => {
+            // Cognito accepted the creds (isSignedIn=true) but the follow-up
+            // backend call failed. The store must log the underlying error and
+            // rethrow so the login page can tell the user something went wrong
+            // — silently resolving here lets a broken session masquerade as
+            // success and the next route-guarded call 401s.
+            vi.mocked(signIn).mockResolvedValue({
+                isSignedIn: true,
+                nextStep: { signInStep: "DONE" }
+            } as never);
+            vi.mocked(getCurrentUser).mockResolvedValue({
+                username: "u",
+                userId: "id"
+            } as never);
+            vi.mocked(getMfaStatus).mockRejectedValue(
+                new Error("Request failed with status code 401")
+            );
+            const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+            await expect(
+                store.signIn({ username: "u", password: "p" })
+            ).rejects.toThrow("Request failed with status code 401");
+
+            expect(consoleSpy).toHaveBeenCalledWith(
+                "Post-signIn hydrate failed:",
+                expect.objectContaining({ message: "Request failed with status code 401" }),
+                expect.any(Object)
+            );
+            consoleSpy.mockRestore();
         });
     });
 

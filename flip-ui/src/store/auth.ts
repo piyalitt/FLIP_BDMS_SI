@@ -14,6 +14,7 @@
 import {
     confirmResetPassword,
     confirmSignIn,
+    fetchAuthSession,
     fetchUserAttributes,
     getCurrentUser,
     resetPassword,
@@ -99,6 +100,34 @@ const buildUserWithPermissions = async (
     attributes,
     permissions: permsRes.permissions ?? []
   };
+};
+
+// Amplify v6 can resolve `signIn({isSignedIn: true})` a beat before
+// `fetchAuthSession()` sees the cached tokens (the token-orchestrator
+// write and the session-reader read don't share a barrier on every
+// platform). When that happens, the very next backend request from
+// `hydrate()` goes out without an `Authorization` header and 401s,
+// which Login.vue surfaces as "There was a problem logging you in".
+// Pause until either the tokens appear or a forceRefresh produces
+// them, so callers can assume `hydrate()` sees a real session.
+const waitForSessionTokens = async (): Promise<void> => {
+    let session = await fetchAuthSession();
+    if (session.tokens?.idToken) return;
+    try {
+        session = await fetchAuthSession({ forceRefresh: true });
+    } catch (e) {
+        console.error("waitForSessionTokens: forceRefresh threw:", e);
+    }
+    if (!session.tokens?.idToken) {
+        // Still nothing. Log what Amplify *thinks* the session is so
+        // DevTools can distinguish "no session at all" (bad storage /
+        // misconfigured client) from "session exists but tokens are
+        // empty" (token-refresh issue).
+        console.warn(
+            "waitForSessionTokens: no idToken after forceRefresh",
+            { userSub: session.userSub, hasCredentials: !!session.credentials }
+        );
+    }
 };
 
 // Shape of Amplify's `nextStep` when Cognito chains into MFA_SETUP.
@@ -196,7 +225,35 @@ export const useAuthStore = defineStore("auth", {
             }
 
             if (out.isSignedIn) {
-                await this.hydrate();
+                await waitForSessionTokens();
+                try {
+                    await this.hydrate();
+                } catch (e) {
+                    // hydrate rolls up any getCurrentUser / getMfaStatus
+                    // failure after Cognito has already accepted the
+                    // credentials. Log the underlying error (AxiosError
+                    // status, Amplify class name, message, response
+                    // body) so DevTools surfaces the real cause instead
+                    // of Login.vue's generic "problem logging you in"
+                    // snackbar swallowing it.
+                    type AxiosErrorLike = {
+                        response?: { status?: number; data?: unknown; headers?: unknown };
+                        config?: { url?: string; headers?: unknown };
+                        name?: string;
+                    };
+                    const ax = e as AxiosErrorLike;
+                    console.error("Post-signIn hydrate failed:", e, {
+                        name: ax.name,
+                        status: ax.response?.status,
+                        responseBody: ax.response?.data,
+                        requestUrl: ax.config?.url,
+                        requestHadAuth: Boolean(
+                            (ax.config?.headers as Record<string, unknown> | undefined)
+                                ?.Authorization
+                        )
+                    });
+                    throw e;
+                }
             }
         },
 
@@ -214,6 +271,7 @@ export const useAuthStore = defineStore("auth", {
             }
 
             if (out.isSignedIn) {
+                await waitForSessionTokens();
                 await this.hydrate();
             }
         },
@@ -231,6 +289,7 @@ export const useAuthStore = defineStore("auth", {
             // next navigation. Without this, a valid code + transient
             // hydrate failure surfaces to the user as "Sign-in failed:
             // Network Error" — misleadingly blaming the code.
+            await waitForSessionTokens();
             try {
                 await this.hydrate(true);
             } catch (e) {
@@ -255,6 +314,7 @@ export const useAuthStore = defineStore("auth", {
             const out = await confirmSignIn({ challengeResponse: code });
             if (!out.isSignedIn) return;
 
+            await waitForSessionTokens();
             try {
                 await updateMFAPreference({ totp: "PREFERRED" });
             } catch (e) {
