@@ -60,8 +60,23 @@ class Http {
         http.interceptors.request.use(
             async config => {
                 if (config.headers && config.headers.Authorization === undefined) {
-                    const session = await fetchAuthSession();
-                    const token = session.tokens?.idToken?.toString();
+                    // Amplify v6 caches tokens asynchronously after signIn;
+                    // a call to fetchAuthSession() immediately after an
+                    // `isSignedIn=true` resolve can observe an empty
+                    // session. If tokens aren't there yet, force a refresh
+                    // so freshly-signed-in users don't hit a 401 on the
+                    // very next request (e.g. getMfaStatus from hydrate).
+                    let session = await fetchAuthSession();
+                    let token = session.tokens?.idToken?.toString();
+                    if (!token) {
+                        try {
+                            session = await fetchAuthSession({ forceRefresh: true });
+                            token = session.tokens?.idToken?.toString();
+                        } catch {
+                            // swallow — request will go out unauthenticated
+                            // and the 401 handler below will clean up.
+                        }
+                    }
 
                     if (token) {
                         config.headers.Authorization = "Bearer " + token;
