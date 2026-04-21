@@ -29,21 +29,18 @@ include $(MAIN_ENV_FILE)
 export $(shell sed 's/=.*//' $(MAIN_ENV_FILE))
 endif
 
-# ---- FL backend selection (flower | nvflare) ----
-FL_BACKEND ?= flower
-VALID_FL_BACKENDS := flower nvflare
-
-ifeq (,$(filter $(FL_BACKEND),$(VALID_FL_BACKENDS)))
-$(error Invalid FL_BACKEND '$(FL_BACKEND)'. Must be one of: $(VALID_FL_BACKENDS))
-endif
+include ../deploy/fl_backend.mk
 
 COMMON_COMPOSE_FILE := compose_trust.$(__DCKR_SUFFIX).yml
 FL_BACKEND_COMPOSE_FILE := compose_trust.$(__DCKR_SUFFIX).$(FL_BACKEND).yml
 
-# Override FL_PROVISIONED_DIR to use absolute path resolved relative to the parent Makefile
-# This allows the repo to work on any machine without hardcoding paths
-override FL_PROVISIONED_DIR := $(shell realpath ../../flip-fl-base/workspace)
-export FL_PROVISIONED_DIR
+# Resolve FL_PROVISIONED_DIR (from .env) to an absolute path relative to the repo root.
+# Docker requires absolute paths for volume mounts; the .env value may be relative.
+# Skip if already absolute (the parent Makefile resolves it before invoking sub-make).
+MAKEFILE_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
+ifeq ($(patsubst /%,,$(FL_PROVISIONED_DIR)),$(FL_PROVISIONED_DIR))
+override FL_PROVISIONED_DIR := $(abspath $(MAKEFILE_DIR)/../$(FL_PROVISIONED_DIR))
+endif
 
 network1 = deploy_trust-network-1
 network2 = deploy_trust-network-2
@@ -82,6 +79,7 @@ TRUST_1_VARS = \
 	LOKI_PORT=${LOKI_PORT_TRUST_1} \
 	TRUST_NETWORK_NAME=${network1} \
 	TRUST_NAME=Trust_1 \
+	TRUST_NUMBER=1 \
 	TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),Trust_1)
 TRUST_2_VARS = \
 	BASE_IMAGES_DOWNLOAD_DIR=${BASE_IMAGES_DOWNLOAD_DIR_TRUST2} \
@@ -98,6 +96,7 @@ TRUST_2_VARS = \
 	LOKI_PORT=${LOKI_PORT_TRUST_2} \
 	TRUST_NETWORK_NAME=${network2} \
 	TRUST_NAME=Trust_2 \
+	TRUST_NUMBER=2 \
 	TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),Trust_2)
 
 build:
@@ -146,7 +145,9 @@ up-local-trust:
 	@echo "⚙️ Using environment file ${MAIN_ENV_FILE}"
 	@echo "🧠 FL_BACKEND=$(FL_BACKEND) ($(FL_BACKEND_COMPOSE_FILE))"
 	mkdir -p ${BASE_IMAGES_DOWNLOAD_DIR_TRUST1}
-	$(TRUST_1_VARS) TRUST_NAME=$(LOCAL_TRUST_NAME) TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),$(LOCAL_TRUST_NAME)) \
+	$(TRUST_1_VARS) TRUST_NAME=$(LOCAL_TRUST_NAME) \
+		TRUST_NUMBER=$(subst Trust_,,$(LOCAL_TRUST_NAME)) \
+		TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),$(LOCAL_TRUST_NAME)) \
 		XNAT_PORT=${XNAT_PORT_LOCAL_TRUST} \
 		PACS_UI_PORT=${PACS_UI_PORT_LOCAL_TRUST} \
 		OMOP_DATA_DIR=./omop-db/volumes/$(LOCAL_TRUST_NAME)/db_data \
@@ -159,6 +160,7 @@ up-local-trust:
 down-local-trust:
 	@echo "🛑 Stopping local Trust services..."
 	$(TRUST_1_VARS) TRUST_NAME=$(LOCAL_TRUST_NAME) \
+		TRUST_NUMBER=$(subst Trust_,,$(LOCAL_TRUST_NAME)) \
 		OMOP_DATA_DIR=./omop-db/volumes/$(LOCAL_TRUST_NAME)/db_data \
 		OBSERVABILITY_CONFIG_DIR=./observability \
 		LOKI_DATA_VOLUME=trust-local-loki-data \

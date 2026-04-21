@@ -760,8 +760,9 @@ def main(
         # Check Central Hub API is reachable inside Central Hub EC2 via SSH
         check_endpoint_over_ssh("flip", f"http://localhost:{API_PORT}/api/health", 200)
 
-        # Check FL-api-net endpoints over ssh and inside flip-api running container.
-        # Use urllib.request (stdlib) for consistency — works even if httpx is absent.
+        # Check FL API client status from the flip-api container (which shares the Docker network).
+        # The FL API /check_client_status endpoint queries the SuperLink Control API.
+        # An empty list is normal if SuperNodes haven't connected yet — report as WARN, not FAIL.
         for nets in configured_net_numbers:
             success, message = run_ssh_command(
                 ssh_key="",
@@ -772,10 +773,8 @@ def main(
                 ),
             )
             if not success or not message:
-                # FL API may not be running or reachable — degrade gracefully
                 print_status("WARN", f"FL API Net {nets} check_client_status not reachable from flip-api container")
                 continue
-            # Extract JSON part from the message (list of client info)
             start = message.find("[")
             json_part = message[start:]
             try:
@@ -786,12 +785,12 @@ def main(
                     f"FL API Net {nets} clients returned invalid JSON from flip-api container:\n{message}",
                 )
                 continue
-            if success and client_info != []:
+            if client_info:
                 print_status("PASS", f"FL API Net {nets} clients are reachable from flip-api container")
             else:
                 print_status(
-                    "FAIL",
-                    f"FL API Net {nets} clients are not reachable from flip-api container:\n{message}",
+                    "WARN",
+                    f"FL API Net {nets} returned empty client list — SuperNodes may not have connected yet",
                 )
 
         # Trust EC2 endpoint checks

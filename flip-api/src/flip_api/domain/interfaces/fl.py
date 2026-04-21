@@ -120,7 +120,11 @@ class IClientStatus(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def online(self) -> bool:
-        return self.status != ClientStatus.NO_REPLY.value
+        offline_statuses = {
+            ClientStatus.NO_REPLY.value,
+            ClientStatus.DISCONNECTED.value,
+        }
+        return self.status not in offline_statuses
 
 
 class INetStatus(BaseModel):
