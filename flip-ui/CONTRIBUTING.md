@@ -46,17 +46,20 @@ npm run dev
 
 This compiles the application and starts a local dev server with hot-reload. A `predev` npm hook runs
 [`scripts/generate-window-js.sh`](scripts/generate-window-js.sh) first, which writes `public/js/window.js` from the
-`VITE_*` environment variables currently in scope (docker-compose populates these from `.env.development`).
+environment variables currently in scope (docker-compose populates these from `.env.development`).
 `public/js/window.js` is gitignored; `public/js/window.js.example` documents the expected shape.
 
 Configure the backend URL via `.env.development`:
 
 ```dotenv
-VITE_AWS_USER_POOL_ID="<A_VALID_COGNITO_USER_POOL>"
-VITE_AWS_CLIENT_ID="<A_VALID_COGNITO_CLIENT_ID>"
-VITE_AWS_BASE_URL="http://localhost:8000/api"
+AWS_COGNITO_USER_POOL_ID="<A_VALID_COGNITO_USER_POOL>"
+AWS_COGNITO_APP_CLIENT_ID="<A_VALID_COGNITO_CLIENT_ID>"
+AWS_REGION="eu-west-2"
+CENTRAL_HUB_API_URL="http://localhost:8000/api"
 VITE_LOCAL=false
 ```
+
+These are the same names the backend services read — no `VITE_AWS_*` duplication.
 
 Set `VITE_LOCAL=true` to enable local mock mode (bypasses Cognito authentication, useful for UI development without
 a running backend).

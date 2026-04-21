@@ -52,7 +52,7 @@ class Http {
         }
 
         const http = axios.create({
-            baseURL: devMode ? process.env.VITE_AWS_BASE_URL : window.AWS_BASE_URL,
+            baseURL: window.AWS_BASE_URL,
             timeout: 30_000,
             headers: {}
         });

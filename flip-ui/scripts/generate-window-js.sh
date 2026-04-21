@@ -26,14 +26,20 @@ json_str() {
   node -pe 'JSON.stringify(process.argv[1] || "")' -- "${1-}"
 }
 
-RAW_USER_POOL_ID="${VITE_AWS_USER_POOL_ID:-${AWS_COGNITO_USER_POOL_ID:-}}"
-RAW_CLIENT_ID="${VITE_AWS_CLIENT_ID:-${AWS_COGNITO_APP_CLIENT_ID:-}}"
+# Single source of truth: the canonical backend-style names used
+# across the rest of the stack (.env.*, compose files, the flip-api
+# container). Vite-specific duplicates used to exist but drifted out
+# of sync on the deploy path and left the bundle with `userPoolId:
+# undefined` at build time — now we read the canonical names directly
+# and the UI picks them up at runtime via window.js.
+RAW_USER_POOL_ID="${AWS_COGNITO_USER_POOL_ID:-}"
+RAW_CLIENT_ID="${AWS_COGNITO_APP_CLIENT_ID:-}"
 
-AWS_BASE_URL=$(json_str "${VITE_AWS_BASE_URL:-http://localhost:8080/api}")
+AWS_BASE_URL=$(json_str "${CENTRAL_HUB_API_URL:-http://localhost:8080/api}")
 USER_POOL_ID=$(json_str "${RAW_USER_POOL_ID}")
 CLIENT_ID=$(json_str "${RAW_CLIENT_ID}")
-REGION=$(json_str "${VITE_AWS_REGION:-${AWS_REGION:-eu-west-2}}")
-BLACKLIST=$(json_str "${VITE_BLACKLISTED_MODEL_FILES:-}")
+REGION=$(json_str "${AWS_REGION:-eu-west-2}")
+BLACKLIST=$(json_str "${BLACKLISTED_MODEL_FILES:-}")
 RELEASE=$(json_str "${RELEASE_VERSION:-}")
 
 # MAX_REIMPORT_COUNT is emitted as a raw number, so reject non-numeric
@@ -50,10 +56,10 @@ case "$MAX_REIMPORT_RAW" in
 esac
 
 if [ -z "${RAW_USER_POOL_ID}" ]; then
-  echo "generate-window-js: WARNING — no AWS_COGNITO_USER_POOL_ID / VITE_AWS_USER_POOL_ID set; Cognito auth will fail." >&2
+  echo "generate-window-js: WARNING — AWS_COGNITO_USER_POOL_ID is unset; Cognito auth will fail." >&2
 fi
 if [ -z "${RAW_CLIENT_ID}" ]; then
-  echo "generate-window-js: WARNING — no AWS_COGNITO_APP_CLIENT_ID / VITE_AWS_CLIENT_ID set; Cognito auth will fail." >&2
+  echo "generate-window-js: WARNING — AWS_COGNITO_APP_CLIENT_ID is unset; Cognito auth will fail." >&2
 fi
 
 cat <<EOF

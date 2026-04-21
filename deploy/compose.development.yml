@@ -31,13 +31,18 @@ services:
       - ~/.aws/config:/root/.aws/config:ro
       - ~/.aws/sso/cache:/root/.aws/sso/cache
     environment:
+      # flip-ui reads config at runtime from window.js, which is generated
+      # from these canonical names by scripts/generate-window-js.sh (via
+      # the predev npm hook). No VITE_AWS_* duplication — those were
+      # dropped so the build, dev, and deploy paths all consume the same
+      # env vars as the rest of the stack.
       - NODE_ENV=${NODE_ENV}
       - VITE_LOCAL=${VITE_LOCAL}
-      - VITE_AWS_BASE_URL=${VITE_AWS_BASE_URL}
-      - VITE_AWS_USER_POOL_ID=${AWS_COGNITO_USER_POOL_ID}
-      - VITE_AWS_CLIENT_ID=${AWS_COGNITO_APP_CLIENT_ID}
-      - VITE_AWS_REGION=${AWS_REGION}
-      - VITE_BLACKLISTED_MODEL_FILES=${VITE_BLACKLISTED_MODEL_FILES}
+      - CENTRAL_HUB_API_URL=${CENTRAL_HUB_API_URL}
+      - AWS_COGNITO_USER_POOL_ID=${AWS_COGNITO_USER_POOL_ID}
+      - AWS_COGNITO_APP_CLIENT_ID=${AWS_COGNITO_APP_CLIENT_ID}
+      - AWS_REGION=${AWS_REGION}
+      - BLACKLISTED_MODEL_FILES=${BLACKLISTED_MODEL_FILES}
     restart: unless-stopped
     networks:
       - default

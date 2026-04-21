@@ -552,7 +552,12 @@ resource "aws_cloudfront_response_headers_policy" "flip_ui_spa" {
       header = "Content-Security-Policy-Report-Only"
       value = join(" ", [
         "default-src 'self';",
-        "connect-src 'self' https://cognito-idp.*.amazonaws.com https://cognito-identity.*.amazonaws.com;",
+        # CSP source expressions only allow wildcards in the leftmost
+        # position (`*.amazonaws.com` OK, `cognito-idp.*.amazonaws.com`
+        # is not — the browser silently drops invalid entries). Pin to
+        # the deployed region so we keep the allowlist tight; update if
+        # the pool is moved to a different region.
+        "connect-src 'self' https://cognito-idp.eu-west-2.amazonaws.com https://cognito-identity.eu-west-2.amazonaws.com;",
         "img-src 'self' data:;",
         "style-src 'self' 'unsafe-inline';",
         "script-src 'self';",
