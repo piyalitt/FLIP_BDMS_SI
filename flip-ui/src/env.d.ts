@@ -28,7 +28,6 @@ interface Window {
     AWS_REGION: string;
     BLACKLISTED_MODEL_FILES: string;
     RELEASE_VERSION: string;
-    MAX_REIMPORT_COUNT: number;
 }
 
 declare module "*.vue" {
