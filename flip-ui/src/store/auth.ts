@@ -167,9 +167,15 @@ export const useAuthStore = defineStore("auth", {
             this.mfaEnabled = null;
             this.pendingUsername = details.username;
 
+            // Force USER_PASSWORD_AUTH — Amplify v6 defaults to SRP,
+            // but the app client (see deploy/providers/AWS/services.tf
+            // comment) is configured for USER_PASSWORD_AUTH. SRP on the
+            // same client can 400 at InitiateAuth if the browser's SRP_A
+            // handshake disagrees with the pool's curve config.
             const out = await signIn({
                 username: details.username,
-                password: details.password
+                password: details.password,
+                options: { authFlowType: "USER_PASSWORD_AUTH" }
             });
 
             const step = out.nextStep?.signInStep as SignInStep | undefined;

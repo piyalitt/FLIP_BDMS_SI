@@ -289,7 +289,11 @@ describe("authStore", () => {
 
             await store.signIn({ username: "u", password: "p" });
 
-            expect(signIn).toHaveBeenCalledWith({ username: "u", password: "p" });
+            expect(signIn).toHaveBeenCalledWith({
+                username: "u",
+                password: "p",
+                options: { authFlowType: "USER_PASSWORD_AUTH" }
+            });
             expect(store.signInStep).toBe("DONE");
             expect(store.mfaEnabled).toBe(true);
             expect(store.user?.username).toBe("u");
