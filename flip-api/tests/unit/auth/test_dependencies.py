@@ -11,13 +11,14 @@
 #
 
 import uuid
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import jwt
 import pytest
 from fastapi import HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 
-from flip_api.auth.dependencies import verify_token, verify_token_no_mfa
+from flip_api.auth.dependencies import _decode_verified_claims, _extract_user_id, verify_token, verify_token_no_mfa
 
 
 @pytest.fixture
@@ -111,3 +112,138 @@ def test_verify_token_no_mfa_skips_gate(credentials, user_sub):
 
         assert str(result) == user_sub
         mock_is_enabled.assert_not_called()
+
+
+def test_verify_token_skips_mfa_gate_when_enforce_mfa_is_false(credentials, user_sub):
+    """ENFORCE_MFA=False (dev-only compose override) must bypass the
+    is_mfa_enabled round-trip so a never-enrolled dev user can hit
+    MFA-gated endpoints without being forced through TOTP enrolment."""
+    with (
+        patch("flip_api.auth.dependencies._decode_verified_claims") as mock_decode,
+        patch("flip_api.auth.dependencies.is_mfa_enabled") as mock_is_enabled,
+        patch("flip_api.auth.dependencies.get_settings") as mock_get_settings,
+    ):
+        mock_decode.return_value = _payload(user_sub)
+        mock_get_settings.return_value.ENFORCE_MFA = False
+
+        result = verify_token(credentials)
+
+        assert str(result) == user_sub
+        # Crucial: we must not have called the Cognito MFA lookup at all —
+        # skipping the gate also skips the AdminGetUser round-trip.
+        mock_is_enabled.assert_not_called()
+
+
+def test_verify_token_enforces_gate_when_enforce_mfa_is_true(credentials, user_sub):
+    """ENFORCE_MFA=True (default, stag/prod) keeps the existing gate in
+    place — regression coverage so the dev opt-out can't be accidentally
+    widened into stag/prod."""
+    with (
+        patch("flip_api.auth.dependencies._decode_verified_claims") as mock_decode,
+        patch("flip_api.auth.dependencies.is_mfa_enabled") as mock_is_enabled,
+        patch("flip_api.auth.dependencies.get_settings") as mock_get_settings,
+    ):
+        mock_decode.return_value = _payload(user_sub)
+        mock_get_settings.return_value.ENFORCE_MFA = True
+        mock_is_enabled.return_value = False
+
+        with pytest.raises(HTTPException) as exc_info:
+            verify_token(credentials)
+
+        assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+        mock_is_enabled.assert_called_once()
+
+
+def _make_signing_key():
+    """Minimal stub: PyJWKClient.get_signing_key_from_jwt returns an object with a .key attr."""
+    return MagicMock(key="signing-key")
+
+
+def test_decode_raises_401_on_expired_signature(credentials):
+    """Cognito-issued JWTs expire after an hour; an ExpiredSignatureError from
+    jwt.decode must surface as 401, not leak as an uncaught exception."""
+    with (
+        patch("flip_api.auth.dependencies.PyJWKClient") as mock_jwks_cls,
+        patch("flip_api.auth.dependencies.jwt.decode") as mock_decode,
+    ):
+        mock_jwks_cls.return_value.get_signing_key_from_jwt.return_value = _make_signing_key()
+        mock_decode.side_effect = jwt.ExpiredSignatureError("token expired")
+
+        with pytest.raises(HTTPException) as exc_info:
+            _decode_verified_claims("expired.jwt.token")
+
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "expired" in exc_info.value.detail.lower()
+
+
+def test_decode_raises_401_on_invalid_token(credentials):
+    """Any other PyJWT validation failure (bad signature, malformed claims)
+    must also be a 401 — we never want to let a bad token through as 500."""
+    with (
+        patch("flip_api.auth.dependencies.PyJWKClient") as mock_jwks_cls,
+        patch("flip_api.auth.dependencies.jwt.decode") as mock_decode,
+    ):
+        mock_jwks_cls.return_value.get_signing_key_from_jwt.return_value = _make_signing_key()
+        mock_decode.side_effect = jwt.InvalidTokenError("bad signature")
+
+        with pytest.raises(HTTPException) as exc_info:
+            _decode_verified_claims("bad.jwt.token")
+
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "credentials" in exc_info.value.detail.lower()
+
+
+def test_decode_raises_500_on_unexpected_error(credentials):
+    """A non-JWT, non-HTTP exception (e.g. JWKS network error) converts to
+    500 with a generic message — we don't want to echo boto/urllib internals
+    to the caller."""
+    with patch("flip_api.auth.dependencies.PyJWKClient") as mock_jwks_cls:
+        # Surface a generic Exception from the JWKS fetch path.
+        mock_jwks_cls.return_value.get_signing_key_from_jwt.side_effect = RuntimeError(
+            "connection refused to JWKS endpoint"
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            _decode_verified_claims("unused.jwt.token")
+
+        assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        # Detail is deliberately generic — don't leak the RuntimeError text.
+        assert "connection refused" not in exc_info.value.detail
+
+
+def test_decode_rejects_wrong_token_type(credentials):
+    """Cognito refresh tokens decode cleanly but carry token_use='refresh' —
+    those should 401, not be treated as credentials."""
+    with (
+        patch("flip_api.auth.dependencies.PyJWKClient") as mock_jwks_cls,
+        patch("flip_api.auth.dependencies.jwt.decode") as mock_decode,
+    ):
+        mock_jwks_cls.return_value.get_signing_key_from_jwt.return_value = _make_signing_key()
+        mock_decode.return_value = {"sub": "abc", "token_use": "refresh"}
+
+        with pytest.raises(HTTPException) as exc_info:
+            _decode_verified_claims("refresh.jwt.token")
+
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "token type" in exc_info.value.detail.lower()
+
+
+def test_extract_user_id_rejects_missing_sub(user_sub):
+    """A verified JWT payload without a 'sub' claim is structurally valid
+    but useless to us — every downstream query keys off the user ID."""
+    with pytest.raises(HTTPException) as exc_info:
+        _extract_user_id({"token_use": "access", "username": "u@e.com"})
+
+    assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+    assert "user identifier" in exc_info.value.detail.lower()
+
+
+def test_extract_user_id_rejects_non_uuid_sub():
+    """Cognito always gives sub as a UUID. A non-UUID string (corrupt pool
+    config, or a forged token that slipped past signature check) must 401
+    rather than raise an unhandled ValueError deeper in the stack."""
+    with pytest.raises(HTTPException) as exc_info:
+        _extract_user_id({"sub": "not-a-uuid", "token_use": "access"})
+
+    assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+    assert "invalid user identifier" in exc_info.value.detail.lower()

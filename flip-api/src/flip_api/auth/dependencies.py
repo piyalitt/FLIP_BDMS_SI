@@ -148,6 +148,12 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
     user_id = _extract_user_id(payload)
     username = _extract_username(payload)
 
+    # ENFORCE_MFA=False is dev-only opt-out set in compose.development.yml;
+    # stag/prod inherit the Settings default (True) and keep the gate.
+    if not get_settings().ENFORCE_MFA:
+        logger.debug(f"ENFORCE_MFA disabled — skipping MFA gate for user: {user_id}")
+        return user_id
+
     if not is_mfa_enabled(username, USER_POOL_ID):
         logger.warning(f"User {user_id} hit MFA-gated route without active TOTP")
         raise HTTPException(
