@@ -45,9 +45,9 @@ variable "POSTGRES_DB" {
 }
 
 variable "postgres_version" {
-  description = "PostgreSQL engine version for the RDS instance. Update this value to upgrade the database version. EOL schedule: 15 → Oct 2027, 16 → Oct 2028."
+  description = "PostgreSQL engine version for the RDS instance. Update this value to upgrade the database version. EOL schedule: 16 → Oct 2028, 17 → Nov 2029."
   type        = string
-  default     = "15.7"
+  default     = "17.9"
 }
 
 variable "flip_keypair" {
@@ -62,12 +62,27 @@ variable "AES_KEY_BASE64" {
   type = string
 }
 
+variable "TRUST_API_KEY_HASHES" {
+  description = "JSON string mapping trust names to SHA-256 hashes of their API keys"
+  type        = string
+}
+
+variable "INTERNAL_SERVICE_KEY_HASH" {
+  description = "SHA-256 hash of the internal service key used for fl-server-to-hub auth"
+  type        = string
+}
+
 variable "FLIP_BUCKET_NAME" {
   type = string
 }
 
 variable "AICENTRE_BUCKET_NAME" {
   type = string
+}
+
+variable "FLIP_UI_BUCKET_NAME" {
+  description = "S3 bucket name for flip-ui static assets served by CloudFront. Must be globally unique."
+  type        = string
 }
 
 variable "flip_user_pool_name" {
@@ -154,11 +169,6 @@ variable "SES_VERIFIED_EMAIL" {
   type        = string
 }
 
-variable "TRUST_API_PORT" {
-  description = "Port for Trust API"
-  type        = number
-}
-
 variable "XNAT_PORT" {
   description = "Port for XNAT service"
   type        = number
@@ -170,13 +180,7 @@ variable "PACS_UI_PORT" {
 }
 
 variable "local_trust_public_ip" {
-  description = "Public IP of an on-premises Trust host. When non-empty, AWS security group rules are created to allow FL communication on ports 8002 and 8003 from this IP to the Central Hub."
+  description = "Public IP of an on-premises Trust host. When non-empty, an AWS security group rule is created to allow FL communication from this IP to the Central Hub NLB."
   type        = string
   default     = ""
-}
-
-variable "create_central_hub_elastic_ip" {
-  description = "Whether to create an Elastic IP for the Central Hub EC2 instance. When true, ensures a persistent IP address across instance restarts and redeployments."
-  type        = bool
-  default     = true
 }
