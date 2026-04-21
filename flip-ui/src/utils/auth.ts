@@ -132,12 +132,18 @@ export const apiGateway = "CentralHubAPIGateway";
 
 const devMode = process.env.NODE_ENV === "development";
 
+// Read Cognito config at runtime from window.* (populated by public/js/window.js
+// in dev and dist/js/window.js in prod — both loaded synchronously before main.ts).
+// `process.env.VITE_*` is substituted at build time by vite; in the deploy build
+// those vars are unset and vite folds them to `undefined`, which makes Amplify
+// throw "Auth UserPool not configured" at signIn. `window.*` is the single
+// runtime source of truth — matches the pattern `api.ts` uses for AWS_BASE_URL.
 export const authConfig = {
     Auth: {
         Cognito: {
-            region: process.env.VITE_AWS_REGION || 'eu-west-2',
-            userPoolId: process.env.VITE_AWS_USER_POOL_ID,
-            userPoolClientId: process.env.VITE_AWS_CLIENT_ID
+            region: window.AWS_REGION || process.env.VITE_AWS_REGION || 'eu-west-2',
+            userPoolId: window.AWS_USER_POOL_ID || process.env.VITE_AWS_USER_POOL_ID,
+            userPoolClientId: window.AWS_CLIENT_ID || process.env.VITE_AWS_CLIENT_ID
         }
     }
 };
