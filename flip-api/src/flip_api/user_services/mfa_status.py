@@ -15,6 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Request
 
 from flip_api.auth.dependencies import verify_token_no_mfa
+from flip_api.config import get_settings
 from flip_api.utils.cognito_helpers import get_user_pool_id, get_username, is_mfa_enabled
 
 router = APIRouter(prefix="/users", tags=["user_services"])
@@ -26,7 +27,8 @@ def get_own_mfa_status(
     token_id: UUID = Depends(verify_token_no_mfa),
 ) -> dict[str, bool]:
     """
-    Report whether the caller has an active TOTP authenticator.
+    Report whether the caller has an active TOTP authenticator and
+    whether this environment requires one.
 
     Exempt from the MFA gate so a freshly-invited or admin-reset user can
     discover their enrolment state and be routed to the setup page.
@@ -37,8 +39,10 @@ def get_own_mfa_status(
         token_id: ID of the authenticated user (from the bearer token).
 
     Returns:
-        dict[str, bool]: ``{"enabled": True}`` if the caller has a verified
-        and enabled TOTP device, ``{"enabled": False}`` otherwise.
+        dict[str, bool]: ``{"enabled": <bool>, "required": <bool>}``.
+        ``enabled`` reflects whether the caller has a verified and active
+        TOTP device; ``required`` mirrors Settings.ENFORCE_MFA so the UI
+        can skip the enrolment redirect in dev without a second env var.
 
     Raises:
         HTTPException: 404 if the token's sub does not resolve to a
@@ -46,4 +50,7 @@ def get_own_mfa_status(
     """
     user_pool_id = get_user_pool_id(request)
     username = get_username(str(token_id), user_pool_id)
-    return {"enabled": is_mfa_enabled(username, user_pool_id)}
+    return {
+        "enabled": is_mfa_enabled(username, user_pool_id),
+        "required": get_settings().ENFORCE_MFA,
+    }

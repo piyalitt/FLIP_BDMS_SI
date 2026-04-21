@@ -33,14 +33,16 @@ def test_returns_enabled_true_when_totp_active(mock_request, token_id):
         patch("flip_api.user_services.mfa_status.get_user_pool_id") as mock_get_pool,
         patch("flip_api.user_services.mfa_status.get_username") as mock_get_username,
         patch("flip_api.user_services.mfa_status.is_mfa_enabled") as mock_is_enabled,
+        patch("flip_api.user_services.mfa_status.get_settings") as mock_get_settings,
     ):
         mock_get_pool.return_value = user_pool_id
         mock_get_username.return_value = username
         mock_is_enabled.return_value = True
+        mock_get_settings.return_value.ENFORCE_MFA = True
 
         result = get_own_mfa_status(mock_request, token_id)
 
-        assert result == {"enabled": True}
+        assert result == {"enabled": True, "required": True}
         mock_get_username.assert_called_once_with(str(token_id), user_pool_id)
         mock_is_enabled.assert_called_once_with(username, user_pool_id)
 
@@ -54,14 +56,39 @@ def test_returns_enabled_false_when_totp_not_active(mock_request, token_id):
         patch("flip_api.user_services.mfa_status.get_user_pool_id") as mock_get_pool,
         patch("flip_api.user_services.mfa_status.get_username") as mock_get_username,
         patch("flip_api.user_services.mfa_status.is_mfa_enabled") as mock_is_enabled,
+        patch("flip_api.user_services.mfa_status.get_settings") as mock_get_settings,
     ):
         mock_get_pool.return_value = user_pool_id
         mock_get_username.return_value = username
         mock_is_enabled.return_value = False
+        mock_get_settings.return_value.ENFORCE_MFA = True
 
         result = get_own_mfa_status(mock_request, token_id)
 
-        assert result == {"enabled": False}
+        assert result == {"enabled": False, "required": True}
+
+
+def test_required_false_signals_dev_bypass_to_ui(mock_request, token_id):
+    """ENFORCE_MFA=False flips the `required` flag so the UI knows it can
+    skip the /auth/mfa-setup redirect — independent of whether the user
+    happens to have TOTP already enabled."""
+    user_pool_id = "test-user-pool-id"
+    username = "user@example.com"
+
+    with (
+        patch("flip_api.user_services.mfa_status.get_user_pool_id") as mock_get_pool,
+        patch("flip_api.user_services.mfa_status.get_username") as mock_get_username,
+        patch("flip_api.user_services.mfa_status.is_mfa_enabled") as mock_is_enabled,
+        patch("flip_api.user_services.mfa_status.get_settings") as mock_get_settings,
+    ):
+        mock_get_pool.return_value = user_pool_id
+        mock_get_username.return_value = username
+        mock_is_enabled.return_value = False
+        mock_get_settings.return_value.ENFORCE_MFA = False
+
+        result = get_own_mfa_status(mock_request, token_id)
+
+        assert result == {"enabled": False, "required": False}
 
 
 def test_raises_404_when_cognito_user_missing(mock_request, token_id):
