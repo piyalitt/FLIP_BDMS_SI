@@ -348,7 +348,11 @@ resource "aws_cloudfront_origin_request_policy" "flip_api" {
   headers_config {
     header_behavior = "whitelist"
     headers {
-      items = ["Content-Type", "Origin"]
+      # Authorization carries the Cognito JWT — without it on the whitelist
+      # CloudFront drops the header at the edge and every /api/* request
+      # hits flip-api looking like an unauthenticated caller, so the
+      # backend's HTTPBearer dependency returns 401 "Not authenticated".
+      items = ["Authorization", "Content-Type", "Origin"]
     }
   }
 
