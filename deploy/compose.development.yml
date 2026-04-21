@@ -22,7 +22,6 @@ services:
         UI_PORT: ${UI_PORT}
       context: ../flip-ui
       dockerfile: Dockerfile
-      target: development
     ports:
       - "${UI_PORT}:443"
     volumes:
@@ -77,6 +76,12 @@ services:
       - shared-net-2
     environment:
       - ENV=development
+      # Disable the app-layer MFA gate for local dev so developers aren't
+      # forced through TOTP enrolment on a burner authenticator app just
+      # to click around. Stag/prod compose files don't pass this through;
+      # Settings.ENFORCE_MFA defaults to True elsewhere. Flip to `true`
+      # here (and `make restart`) to test the MFA flow end-to-end locally.
+      - ENFORCE_MFA=false
       - DEBUG=${DEBUG}
       - AWS_PROFILE=${AWS_PROFILE}
       - AWS_REGION=${AWS_REGION}
