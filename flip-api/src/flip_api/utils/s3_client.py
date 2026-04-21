@@ -219,6 +219,10 @@ class S3Client:
 
         Returns:
             bool: True if the object exists, False otherwise.
+
+        Raises:
+            ClientError: If ``head_object`` fails with any error other than HTTP 404 (e.g.,
+                permissions issues).
         """
         bucket, key = parse_s3_path(s3_path)
         try:
