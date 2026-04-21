@@ -45,9 +45,8 @@ class Http {
 
     private initHttp() {
         const authStore = useAuthStore();
-        const devMode = process.env.NODE_ENV === "development";
 
-        if (devMode) {
+        if (import.meta.env.DEV) {
             console.log("Initializing HTTP client in development mode");
         }
 

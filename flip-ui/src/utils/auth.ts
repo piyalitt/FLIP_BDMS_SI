@@ -130,8 +130,6 @@ export const isUserUnconfirmedCheck = async (
 
 export const apiGateway = "CentralHubAPIGateway";
 
-const devMode = process.env.NODE_ENV === "development";
-
 // Read Cognito config at runtime from window.* (populated by
 // public/js/window.js in dev and dist/js/window.js in prod — both
 // loaded synchronously before main.ts). The generator reads from
