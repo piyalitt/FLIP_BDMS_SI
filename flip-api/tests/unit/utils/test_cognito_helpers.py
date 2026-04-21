@@ -1364,3 +1364,62 @@ class TestIsMfaEnabled:
 
         assert is_mfa_enabled("user@example.com", "pool-id") is False
         assert mock_client_instance.admin_get_user.call_count == 2
+
+
+class TestGetUsername:
+    """Cover the get_username helper. Exercised on the hot path by
+    verify_token (to turn a Cognito sub UUID back into an email for the
+    is_mfa_enabled lookup) so the 404 / multi-user edges matter."""
+
+    def test_returns_email_for_known_sub(self):
+        """Happy path: a single matching CognitoUser yields its email."""
+        user_sub = str(user1)
+        with patch("flip_api.utils.cognito_helpers.get_cognito_users") as mock_list:
+            mock_list.return_value = [CognitoUserFactory(id=user1, email="u@example.com")]
+
+            from flip_api.utils.cognito_helpers import get_username
+
+            result = get_username(user_sub, USER_POOL_ID)
+
+            assert result == "u@example.com"
+            mock_list.assert_called_once()
+            # The filter expression is what gates the Cognito query; regress
+            # it so a future refactor can't silently drop the sub filter and
+            # start returning arbitrary users.
+            params = mock_list.call_args.args[0]
+            assert params["Filter"] == f'sub="{user_sub}"'
+            assert params["UserPoolId"] == USER_POOL_ID
+
+    def test_raises_404_when_no_match(self):
+        """An unknown sub means the Cognito user was deleted between token
+        issue and this lookup — caller (verify_token) converts this into a
+        clean 401 for the user."""
+        with patch("flip_api.utils.cognito_helpers.get_cognito_users") as mock_list:
+            mock_list.return_value = []
+
+            from flip_api.utils.cognito_helpers import get_username
+
+            with pytest.raises(HTTPException) as exc_info:
+                get_username(str(user1), USER_POOL_ID)
+
+            assert exc_info.value.status_code == 404
+            assert str(user1) in exc_info.value.detail
+
+    def test_returns_first_match_and_warns_on_duplicates(self, mock_logger):
+        """Cognito's `sub` is supposed to be unique, but we defend against a
+        malformed pool by returning the first match and warning rather than
+        crashing — the caller's fail-open behaviour beats a 500."""
+        with patch("flip_api.utils.cognito_helpers.get_cognito_users") as mock_list:
+            mock_list.return_value = [
+                CognitoUserFactory(id=user1, email="first@example.com"),
+                CognitoUserFactory(id=user1, email="second@example.com"),
+            ]
+
+            from flip_api.utils.cognito_helpers import get_username
+
+            result = get_username(str(user1), USER_POOL_ID)
+
+            assert result == "first@example.com"
+            mock_logger.warning.assert_any_call(
+                f"Multiple users found for ID {user1}, returning the first one"
+            )
