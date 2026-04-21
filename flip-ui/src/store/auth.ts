@@ -81,6 +81,9 @@ type AuthState = {
   totpSetup: TotpSetupDetails | null;
   // null = not yet known (store hydration in progress or sign-in incomplete)
   mfaEnabled: boolean | null;
+  // Username captured at sign-in, used as the account label when building
+  // the TOTP setup URI before `user` is populated (challenge chain step).
+  pendingUsername: string | null;
 };
 
 const buildUserWithPermissions = async (
@@ -112,7 +115,8 @@ export const useAuthStore = defineStore("auth", {
         user: null,
         signInStep: null,
         totpSetup: null,
-        mfaEnabled: null
+        mfaEnabled: null,
+        pendingUsername: null
     }),
 
     getters: {
@@ -161,6 +165,7 @@ export const useAuthStore = defineStore("auth", {
             this.signInStep = null;
             this.totpSetup = null;
             this.mfaEnabled = null;
+            this.pendingUsername = details.username;
 
             const out = await signIn({
                 username: details.username,
@@ -269,9 +274,15 @@ export const useAuthStore = defineStore("auth", {
         captureTotpSetupDetails(nextStep: unknown) {
             const details = (nextStep as AmplifyTotpNextStep).totpSetupDetails;
             if (details) {
+                // Use the login username (email) as the authenticator's
+                // account label. Passing `sharedSecret` here would leak
+                // the secret into the label the user sees in their app.
+                // `pendingUsername` may be null for callers that didn't
+                // route through signIn — fall back to omitting the label.
+                const accountLabel = this.pendingUsername ?? undefined;
                 this.totpSetup = {
                     sharedSecret: details.sharedSecret,
-                    setupUri: details.getSetupUri("FLIP", details.sharedSecret).toString()
+                    setupUri: details.getSetupUri("FLIP", accountLabel).toString()
                 };
             }
         },

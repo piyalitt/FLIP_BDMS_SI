@@ -11,6 +11,8 @@
 #
 
 import logging
+import threading
+import time
 from collections import defaultdict
 from collections.abc import Sequence
 from functools import lru_cache
@@ -302,6 +304,7 @@ def reset_user_mfa(username: str, user_pool_id: str) -> None:
             SoftwareTokenMfaSettings={"Enabled": False, "PreferredMfa": False},
         )
         client.admin_user_global_sign_out(UserPoolId=user_pool_id, Username=username)
+        _invalidate_mfa_cache(username, user_pool_id)
 
         logger.info(f"Successfully reset MFA and revoked sessions for user: {username}")
     except ClientError as e:
@@ -314,6 +317,24 @@ def reset_user_mfa(username: str, user_pool_id: str) -> None:
         ) from e
 
 
+# TTL cache for is_mfa_enabled. verify_token calls this on every
+# authenticated request, so a short-lived in-process cache sidesteps the
+# Cognito AdminGetUser round-trip and its throttling ceiling. The cache is
+# invalidated from reset_user_mfa so admin resets take effect immediately;
+# the TTL is the upper bound on staleness when a user's MFA preference
+# changes through a path that doesn't go through reset_user_mfa (e.g. the
+# user enrolling via updateMFAPreference on the client).
+_MFA_STATE_TTL_SECONDS = 60.0
+_mfa_state_cache: dict[tuple[str, str], tuple[bool, float]] = {}
+_mfa_state_cache_lock = threading.Lock()
+
+
+def _invalidate_mfa_cache(username: str, user_pool_id: str) -> None:
+    """Drop the cached MFA-enabled state for a user (used after admin reset)."""
+    with _mfa_state_cache_lock:
+        _mfa_state_cache.pop((user_pool_id, username), None)
+
+
 def is_mfa_enabled(username: str, user_pool_id: str) -> bool:
     """
     Check whether a user has TOTP MFA active in Cognito.
@@ -322,6 +343,9 @@ def is_mfa_enabled(username: str, user_pool_id: str) -> bool:
     their UserMFASettingList — Cognito only adds that entry after the
     user has both verified a software token and had their preference set
     with Enabled=True.
+
+    Results are cached for a short TTL because ``verify_token`` calls this
+    on every authenticated request; see ``_MFA_STATE_TTL_SECONDS``.
 
     Args:
         username (str): Username (email)
@@ -333,6 +357,13 @@ def is_mfa_enabled(username: str, user_pool_id: str) -> bool:
     Raises:
         HTTPException: If the Cognito lookup fails.
     """
+    cache_key = (user_pool_id, username)
+    now = time.monotonic()
+    with _mfa_state_cache_lock:
+        cached = _mfa_state_cache.get(cache_key)
+        if cached and cached[1] > now:
+            return cached[0]
+
     client = _cognito_client()
 
     try:
@@ -346,7 +377,10 @@ def is_mfa_enabled(username: str, user_pool_id: str) -> bool:
             detail="Failed to fetch MFA state",
         ) from e
 
-    return "SOFTWARE_TOKEN_MFA" in response.get("UserMFASettingList", [])
+    enabled = "SOFTWARE_TOKEN_MFA" in response.get("UserMFASettingList", [])
+    with _mfa_state_cache_lock:
+        _mfa_state_cache[cache_key] = (enabled, time.monotonic() + _MFA_STATE_TTL_SECONDS)
+    return enabled
 
 
 def revoke_token(refresh_token: str, client_id: str) -> None:

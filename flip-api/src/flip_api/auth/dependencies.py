@@ -56,7 +56,7 @@ def _decode_verified_claims(token: str) -> dict[str, Any]:
         if payload.get("token_use") not in ["id", "access"]:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token type. Expected ID token.",
+                detail="Invalid token type. Expected an ID or access token.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 

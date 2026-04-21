@@ -117,23 +117,15 @@ export const authCheck = async (
     }
 };
 
-const UNCONFIRMED_STEPS = new Set<string>([
-    "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED",
-    "CONTINUE_SIGN_IN_WITH_TOTP_SETUP",
-    "CONFIRM_SIGN_IN_WITH_TOTP_CODE"
-]);
-
 export const isUserUnconfirmedCheck = async (
     authStore: StoreGeneric
 ): Promise<boolean> => {
-    // true when the user is fully signed in, signed out, or stuck in any
-    // intermediate challenge step we do not own (the individual challenge
-    // pages will redirect elsewhere if they are opened in the wrong state).
-    return (
-        authStore.user === null ||
-        authStore.confirmedUser ||
-        !UNCONFIRMED_STEPS.has(authStore.signInStep)
-    );
+    // True only when the caller is genuinely in the new-password
+    // challenge step this page handles. Everything else — fully signed
+    // in, mid-TOTP, signed out, or a challenge we don't own — should be
+    // redirected away by the caller (usually to viewProjects, where the
+    // router guard sorts them out).
+    return authStore.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED";
 };
 
 export const apiGateway = "CentralHubAPIGateway";
@@ -175,7 +167,10 @@ const listener = (data: { payload: { event: string } }) => {
 
     switch (data.payload.event) {
         case "tokenRefresh_failure":
-            if (NO_FORCED_SIGNOUT_PATHS.has(router.currentRoute.value.fullPath)) {
+            // Compare against path (no query/fragment) so a whitelisted
+            // route with a `?redirect=...` or `#frag` still skips the
+            // forced sign-out. `fullPath` would miss the membership test.
+            if (NO_FORCED_SIGNOUT_PATHS.has(router.currentRoute.value.path)) {
                 break;
             }
 

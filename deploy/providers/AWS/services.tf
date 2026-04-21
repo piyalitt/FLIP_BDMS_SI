@@ -90,11 +90,10 @@ resource "aws_s3_bucket_cors_configuration" "aicentre_bucket_cors" {
 # Cognito
 ############################
 #
-# Resource definitions now live in ./modules/cognito. The first apply after
-# introducing this module on an existing state MUST be preceded by
-# `terraform state mv` for every Cognito resource — see the module's header
-# comment for the full list. Without that, terraform will try to destroy and
-# recreate the pool, which prevent_destroy rejects.
+# Resource definitions now live in ./modules/cognito. Existing state is
+# migrated automatically by the `moved` blocks below on the next plan/apply
+# — no manual `terraform state mv` step is required. See the module's
+# header comment for the mapping from old root addresses to module paths.
 
 module "cognito" {
   source = "./modules/cognito"

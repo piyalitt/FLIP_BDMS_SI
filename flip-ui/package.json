@@ -28,6 +28,7 @@
     "dependencies": {
         "echarts": "^5.2.2",
         "husky": "^9.1.7",
+        "qrcode": "^1.5.4",
         "vue": "^3.2.16",
         "vue-router": "^4.0.11"
     },
@@ -79,7 +80,6 @@
         "mitt": "^3.0.0",
         "pinia": "^2.1.7",
         "postcss": "^8.4.5",
-        "qrcode": "^1.5.4",
         "start-server-and-test": "^2.0.12",
         "swrv": "^1.0.4",
         "tailwindcss": "^3.1.8",

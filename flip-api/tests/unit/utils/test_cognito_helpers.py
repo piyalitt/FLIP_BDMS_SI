@@ -1260,6 +1260,16 @@ class TestResetUserMfa:
 class TestIsMfaEnabled:
     """Tests for the is_mfa_enabled helper."""
 
+    @pytest.fixture(autouse=True)
+    def _clear_mfa_cache(self):
+        # The helper keeps a module-level TTL cache; wipe it before every
+        # test so prior calls don't bleed into the next assertion.
+        from flip_api.utils.cognito_helpers import _mfa_state_cache
+
+        _mfa_state_cache.clear()
+        yield
+        _mfa_state_cache.clear()
+
     @pytest.fixture
     def mock_boto3_client(self):
         with patch("flip_api.utils.cognito_helpers.boto3.client") as mock_client:
@@ -1313,3 +1323,44 @@ class TestIsMfaEnabled:
         assert exc_info.value.detail == "Failed to fetch MFA state"
         assert "boom" not in exc_info.value.detail
         mock_logger.exception.assert_called_once()
+
+    def test_result_is_cached_within_ttl(self, mock_boto3_client, mock_settings):
+        """Repeat lookups inside the TTL window must not re-hit Cognito."""
+        mock_client_instance = mock_boto3_client.return_value
+        mock_client_instance.admin_get_user.return_value = {
+            "Username": "user@example.com",
+            "UserMFASettingList": ["SOFTWARE_TOKEN_MFA"],
+        }
+
+        assert is_mfa_enabled("user@example.com", "pool-id") is True
+        assert is_mfa_enabled("user@example.com", "pool-id") is True
+        assert is_mfa_enabled("user@example.com", "pool-id") is True
+
+        assert mock_client_instance.admin_get_user.call_count == 1
+
+    def test_cache_is_invalidated_by_reset_user_mfa(self, mock_boto3_client, mock_settings):
+        """admin_set_user_mfa_preference must invalidate the cached entry so the
+        next verify_token call sees the fresh Cognito state."""
+        mock_client_instance = mock_boto3_client.return_value
+        mock_client_instance.admin_get_user.return_value = {
+            "Username": "user@example.com",
+            "UserMFASettingList": ["SOFTWARE_TOKEN_MFA"],
+        }
+
+        # Warm the cache.
+        assert is_mfa_enabled("user@example.com", "pool-id") is True
+
+        # Admin reset: the helper flips the preference and should drop the
+        # cached entry as part of the same call.
+        from flip_api.utils.cognito_helpers import reset_user_mfa
+
+        reset_user_mfa("user@example.com", "pool-id")
+
+        # Next lookup returns no MFA and must re-hit Cognito.
+        mock_client_instance.admin_get_user.return_value = {
+            "Username": "user@example.com",
+            "UserMFASettingList": [],
+        }
+
+        assert is_mfa_enabled("user@example.com", "pool-id") is False
+        assert mock_client_instance.admin_get_user.call_count == 2
