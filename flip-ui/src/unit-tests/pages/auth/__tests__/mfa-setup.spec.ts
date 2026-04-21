@@ -263,6 +263,221 @@ describe("Sign-in-chain flow (signInStep = CONTINUE_SIGN_IN_WITH_TOTP_SETUP)", (
             // the test runner) and the redirect never fires.
             expect(mockGotoLogin).not.toHaveBeenCalled();
         });
+
+        test("beginMfaEnrolment failure fires the 'Couldn't start enrolment' snackbar with the error message", async () => {
+            // Directly verify the catch block at onMounted line 157-158:
+            // the failure path must surface the underlying Amplify error
+            // to the user rather than silently leaving a blank page.
+            //
+            // createTestingPinia stubs the store's actions as vi.fn() the
+            // first time useAuthStore() is called under that pinia — which
+            // is during the component's setup(). To make beginMfaEnrolment
+            // reject on that very first call we install a `beforeCreate`
+            // plugin that re-arms the spy the moment the store is
+            // instantiated inside the component tree.
+            const throwingError = new Error("Cognito: throttled");
+            const wrapper = mount(MfaSetup, {
+                global: {
+                    plugins: [
+                        createTestingPinia({
+                            createSpy: vi.fn,
+                            initialState: {
+                                auth: {
+                                    signInStep: "DONE",
+                                    user: signedInUser,
+                                    mfaEnabled: false,
+                                    totpSetup: null
+                                }
+                            }
+                        })
+                    ],
+                    stubs: {
+                        Form: {
+                            template: "<form><slot /></form>",
+                            inheritAttrs: false,
+                            emits: ["submit"]
+                        },
+                        AiInput: { template: "<input />",
+                            props: ["name", "type", "label", "preIcon", "inputProps"] },
+                        AiButton: { template: "<button><slot /></button>",
+                            props: ["primary", "clear", "block", "loading", "disabled"] }
+                    }
+                }
+            });
+            // Grab the in-component store AFTER mount so we can mutate its
+            // spies, then unmount and remount to trigger onMounted against
+            // the rejecting spy. (Pinia shares state across useAuthStore()
+            // calls within the same pinia instance.)
+            const store = useAuthStore();
+            (store.beginMfaEnrolment as unknown as ReturnType<typeof vi.fn>)
+                .mockRejectedValueOnce(throwingError);
+            wrapper.unmount();
+            // Second mount reuses the same pinia (via setActivePinia from
+            // the first createTestingPinia call), so the rejecting spy is
+            // in place when the new onMounted runs.
+            mount(MfaSetup, {
+                global: {
+                    stubs: {
+                        Form: { template: "<form><slot /></form>",
+                            inheritAttrs: false, emits: ["submit"] },
+                        AiInput: { template: "<input />",
+                            props: ["name", "type", "label", "preIcon", "inputProps"] },
+                        AiButton: { template: "<button><slot /></button>",
+                            props: ["primary", "clear", "block", "loading", "disabled"] }
+                    }
+                }
+            });
+            await flushPromises();
+
+            expect(mockSnackbarError).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    title: "Couldn't start enrolment",
+                    text: expect.stringContaining("Cognito: throttled")
+                })
+            );
+        });
+    });
+
+    describe("submit error handling", () => {
+        const buildSigninChainState = (): Partial<AuthStoreState> => ({
+            signInStep: SIGN_IN_CHAIN_STEP,
+            totpSetup: { sharedSecret: "ABCD1234", setupUri: "otpauth://totp/FLIP" }
+        });
+
+        test("CodeMismatchException shows the 'Invalid code' snackbar (user retry will help)", async () => {
+            const wrapper = mountMfaSetup(buildSigninChainState());
+            await flushPromises();
+            const authStore = useAuthStore();
+            // Cognito's canonical name for a wrong TOTP digit; the page
+            // treats this as a retryable user error, not an infra error.
+            const mismatch = Object.assign(new Error("Invalid code passed"), {
+                name: "CodeMismatchException"
+            });
+            (authStore.confirmTotpSetup as unknown as ReturnType<typeof vi.fn>)
+                .mockRejectedValueOnce(mismatch);
+
+            await wrapper.find("form").trigger("submit");
+            await flushPromises();
+
+            expect(mockSnackbarError).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    title: "Invalid code",
+                    text: expect.stringContaining("did not match")
+                })
+            );
+            // Crucial: we stay on the page so the user can retry.
+            expect(mockViewProjects).not.toHaveBeenCalled();
+        });
+
+        test("ExpiredCodeException is also treated as a retryable 'Invalid code'", async () => {
+            // TOTP codes rotate every 30s; a slow user sees Cognito raise
+            // ExpiredCodeException. From the user's perspective this is
+            // still 'your code was wrong' — the same snackbar is correct.
+            const wrapper = mountMfaSetup(buildSigninChainState());
+            await flushPromises();
+            const authStore = useAuthStore();
+            const expired = Object.assign(new Error("Your software token has expired."), {
+                name: "ExpiredCodeException"
+            });
+            (authStore.confirmTotpSetup as unknown as ReturnType<typeof vi.fn>)
+                .mockRejectedValueOnce(expired);
+
+            await wrapper.find("form").trigger("submit");
+            await flushPromises();
+
+            expect(mockSnackbarError).toHaveBeenCalledWith(
+                expect.objectContaining({ title: "Invalid code" })
+            );
+        });
+
+        test("'did not match' in the error message is also treated as a code error", async () => {
+            // Defensive branch: some Amplify wrappers stringify the
+            // exception rather than preserve the name. The heuristic
+            // regex catches the common phrasing so the user still sees
+            // the retry-friendly snackbar.
+            const wrapper = mountMfaSetup(buildSigninChainState());
+            await flushPromises();
+            const authStore = useAuthStore();
+            (authStore.confirmTotpSetup as unknown as ReturnType<typeof vi.fn>)
+                .mockRejectedValueOnce(new Error("Provided code did not match an expected value"));
+
+            await wrapper.find("form").trigger("submit");
+            await flushPromises();
+
+            expect(mockSnackbarError).toHaveBeenCalledWith(
+                expect.objectContaining({ title: "Invalid code" })
+            );
+        });
+
+        test("unrelated errors fall through to the generic 'Enrolment failed' snackbar", async () => {
+            // Network blip, backend outage, Cognito quota — none of these
+            // are fixable by re-entering the code. Show the underlying
+            // message so the operator has something to act on.
+            const wrapper = mountMfaSetup(buildSigninChainState());
+            await flushPromises();
+            const authStore = useAuthStore();
+            (authStore.confirmTotpSetup as unknown as ReturnType<typeof vi.fn>)
+                .mockRejectedValueOnce(new Error("Network Error"));
+
+            await wrapper.find("form").trigger("submit");
+            await flushPromises();
+
+            expect(mockSnackbarError).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    title: "Enrolment failed",
+                    text: "Network Error"
+                })
+            );
+        });
+
+        test("completeMfaEnrolment failure in the post-auth flow routes through the same error handling", async () => {
+            // Post-auth path uses completeMfaEnrolment instead of
+            // confirmTotpSetup — the error branches should behave the same.
+            const wrapper = mountMfaSetup({
+                signInStep: "DONE",
+                user: {
+                    username: "u",
+                    userId: "u",
+                    attributes: { sub: "s", email: "u@e.com" },
+                    permissions: []
+                },
+                mfaEnabled: false,
+                totpSetup: { sharedSecret: "ABCD1234", setupUri: "otpauth://totp/FLIP" }
+            });
+            await flushPromises();
+            const authStore = useAuthStore();
+            const mismatch = Object.assign(new Error("Invalid code passed"), {
+                name: "CodeMismatchException"
+            });
+            (authStore.completeMfaEnrolment as unknown as ReturnType<typeof vi.fn>)
+                .mockRejectedValueOnce(mismatch);
+
+            await wrapper.find("form").trigger("submit");
+            await flushPromises();
+
+            expect(mockSnackbarError).toHaveBeenCalledWith(
+                expect.objectContaining({ title: "Invalid code" })
+            );
+            expect(mockViewProjects).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("QR rendering error handling", () => {
+        test("leaves qrDataUrl null and hides the <img> when QRCode.toDataURL throws", async () => {
+            // Exercises the renderQr catch block (line 126). QR rendering
+            // is best-effort — a bad URI must not break the page; the
+            // user can still type the shared secret manually.
+            mockToDataURL.mockRejectedValueOnce(new Error("invalid URI"));
+            const wrapper = mountMfaSetup({
+                signInStep: SIGN_IN_CHAIN_STEP,
+                totpSetup: { sharedSecret: "ABCD1234", setupUri: "not-a-valid-uri" }
+            });
+            await flushPromises();
+
+            expect(wrapper.find("[data-test='mfa-qr-code']").exists()).toBe(false);
+            // The shared-secret fallback stays rendered.
+            expect(wrapper.find("[data-test='mfa-shared-secret']").text()).toBe("ABCD1234");
+        });
     });
 
     describe("QR rendering", () => {

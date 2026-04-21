@@ -63,6 +63,7 @@ interface AuthStoreState {
     signInStep: string | null;
     user: unknown;
     mfaEnabled: boolean | null;
+    mfaRequired: boolean | null;
     needsMfaEnrolment: boolean;
 }
 
@@ -77,6 +78,7 @@ function mountLogin(authState: Partial<AuthStoreState> = {}): VueWrapper {
                             signInStep: null,
                             user: null,
                             mfaEnabled: null,
+                            mfaRequired: null,
                             ...authState
                         }
                     }
@@ -226,13 +228,18 @@ describe("Login page", () => {
         test("default step + needsMfaEnrolment=true routes to /auth/mfa-setup", async () => {
             // The needsMfaEnrolment getter comes from the real pinia
             // definition; we tweak the store state so it evaluates true.
-            const wrapper = mountLogin({ mfaEnabled: false });
+            // needsMfaEnrolment now requires mfaRequired=true as well, so
+            // set that explicitly — the default mfaRequired=null would
+            // prevent the enrolment redirect from firing even with
+            // mfaEnabled=false.
+            const wrapper = mountLogin({ mfaEnabled: false, mfaRequired: true });
             await flushPromises();
             const authStore = useAuthStore();
             (authStore.signIn as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(
                 async () => {
                     authStore.signInStep = "DONE";
                     authStore.mfaEnabled = false;
+                    authStore.mfaRequired = true;
                 }
             );
 
@@ -251,6 +258,35 @@ describe("Login page", () => {
                 async () => {
                     authStore.signInStep = "DONE";
                     authStore.mfaEnabled = true;
+                    authStore.mfaRequired = true;
+                    authStore.user = {
+                        username: "u",
+                        userId: "u",
+                        attributes: { sub: "s", email: "u@e.com" },
+                        permissions: []
+                    };
+                }
+            );
+
+            await wrapper.find("form").trigger("submit");
+            await flushPromises();
+
+            expect(mockViewProjects).toHaveBeenCalledTimes(1);
+            expect(mockMfaSetup).not.toHaveBeenCalled();
+        });
+
+        test("dev bypass: mfaRequired=false + mfaEnabled=false still routes to /projects", async () => {
+            // Mirror of the router-guard case: when the backend says MFA
+            // is not required for this environment (dev), an unenrolled
+            // user logs straight into the app — no /auth/mfa-setup detour.
+            const wrapper = mountLogin();
+            await flushPromises();
+            const authStore = useAuthStore();
+            (authStore.signIn as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(
+                async () => {
+                    authStore.signInStep = "DONE";
+                    authStore.mfaEnabled = false;
+                    authStore.mfaRequired = false;
                     authStore.user = {
                         username: "u",
                         userId: "u",

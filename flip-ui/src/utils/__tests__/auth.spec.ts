@@ -167,6 +167,7 @@ describe("authCheck", () => {
                 permissions: []
             };
             auth.mfaEnabled = true;
+            auth.mfaRequired = true;
             auth.signInStep = "DONE";
         });
         auth.fetchInfo = fetchInfo;
@@ -177,7 +178,7 @@ describe("authCheck", () => {
         expect(calls).toEqual([undefined]);
     });
 
-    it("bounces MFA-pending user (mfaEnabled=false) to /auth/mfa-setup", async () => {
+    it("bounces MFA-pending user (mfaEnabled=false) to /auth/mfa-setup when env requires MFA", async () => {
         vi.mocked(fetchAuthSession).mockResolvedValue({} as never);
         const { next, calls } = makeNext();
         const auth = useAuthStore();
@@ -188,11 +189,34 @@ describe("authCheck", () => {
             permissions: []
         };
         auth.mfaEnabled = false;
+        auth.mfaRequired = true;
         auth.signInStep = "DONE";
 
         await authCheck(route("/projects") as never, route("/") as never, next as never);
 
         expect(calls).toEqual(["/auth/mfa-setup"]);
+    });
+
+    it("does NOT redirect an unenrolled user to /auth/mfa-setup when the env disables MFA", async () => {
+        // Dev-only case: ENFORCE_MFA=false on the backend propagates to
+        // authStore.mfaRequired=false. Users without TOTP get the same
+        // router treatment as users who have TOTP — straight to the app.
+        vi.mocked(fetchAuthSession).mockResolvedValue({} as never);
+        const { next, calls } = makeNext();
+        const auth = useAuthStore();
+        auth.user = {
+            username: "u",
+            userId: "id",
+            attributes: { sub: "s", email: "u@e.com" },
+            permissions: []
+        };
+        auth.mfaEnabled = false;
+        auth.mfaRequired = false;
+        auth.signInStep = "DONE";
+
+        await authCheck(route("/projects") as never, route("/") as never, next as never);
+
+        expect(calls).toEqual([undefined]);
     });
 
     it("allows MFA-pending user to stay on /auth/mfa-setup", async () => {

@@ -99,8 +99,11 @@ export const authCheck = async (
         }
 
         // Admin-reset users (or anyone Cognito signed in without MFA)
-        // can only reach the enrolment page until they finish setup.
-        if (auth.mfaEnabled === false && to.path !== '/auth/mfa-setup') {
+        // can only reach the enrolment page until they finish setup —
+        // but only if this environment requires MFA at all. In dev
+        // (backend Settings.ENFORCE_MFA=False), `mfaRequired` is false
+        // and we skip the redirect even for unenrolled users.
+        if (auth.mfaRequired === true && auth.mfaEnabled === false && to.path !== '/auth/mfa-setup') {
             return next('/auth/mfa-setup');
         }
 

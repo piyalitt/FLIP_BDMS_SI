@@ -107,7 +107,7 @@ describe("authStore", () => {
             expect(store.getUser).toEqual(store.user);
         });
 
-        it("confirmedUser is true only when DONE + user + mfaEnabled=true", () => {
+        it("confirmedUser is true once challenges clear AND (env is MFA-off OR TOTP is active)", () => {
             expect(store.confirmedUser).toBe(false);
 
             store.signInStep = "DONE";
@@ -117,6 +117,8 @@ describe("authStore", () => {
                 attributes: { sub: "s", email: "e@f.com" },
                 permissions: []
             };
+            // Stag/prod path: mfaRequired=true forces mfaEnabled=true gate.
+            store.mfaRequired = true;
             store.mfaEnabled = true;
             expect(store.confirmedUser).toBe(true);
 
@@ -125,12 +127,19 @@ describe("authStore", () => {
 
             store.mfaEnabled = null;
             expect(store.confirmedUser).toBe(false);
+
+            // Dev path: mfaRequired=false bypasses the mfaEnabled check
+            // entirely — users who never enrolled still count as confirmed.
+            store.mfaRequired = false;
+            store.mfaEnabled = false;
+            expect(store.confirmedUser).toBe(true);
         });
 
-        it("needsMfaEnrolment is true only when DONE + mfaEnabled=false", () => {
+        it("needsMfaEnrolment is true only when DONE + mfaRequired=true + mfaEnabled=false", () => {
             expect(store.needsMfaEnrolment).toBe(false);
 
             store.signInStep = "DONE";
+            store.mfaRequired = true;
             store.mfaEnabled = false;
             expect(store.needsMfaEnrolment).toBe(true);
 
@@ -138,6 +147,12 @@ describe("authStore", () => {
             expect(store.needsMfaEnrolment).toBe(false);
 
             store.mfaEnabled = null;
+            expect(store.needsMfaEnrolment).toBe(false);
+
+            // Dev bypass: even with mfaEnabled=false, an environment
+            // that doesn't require MFA must NOT trigger enrolment.
+            store.mfaRequired = false;
+            store.mfaEnabled = false;
             expect(store.needsMfaEnrolment).toBe(false);
         });
     });
@@ -148,7 +163,7 @@ describe("authStore", () => {
                 username: "u",
                 userId: "id"
             } as never);
-            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: true });
+            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: true, required: true });
             vi.mocked(fetchUserAttributes).mockResolvedValue({
                 sub: "s",
                 email: "e@f.com"
@@ -176,7 +191,7 @@ describe("authStore", () => {
                 username: "u",
                 userId: "id"
             } as never);
-            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: true });
+            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: true, required: true });
             vi.mocked(fetchUserAttributes).mockResolvedValue({
                 sub: "s",
                 email: "e@f.com"
@@ -194,7 +209,7 @@ describe("authStore", () => {
                 username: "u",
                 userId: "id"
             } as never);
-            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: false });
+            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: false, required: true });
             vi.mocked(fetchUserAttributes).mockResolvedValue({
                 sub: "s",
                 email: "e@f.com"
@@ -224,10 +239,37 @@ describe("authStore", () => {
             } as never);
             vi.mocked(getUserPermissions).mockResolvedValue({ permissions: [] });
 
-            await store.hydrate(true);
+            await store.hydrate({ enabled: true, required: true });
 
             expect(getMfaStatus).not.toHaveBeenCalled();
             expect(store.mfaEnabled).toBe(true);
+            expect(store.mfaRequired).toBe(true);
+        });
+
+        it("still fetches permissions when MFA is not enabled but this environment doesn't require it", async () => {
+            // Dev bypass: a user who never enrolled TOTP in an environment
+            // with ENFORCE_MFA=false still has full API access, so the
+            // store should populate real permissions instead of the
+            // attributes-only placeholder reserved for the MFA-blocked case.
+            vi.mocked(getCurrentUser).mockResolvedValue({
+                username: "u",
+                userId: "id"
+            } as never);
+            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: false, required: false });
+            vi.mocked(fetchUserAttributes).mockResolvedValue({
+                sub: "s",
+                email: "e@f.com"
+            } as never);
+            vi.mocked(getUserPermissions).mockResolvedValue({
+                permissions: ["CanManageUsers"]
+            });
+
+            await store.hydrate();
+
+            expect(store.mfaEnabled).toBe(false);
+            expect(store.mfaRequired).toBe(false);
+            expect(store.user?.permissions).toEqual(["CanManageUsers"]);
+            expect(getUserPermissions).toHaveBeenCalledWith("id");
         });
     });
 
@@ -237,7 +279,7 @@ describe("authStore", () => {
                 username: "u",
                 userId: "id"
             } as never);
-            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: false });
+            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: false, required: true });
             vi.mocked(fetchUserAttributes).mockResolvedValue({
                 sub: "s",
                 email: "e@f.com"
@@ -256,7 +298,7 @@ describe("authStore", () => {
                 username: "u",
                 userId: "id"
             } as never);
-            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: true });
+            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: true, required: true });
             vi.mocked(fetchUserAttributes).mockResolvedValue({
                 sub: "s",
                 email: "e@f.com"
@@ -289,7 +331,7 @@ describe("authStore", () => {
                 username: "u",
                 userId: "id"
             } as never);
-            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: true });
+            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: true, required: true });
             vi.mocked(fetchUserAttributes).mockResolvedValue({
                 sub: "s",
                 email: "e@f.com"
@@ -370,6 +412,42 @@ describe("authStore", () => {
             expect(getCurrentUser).not.toHaveBeenCalled();
         });
 
+        it("logs but tolerates a forceRefresh that throws (still lets hydrate attempt)", async () => {
+            // Amplify's forceRefresh can throw on its own (expired refresh
+            // token, Cognito transient failure). The wait helper swallows
+            // it and moves on — the downstream hydrate is what surfaces
+            // the error to the user with richer context. We just need
+            // to make sure the throw is logged, not unhandled.
+            const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+            const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+            vi.mocked(fetchAuthSession)
+                .mockReset()
+                .mockResolvedValueOnce({ tokens: undefined } as never)
+                .mockRejectedValueOnce(new Error("Refresh token expired"));
+            vi.mocked(signIn).mockResolvedValue({
+                isSignedIn: true,
+                nextStep: { signInStep: "DONE" }
+            } as never);
+            // hydrate throws — we expect signIn to rethrow, which is fine;
+            // the test target is the console.error about the refresh.
+            vi.mocked(getCurrentUser).mockRejectedValue(new Error("401"));
+
+            await expect(store.signIn({ username: "u", password: "p" })).rejects.toThrow();
+
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
+                "waitForSessionTokens: forceRefresh threw:",
+                expect.objectContaining({ message: "Refresh token expired" })
+            );
+            // Also covers the "still no idToken after forceRefresh" warn —
+            // the rejected forceRefresh leaves `session.tokens` undefined.
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                "waitForSessionTokens: no idToken after forceRefresh",
+                expect.any(Object)
+            );
+            consoleErrorSpy.mockRestore();
+            consoleWarnSpy.mockRestore();
+        });
+
         it("forces a session refresh when tokens are not yet visible after signIn", async () => {
             // Amplify v6 can resolve signIn before fetchAuthSession sees the
             // cached tokens; this race used to surface as a 401 on the very
@@ -390,7 +468,7 @@ describe("authStore", () => {
                 username: "u",
                 userId: "id"
             } as never);
-            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: true });
+            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: true, required: true });
             vi.mocked(fetchUserAttributes).mockResolvedValue({
                 sub: "s",
                 email: "e@f.com"
@@ -446,7 +524,7 @@ describe("authStore", () => {
                 username: "u",
                 userId: "id"
             } as never);
-            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: false });
+            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: false, required: true });
             vi.mocked(fetchUserAttributes).mockResolvedValue({
                 sub: "s",
                 email: "e@f.com"

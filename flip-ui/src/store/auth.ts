@@ -82,6 +82,11 @@ type AuthState = {
   totpSetup: TotpSetupDetails | null;
   // null = not yet known (store hydration in progress or sign-in incomplete)
   mfaEnabled: boolean | null;
+  // Mirrors the backend's Settings.ENFORCE_MFA flag (sourced from
+  // /users/me/mfa/status). null until the first hydrate lands; once
+  // populated the router guard uses it to skip the /auth/mfa-setup
+  // redirect in dev environments where MFA is not required.
+  mfaRequired: boolean | null;
   // Username captured at sign-in, used as the account label when building
   // the TOTP setup URI before `user` is populated (challenge chain step).
   pendingUsername: string | null;
@@ -145,37 +150,54 @@ export const useAuthStore = defineStore("auth", {
         signInStep: null,
         totpSetup: null,
         mfaEnabled: null,
+        mfaRequired: null,
         pendingUsername: null
     }),
 
     getters: {
         getUser: (state) => state.user,
-        // Sign-in challenge chain complete AND TOTP confirmed active at the app layer.
+        // Sign-in challenge chain complete AND (either the backend
+        // doesn't require MFA in this environment, or TOTP is active).
+        // `mfaRequired === false` covers the dev bypass; stag/prod have
+        // mfaRequired=true and still need mfaEnabled=true.
         confirmedUser: (state) =>
-            state.signInStep === "DONE" && !!state.user && state.mfaEnabled === true,
-        // True when Cognito tokens exist and challenges are cleared but MFA is not yet active —
-        // the one state where we route the user to the enrolment page instead of the app.
+            state.signInStep === "DONE" &&
+            !!state.user &&
+            (state.mfaRequired === false || state.mfaEnabled === true),
+        // True only when Cognito challenges are cleared AND the backend
+        // demands MFA AND the user hasn't enrolled yet — the one state
+        // where the router routes them to the enrolment page. In dev
+        // (mfaRequired=false) this always returns false.
         needsMfaEnrolment: (state) =>
-            state.signInStep === "DONE" && state.mfaEnabled === false
+            state.signInStep === "DONE" &&
+            state.mfaRequired === true &&
+            state.mfaEnabled === false
     },
     actions: {
-        // Load user + MFA state into the store. When `mfaEnabled` is already
-        // known (e.g. just after a successful TOTP enrolment), the caller
-        // can pass it in to skip the round-trip to /users/me/mfa/status.
-        async hydrate(knownMfaEnabled?: boolean) {
-            const [{ username, userId }, mfaEnabled] = await Promise.all([
+        // Load user + MFA state into the store. When the MFA state is
+        // already known (e.g. just after a successful TOTP enrolment),
+        // the caller can pass it in as `{enabled, required}` to skip the
+        // round-trip to /users/me/mfa/status. Post-enrolment callers
+        // know both values, so the shortcut now takes an object rather
+        // than a bare boolean.
+        async hydrate(knownMfaState?: { enabled: boolean; required: boolean }) {
+            const [{ username, userId }, mfaState] = await Promise.all([
                 getCurrentUser(),
-                knownMfaEnabled !== undefined
-                    ? Promise.resolve(knownMfaEnabled)
-                    : getMfaStatus().then(s => s.enabled)
+                knownMfaState !== undefined
+                    ? Promise.resolve(knownMfaState)
+                    : getMfaStatus()
             ]);
             this.signInStep = "DONE";
-            this.mfaEnabled = mfaEnabled;
-            if (mfaEnabled) {
+            this.mfaEnabled = mfaState.enabled;
+            this.mfaRequired = mfaState.required;
+            // Fetch permissions whenever the user has full API access —
+            // i.e. MFA is active OR this environment doesn't require it.
+            // The attributes-only branch is reserved for the "MFA
+            // required but not yet enrolled" case, where the permissions
+            // endpoint would 403 under the app-layer gate.
+            if (mfaState.enabled || !mfaState.required) {
                 this.user = await buildUserWithPermissions({ username, userId });
             } else {
-                // Permissions endpoint is MFA-gated, so hold the profile
-                // at attributes-only until the user completes enrolment.
                 const attributes = (await fetchUserAttributes()) as Attributes;
                 this.user = { username, userId, attributes, permissions: [] };
             }
@@ -194,6 +216,7 @@ export const useAuthStore = defineStore("auth", {
             this.signInStep = null;
             this.totpSetup = null;
             this.mfaEnabled = null;
+            this.mfaRequired = null;
             this.pendingUsername = details.username;
 
             // Force USER_PASSWORD_AUTH — Amplify v6 defaults to SRP,
@@ -291,7 +314,7 @@ export const useAuthStore = defineStore("auth", {
             // Network Error" — misleadingly blaming the code.
             await waitForSessionTokens();
             try {
-                await this.hydrate(true);
+                await this.hydrate({ enabled: true, required: true });
             } catch (e) {
                 console.error("Failed to hydrate user post-TOTP-challenge:", e);
                 this.signInStep = "DONE";
@@ -322,7 +345,7 @@ export const useAuthStore = defineStore("auth", {
             }
             this.totpSetup = null;
             try {
-                await this.hydrate(true);
+                await this.hydrate({ enabled: true, required: true });
             } catch (e) {
                 console.error("Failed to hydrate user post-MFA setup:", e);
                 // Leave `mfaEnabled=null` so the router guard re-fetches
@@ -375,7 +398,7 @@ export const useAuthStore = defineStore("auth", {
             }
             this.totpSetup = null;
             try {
-                await this.hydrate(true);
+                await this.hydrate({ enabled: true, required: true });
             } catch (e) {
                 console.error("Failed to hydrate user post-MFA enrolment:", e);
                 // See confirmTotpSetup: leave mfaEnabled=null so the

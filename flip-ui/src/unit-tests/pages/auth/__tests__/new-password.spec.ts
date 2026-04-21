@@ -53,6 +53,7 @@ interface AuthStoreState {
     signInStep: string | null;
     user: unknown;
     mfaEnabled: boolean | null;
+    mfaRequired: boolean | null;
 }
 
 function mountNewPassword(
@@ -71,6 +72,7 @@ function mountNewPassword(
                             signInStep: "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED",
                             user: null,
                             mfaEnabled: null,
+                            mfaRequired: null,
                             ...authState
                         }
                     }
@@ -152,9 +154,13 @@ describe("new-password page", () => {
             const authStore = useAuthStore();
             (authStore.changePassword as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(
                 async () => {
-                    // `needsMfaEnrolment` getter true when signInStep=DONE, mfaEnabled=false
+                    // `needsMfaEnrolment` getter is true when signInStep=DONE AND
+                    // mfaRequired=true AND mfaEnabled=false — the stag/prod case
+                    // where the password change cleared the challenge chain but
+                    // the user still has to enrol TOTP.
                     authStore.signInStep = "DONE";
                     authStore.mfaEnabled = false;
+                    authStore.mfaRequired = true;
                 }
             );
 
@@ -174,6 +180,7 @@ describe("new-password page", () => {
                     // MFA already active + sign-in chain cleared
                     authStore.signInStep = "DONE";
                     authStore.mfaEnabled = true;
+                    authStore.mfaRequired = true;
                 }
             );
 
