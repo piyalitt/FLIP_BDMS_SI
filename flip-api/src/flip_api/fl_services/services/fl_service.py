@@ -675,6 +675,18 @@ def verify_bundle_paths(
 ) -> None:
     """
     Verifies that all expected destination keys exist after bundling.
+
+    Args:
+        s3 (S3Client): S3 client used to list destination objects.
+        base_files (list[str]): Keys of the base application files in the source bucket.
+        model_files (list[str]): Keys of the user-uploaded model files in the source bucket.
+        app_folders (set[str]): Application subfolder names that model files get mirrored into.
+        base_bucket_s3_path (str): Root S3 path of the base application bucket.
+        model_bucket_s3_path (str): Root S3 path of the user model bucket.
+        dest_bucket_s3_path (str): Root S3 path of the destination bundle bucket.
+
+    Raises:
+        RuntimeError: If any expected destination key is missing from the bundle bucket.
     """
 
     # Relative paths of model files
@@ -758,6 +770,10 @@ def extract_current_job_data(net_endpoint: str, fl_backend_job_id: str) -> IJobM
 
     Returns:
         IJobMetaData: The current job data if found.
+
+    Raises:
+        ValueError: If the FL server response is not a list, no running job matches
+            ``fl_backend_job_id``, or more than one running job shares the same ID.
     """
     url = f"{net_endpoint}/list_jobs"
     current_job_data = http_get(url)
@@ -802,6 +818,10 @@ def abort_model_training(request: Request, model_id: UUID, session: Session) -> 
         request (Request): The FastAPI request object
         model_id (UUID): The ID of the model to abort
         session (Session): SQLModel session object
+
+    Raises:
+        ValueError: If the FL server is not running, or if the job currently running on the
+            server does not correspond to ``model_id``, or if ``target`` is invalid.
     """
     logger.debug(f"Checking if model {model_id} is currently running...")
 
