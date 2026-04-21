@@ -1423,3 +1423,151 @@ class TestGetUsername:
             mock_logger.warning.assert_any_call(
                 f"Multiple users found for ID {user1}, returning the first one"
             )
+
+
+class TestUpdateUser:
+    """Cover update_user — it's a pre-existing helper but the PR refactored
+    its boto3 client call to go through `_cognito_client()`, which made
+    codecov treat the first line as a net-new addition."""
+
+    @pytest.fixture
+    def mock_boto3_client(self):
+        with patch("flip_api.utils.cognito_helpers.boto3.client") as mock_client:
+            yield mock_client
+
+    @pytest.fixture
+    def mock_settings(self):
+        with patch("flip_api.utils.cognito_helpers.get_settings") as mock_get_settings:
+            mock_get_settings.return_value.AWS_REGION = "eu-west-2"
+            yield mock_get_settings
+
+    def test_disables_user_when_disabled_true(self, mock_boto3_client, mock_settings, mock_logger):
+        """disabled=True routes through AdminDisableUser. The returned
+        Disabled schema echoes the requested state so the caller can
+        confirm the flip without a second round-trip."""
+        from flip_api.utils.cognito_helpers import update_user
+
+        result = update_user("user@example.com", "pool-id", disabled=True)
+
+        assert result.disabled is True
+        mock_boto3_client.return_value.admin_disable_user.assert_called_once_with(
+            UserPoolId="pool-id", Username="user@example.com"
+        )
+        mock_boto3_client.return_value.admin_enable_user.assert_not_called()
+
+    def test_enables_user_when_disabled_false(self, mock_boto3_client, mock_settings, mock_logger):
+        """disabled=False routes through AdminEnableUser — the inverse."""
+        from flip_api.utils.cognito_helpers import update_user
+
+        result = update_user("user@example.com", "pool-id", disabled=False)
+
+        assert result.disabled is False
+        mock_boto3_client.return_value.admin_enable_user.assert_called_once_with(
+            UserPoolId="pool-id", Username="user@example.com"
+        )
+        mock_boto3_client.return_value.admin_disable_user.assert_not_called()
+
+    def test_client_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
+        """A boto3 failure surfaces as HTTP 500 with the error text tacked
+        on — the admin users page relies on this to render a banner."""
+        from flip_api.utils.cognito_helpers import update_user
+
+        mock_boto3_client.return_value.admin_disable_user.side_effect = ClientError(
+            error_response={"Error": {"Code": "UserNotFoundException", "Message": "nope"}},
+            operation_name="AdminDisableUser",
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            update_user("missing@example.com", "pool-id", disabled=True)
+
+        assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
+        assert "Failed to update user" in exc_info.value.detail
+
+
+class TestDeleteCognitoUser:
+    """Cover delete_cognito_user — same situation as update_user: pre-existing,
+    refactored by the PR to use `_cognito_client()`."""
+
+    @pytest.fixture
+    def mock_boto3_client(self):
+        with patch("flip_api.utils.cognito_helpers.boto3.client") as mock_client:
+            yield mock_client
+
+    @pytest.fixture
+    def mock_settings(self):
+        with patch("flip_api.utils.cognito_helpers.get_settings") as mock_get_settings:
+            mock_get_settings.return_value.AWS_REGION = "eu-west-2"
+            yield mock_get_settings
+
+    def test_deletes_user_successfully(self, mock_boto3_client, mock_settings, mock_logger):
+        """Happy path: AdminDeleteUser is called once and the helper logs success."""
+        from flip_api.utils.cognito_helpers import delete_cognito_user
+
+        delete_cognito_user("user@example.com", "pool-id")
+
+        mock_boto3_client.return_value.admin_delete_user.assert_called_once_with(
+            UserPoolId="pool-id", Username="user@example.com"
+        )
+        mock_logger.info.assert_called_once_with(
+            "Successfully deleted user: user@example.com"
+        )
+
+    def test_client_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
+        """A boto3 failure during delete surfaces as HTTP 500."""
+        from flip_api.utils.cognito_helpers import delete_cognito_user
+
+        mock_boto3_client.return_value.admin_delete_user.side_effect = ClientError(
+            error_response={"Error": {"Code": "ResourceNotFoundException", "Message": "gone"}},
+            operation_name="AdminDeleteUser",
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            delete_cognito_user("ghost@example.com", "pool-id")
+
+        assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
+        assert "Failed to delete user" in exc_info.value.detail
+
+
+class TestRevokeToken:
+    """Cover revoke_token — called on logout to invalidate a refresh token."""
+
+    @pytest.fixture
+    def mock_boto3_client(self):
+        with patch("flip_api.utils.cognito_helpers.boto3.client") as mock_client:
+            yield mock_client
+
+    @pytest.fixture
+    def mock_settings(self):
+        with patch("flip_api.utils.cognito_helpers.get_settings") as mock_get_settings:
+            mock_get_settings.return_value.AWS_REGION = "eu-west-2"
+            yield mock_get_settings
+
+    def test_revokes_token_successfully(self, mock_boto3_client, mock_settings, mock_logger):
+        """Happy path: Cognito's RevokeToken API is called with both the
+        refresh token and the app client id (required to authenticate the
+        revoke against the right pool)."""
+        from flip_api.utils.cognito_helpers import revoke_token
+
+        revoke_token("refresh-token-value", "client-id-value")
+
+        mock_boto3_client.return_value.revoke_token.assert_called_once_with(
+            Token="refresh-token-value", ClientId="client-id-value"
+        )
+        mock_logger.info.assert_called_once_with("Successfully revoked refresh token")
+
+    def test_client_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
+        """A boto3 failure surfaces as HTTP 500. An invalid refresh token
+        is NotAuthorizedException from Cognito — that's still a 500 from
+        the API's perspective because the user already hit logout."""
+        from flip_api.utils.cognito_helpers import revoke_token
+
+        mock_boto3_client.return_value.revoke_token.side_effect = ClientError(
+            error_response={"Error": {"Code": "NotAuthorizedException", "Message": "invalid"}},
+            operation_name="RevokeToken",
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            revoke_token("bad-token", "client-id")
+
+        assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
+        assert "Failed to revoke token" in exc_info.value.detail
