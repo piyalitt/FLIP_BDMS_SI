@@ -34,21 +34,15 @@ include $(MAIN_ENV_FILE)
 export $(shell sed 's/=.*//' $(MAIN_ENV_FILE))
 endif
 
-# ---- FL backend selection (flower | nvflare) ----
-FL_BACKEND ?= flower
-VALID_FL_BACKENDS := flower nvflare
-
-ifeq (,$(filter $(FL_BACKEND),$(VALID_FL_BACKENDS)))
-$(error Invalid FL_BACKEND '$(FL_BACKEND)'. Must be one of: $(VALID_FL_BACKENDS))
-endif
+include deploy/fl_backend.mk
 
 COMMON_COMPOSE_FILE := deploy/compose.$(__DCKR_SUFFIX).yml
 FL_BACKEND_COMPOSE_FILE := deploy/compose.$(__DCKR_SUFFIX).$(FL_BACKEND).yml
 
-# Override FL_PROVISIONED_DIR to use absolute path resolved relative to this Makefile
-# This allows the repo to work on any machine without hardcoding paths
-override FL_PROVISIONED_DIR := $(shell realpath $(dir $(lastword $(MAKEFILE_LIST)))/../flip-fl-base/workspace)
-export FL_PROVISIONED_DIR
+# Resolve FL_PROVISIONED_DIR (from .env) to an absolute path relative to this Makefile
+# Docker requires absolute paths for volume mounts; the .env value may be relative
+MAKEFILE_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
+override FL_PROVISIONED_DIR := $(abspath $(MAKEFILE_DIR)/$(FL_PROVISIONED_DIR))
 
 # Service configuration
 define SERVICE_CONFIG
@@ -173,11 +167,20 @@ restart-no-trust:
 ci:
 	act --env-file .env.development
 ui:
+ifeq ($(strip $(PROD)),)
 	@echo "🚀 Starting UI..."
 	$(DOCKER_COMMAND) up --remove-orphans -d flip-ui
+else
+	@echo "ℹ️  flip-ui is served from S3 + CloudFront when PROD=$(PROD); no container to start."
+	@echo "    Run \`make -C deploy/providers/AWS deploy-ui PROD=$(PROD)\` to publish the bundle."
+endif
 ui-off:
+ifeq ($(strip $(PROD)),)
 	@echo "🛑 Stopping UI..."
 	$(DOCKER_COMMAND) down --remove-orphans flip-ui
+else
+	@echo "ℹ️  No flip-ui container runs when PROD=$(PROD) (S3 + CloudFront)."
+endif
 tests:
 	cd flip-ui && $(MAKE) unit_test && \
 	cd ../flip-api && $(MAKE) test

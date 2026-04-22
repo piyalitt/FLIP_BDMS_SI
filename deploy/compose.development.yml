@@ -22,7 +22,6 @@ services:
         UI_PORT: ${UI_PORT}
       context: ../flip-ui
       dockerfile: Dockerfile
-      target: development
     ports:
       - "${UI_PORT}:443"
     volumes:
@@ -103,7 +102,7 @@ services:
     container_name: flip-api
 
   flip-db:
-    image: postgres:13
+    image: postgres:17
     ports:
       - ${DB_PORT}:${DB_PORT}
     environment:

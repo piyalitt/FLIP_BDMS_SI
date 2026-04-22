@@ -79,42 +79,57 @@ This command executes the following steps in order:
 1. **`github-login`**: Authenticate with GitHub CLI
 2. **`aws-login`**: Authenticate with AWS SSO
 3. **`init`**: Initialize Terraform with environment-specific S3 backend
-4. **`import-all`**: Import existing AWS resources to prevent replacement
-5. **`plan`**: Generate and review Terraform execution plan
+4. **`import-persistent`**: Import existing persistent AWS resources to prevent replacement
+5. **`plan`**: Generate and review the initial Terraform execution plan
 6. **`apply`**: Apply infrastructure changes
-7. **`ssh-config`**: Update `~/.ssh/config` with EC2 instance IPs
-8. **`ansible-init`**: Configure EC2 instances with Docker and CloudWatch
-9. **`deploy-centralhub`**: Deploy Central Hub services via Docker Compose
-10. **`deploy-trust`**: Deploy Trust services via Docker Compose
-11. **`status`**: Run comprehensive health checks
+7. **`update-env`**: Refresh the root environment file with Terraform outputs
+8. **`ssh-config`**: Update `~/.ssh/config` with EC2 instance IPs
+9. **`ansible-init`**: Configure EC2 instances with Docker, CloudWatch, and FL assets
+10. **`deploy-centralhub`**: Deploy Central Hub services via Docker Compose
+11. **`deploy-trust`**: Deploy Trust services via Docker Compose
+12. **`status`**: Run comprehensive health checks
+
+### flip-ui on S3 + CloudFront
+
+The UI is served from S3 behind CloudFront at the canonical user-facing subdomain (`stag.flip.aicentre.co.uk` / `app.flip.aicentre.co.uk`). CloudFront also forwards `/api/*` to the ALB, using a backend-only `api.<subdomain>` DNS name that only CloudFront uses — trusts and users never see it. CloudFront is the only supported UI-hosting path; there is no legacy EC2 UI container or ALB UI target group to fall back to.
+
+**Subsequent UI deploys**: just `make deploy-ui PROD=stag|true` — builds the UI from the working tree, regenerates `window.js`, syncs to S3, invalidates CloudFront. No Terraform involved.
 
 ### Manual Step-by-Step Deployment
 
 For debugging or selective deployment, run individual steps:
 
 ```bash
-# 1. Login to AWS
+# 0. Choose the environment for this shell.
+# If you omit PROD, the AWS provider Makefile defaults to staging.
+export PROD=stag    # or: export PROD=true
+
+# 1. Login to GitHub and AWS
+make github-login
 make aws-login
 
-# 2. Initialize Terraform (creates/configures S3 backend)
+# 2. Bootstrap the Terraform backend bucket once, if needed
+make create-backend
+
+# 3. Initialize Terraform (uses the configured S3 backend)
 make init
 
-# 3. Import existing resources (prevents replacement errors)
-make import-all
+# 4. Import existing persistent resources (prevents replacement errors)
+make import-persistent
 
-# 4. Plan changes
+# 5. Plan changes
 make plan
 
-# 5. Apply infrastructure
+# 6. Apply infrastructure
 make apply
 
-# 6. Configure SSH access
+# 7. Configure SSH access
 make ssh-config
 
-# 7. Setup EC2 instances with Ansible
+# 8. Setup EC2 instances with Ansible
 make ansible-init
 
-# 8. Deploy services
+# 9. Deploy services
 make deploy-centralhub
 make deploy-trust
 
@@ -138,8 +153,72 @@ make full-deploy PROD=true
 
 The `PROD` variable determines which environment files are loaded:
 
-- `PROD=stag` → Uses `.env.stag`, `flip-api/.env.stag`
-- `PROD=true` → Uses `.env.production`, `flip-api/.env.production`
+- `PROD=stag` → Uses the root `.env.stag`
+- `PROD=true` → Uses the root `.env.production`
+
+If `PROD` is omitted when running the AWS provider Makefile, it defaults to staging.
+
+#### AWS profile aliases
+
+The Makefile guards refuse to apply unless `AWS_PROFILE` matches the expected profile for the chosen environment. Defaults are the short logical names `prod`, `stag`, and `dev` — add these aliases to `~/.aws/config` so commands like `AWS_PROFILE=stag make plan` work without thinking about account numbers:
+
+```ini
+[profile prod]
+sso_session = FLIP
+sso_account_id = <prod-sso-account-id>
+sso_role_name = <sso-role-name>
+region = <aws-region>
+output = json
+
+[profile stag]
+sso_session = FLIP
+sso_account_id = <stag-sso-account-id>
+sso_role_name = <sso-role-name>
+region = <aws-region>
+output = json
+
+[profile dev]
+sso_session = FLIP
+sso_account_id = <dev-sso-account-id>
+sso_role_name = <sso-role-name>
+region = <aws-region>
+output = json
+```
+
+Replace each `<…>` with the matching value from the FLIP AWS account directory (kept out of the public repo).
+
+If your local profile names differ, override the defaults via `PROD_AWS_PROFILE`, `STAG_AWS_PROFILE`, or `DEV_AWS_PROFILE` (in your env file or on the make command line).
+
+**Dev account (Cognito + SES only):**
+
+The dev AWS account runs only the services that cannot reasonably run locally (Cognito for auth, SES for email). A separate, minimal Terraform root lives in [`dev/`](./dev/README.md) and calls the same `modules/cognito` and `modules/ses` as this stack, so a change to either service lands in both environments from one place. The dev stack reuses `.env.development` — the same env file the local Docker Compose dev stack consumes — so there is no extra file to maintain.
+
+The dev stack has its own Makefile; drive it from the `dev/` directory:
+
+```bash
+cd deploy/providers/AWS/dev
+make create-backend  # one-time, if the backend bucket needs bootstrapping
+make init            # one-time, or after backend config changes
+make plan
+make apply
+```
+
+See [`dev/README.md`](./dev/README.md) for the one-time `terraform import` workflow that pulls the manually-created dev Cognito pool into state.
+
+### Terraform module layout
+
+```
+deploy/providers/AWS/
+├── main.tf / services.tf       # prod + stag stack root
+├── modules/
+│   ├── cognito/                # shared: pool, domain, client, seed users
+│   ├── ses/                    # shared: sender identity, transactional templates
+│   ├── secgroup/               # shared: security-group wrapper
+│   └── trust_ec2/              # prod/stag only
+└── dev/                        # dev-account root (calls cognito + ses modules)
+```
+
+The Cognito and SES resources used to live at the root of the prod/stag stack. `services.tf` and `main.tf` ship `moved` blocks that re-anchor the old root addresses onto the new `module.cognito.*` / `module.ses.*` paths, so any state still on the old layout self-heals on the next plan — no manual `terraform state mv` needed. `scripts/import-resources.sh` already targets the module addresses, so a fresh import lands in the right place too.
 
 ### Destroy Infrastructure
 
@@ -231,6 +310,12 @@ cd deploy/providers/AWS
 make full-deploy-stag-hybrid LOCAL_TRUST_IP=<public-ip> [LOCAL_TRUST_SSH_KEY=~/.ssh/trust_key]
 ```
 
+This wrapper target runs the full AWS deployment, provisions the local trust, and redeploys the Central Hub so the new secret values are loaded.
+You still need to:
+
+1. Start the trust stack on the host: `cd trust && env PROD=stag make up-local-trust-stag`
+2. Verify the trust can poll the hub (check trust-api logs for successful task polling)
+
 Or run provisioning directly:
 
 ```bash
@@ -277,33 +362,32 @@ Review the output for failed checks and follow the specific troubleshooting step
 
 The platform supports a cloud-only setup (Central Hub + Trust on AWS) or a hybrid setup (Central Hub on AWS + Trust on-premises). Trusts poll the Central Hub for tasks — all communication is outbound from the trust.
 
-1. **Central Hub EC2**: Hosts the main application services
-   - flip-ui (Frontend)
+1. **flip-ui (Frontend)**: Served as static assets from an S3 bucket behind CloudFront at the canonical subdomain. See the [flip-ui on S3 + CloudFront](#flip-ui-on-s3--cloudfront) section.
+
+2. **Central Hub EC2**: Hosts the main application services (but **not** the UI — that lives in CloudFront)
    - flip-api (Backend API)
    - fl-api-net-1 (Federated Learning API for Network 1)
-   - fl-api-net-2 (Federated Learning API for Network 2)
    - fl-server-net-1 (Federated Learning Server for Network 1)
-   - fl-server-net-2 (Federated Learning Server for Network 2)
 
-2. **Trust EC2** (cloud model): Hosts trust-related services (automatically provisioned)
+3. **Trust EC2** (cloud model): Hosts trust-related services (automatically provisioned)
    - trust-api (polls hub for tasks)
    - imaging-api
    - data-access-api
    - fl-client-net-1 (FL Client for Network 1)
-   - fl-client-net-2 (FL Client for Network 2)
    - XNAT (medical imaging platform)
    - Orthanc (DICOM server)
    - OMOP database
 
-3. **On-Premises Trust** (hybrid model, optional): Same trust services running on a local host
+4. **On-Premises Trust** (hybrid model, optional): Same trust services running on a local host
    - Provisioned via [`deploy/providers/local/`](../local/README.md)
    - Polls the Central Hub over the internet via HTTPS (outbound only)
 
 | Application Component |
 | ---------------------- |
-| **Central Hub Services** |
-| FLIP API ✅ |
+| **Central Hub (S3 + CloudFront)** |
 | FLIP UI ✅ |
+| **Central Hub (EC2)** |
+| FLIP API ✅ |
 | FL API ✅ |
 | FL Server ✅ |
 | **Trust Services** |
@@ -318,13 +402,16 @@ The platform supports a cloud-only setup (Central Hub + Trust on AWS) or a hybri
 │    Internet      │
 └────────┬────────┘
          │
+    ┌────▼────────────────┐
+    │    CloudFront         │ (UI from S3; /api/* → ALB)
+    └────┬────────────────┘
+         │   /api/*
     ┌────▼────┐
     │   ALB    │ (HTTPS, ACM cert)
     └────┬────┘
          │
     ┌────▼──────────────────────┐
     │  Central Hub EC2          │
-    │  - flip-ui                │
     │  - flip-api               │
     │  - fl-api                 │
     │  - fl-server              │
@@ -383,12 +470,110 @@ Trust services can run on AWS EC2 or on-premises. Both models use the same Docke
 
 | Port | Service | Status | Purpose |
 | ------ | --------- | --------- | --------- |
+| **22** | SSH | 🔴 **CLOSED** | Not exposed — remote access is via SSM Session Manager tunnel (see below) |
 | **80** | HTTP | 🟢 **OPEN** | ALB traffic |
+| **443** | HTTPS | 🟢 **OPEN** | ALB HTTPS entrypoint |
 | **3000** | FLIP UI | 🟢 **OPEN** | Frontend application |
-| **8000** | FLIP API | 🟢 **OPEN** | Backend API |
-| **8001** | FL API | 🟢 **OPEN** | Federated learning API |
-| **8002** | FL Server | 🟡 **CONDITIONAL** | gRPC (open to trust IPs only) |
+| **8080** | FLIP API | 🟢 **OPEN** | Backend API |
+| **8000** | FL API | 🟢 **OPEN** | Federated learning API |
+| **8002** | FL Server/Admin | 🟡 **CONDITIONAL** | Consolidated FL server/admin traffic (open to trust IPs only) |
 | | | | Trust API: no inbound port needed (trusts poll the hub outbound) |
+
+### Remote Access via SSM Session Manager
+
+EC2 instances are accessed through AWS Systems Manager Session Manager — port 22 is **not** open in any security group. SSH traffic is tunnelled through the SSM agent running on each instance, so no bastion host or inbound firewall rule is needed.
+
+**Prerequisites**
+
+- AWS CLI authenticated for the correct account and region:
+
+  ```bash
+  export AWS_PROFILE=<your-profile>   # e.g. FlipDeveloperAccess-046651569599
+  export AWS_REGION=eu-west-2         # must match the region where instances are deployed
+  aws sso login --profile $AWS_PROFILE
+  ```
+
+- [AWS Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) installed (minimum version 1.2.319.0):
+
+  **macOS:**
+
+  ```bash
+  brew install session-manager-plugin
+  brew upgrade session-manager-plugin  # Update if already installed
+  ```
+
+  **Linux (Ubuntu/Debian):**
+
+  ```bash
+  curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o "session-manager-plugin.deb"
+  sudo dpkg -i session-manager-plugin.deb
+  ```
+
+  **Verify installation:**
+
+  ```bash
+  session-manager-plugin --version  # Should output version >= 1.2.319.0
+  ```
+
+- SSH key at `~/.ssh/host-aws` (configured in Step 3 of [Pre-configurations README](../README.md#step-3-get-ssh-key-configured))
+
+**Updating `~/.ssh/config`**
+
+After `terraform apply`, run:
+
+```bash
+make ssh-config
+```
+
+This calls `update_ssm_ssh_config.py`, which reads the EC2 instance IDs from Terraform outputs and writes `Host flip` / `Host flip-trust` blocks like the following into `~/.ssh/config`:
+
+```text
+# Managed by FLIP - SSH over SSM Session Manager
+Host flip
+    HostName i-0123456789abcdef0
+    User ubuntu
+    IdentitiesOnly yes
+    IdentityFile ~/.ssh/host-aws
+    StrictHostKeyChecking accept-new
+    ProxyCommand aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters 'portNumber=%p' --region eu-west-2 --profile <your-profile>
+    ControlMaster auto
+    ControlPath ~/.ssh/cm-flip-%r@%h:%p
+    ControlPersist 10m
+```
+
+**Connecting**
+
+```bash
+ssh flip        # Central Hub
+ssh flip-trust  # Trust EC2
+```
+
+Both aliases resolve through the SSM tunnel — no public IP or open port 22 is needed. If your AWS session has expired, re-run `aws sso login --profile $AWS_PROFILE` before connecting.
+
+**Troubleshooting SSM Access**
+
+| Problem | Diagnostics | Solution |
+|---------|-------------|----------|
+| `Unable to locate credentials` | `aws sts get-caller-identity` returns error | Run `aws sso login --profile $AWS_PROFILE` to refresh session |
+| `SessionManagerPlugin not found` | `command -v session-manager-plugin` returns nothing | Install plugin: `brew install session-manager-plugin` (macOS) or see prerequisites above |
+| `[ERROR] SessionManagerPlugin is not installed` | Session manager plugin is missing or outdated | Upgrade plugin: `brew upgrade session-manager-plugin` or download latest version |
+| `InvalidInstanceID.NotFound` | SSH attempts to connect but fails | Verify instance exists: `terraform output Ec2InstanceId` and `terraform output TrustEc2InstanceId` |
+| `AccessDeniedException` | `aws ssm start-session` returns access denied | Check EC2 instance IAM role has `ssm:StartSession` and `ec2messages:*` permissions (Terraform should have created this) |
+| `Connection timeout` (hanging) | SSM tunnel hangs without error | Check security group allows NLB ingress from NAT Gateway (port 8000-8005); verify instances are running: `aws ec2 describe-instances` |
+| `Unable to connect to SSM endpoint` | Connection fails immediately | Verify AWS_REGION matches deployment region: `echo $AWS_REGION` should match `eu-west-2` (or your region) |
+| `Bad ProxyCommand` in ~/.ssh/config | SSH config syntax error | Re-generate config: `make ssh-config` and verify it looks like the example above |
+
+**Testing Connectivity**
+
+```bash
+# Test SSM session directly (before trying SSH)
+aws ssm start-session --target $(terraform output -raw Ec2InstanceId)
+
+# Should open an interactive shell. Run `uname -a` to verify connectivity, then `exit`.
+
+# Then test SSH
+ssh flip  # Should connect via SSM tunnel
+```
 
 ---
 
@@ -438,10 +623,10 @@ Changes to template files are automatically picked up on next `terraform apply` 
 
 | Placeholder | Replaced By | Example |
 | --- | --- | --- |
-| `{username}` | Cognito username (email) | john.smith@example.com |
+| `{username}` | Cognito username (email) | <john.smith@example.com> |
 | `{####}` | 6-digit temporary password or verification code | 123456 |
 | `{flip_alb_subdomain}` | ALB domain from Terraform var | flip-app.example.com |
-| `{reset_link}` | Password reset link with token | https://flip.../reset?token=xyz |
+| `{reset_link}` | Password reset link with token | <https://flip.../reset?token=xyz> |
 
 **SES templates** use double-brace (Mustache) placeholders substituted at send time:
 
@@ -505,7 +690,7 @@ Before testing emails:
 
 1. **Verify SES Email** in AWS Console (SES → Configuration → Identities)
 2. **Sandbox Mode** (default): can only send to verified email addresses. Request production access in SES console.
-3. **Check Send Quota**: `aws ses get-account-sending-enabled --region eu-west-2`
+3. **Check Send Quota**: `aws ses get-account-sending-enabled --region <aws-region>`
 
 ### Troubleshooting Email Issues
 
