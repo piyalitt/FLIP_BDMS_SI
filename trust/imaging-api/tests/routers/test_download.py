@@ -12,7 +12,7 @@
 
 from unittest.mock import AsyncMock, patch
 
-from imaging_api.utils.exceptions import NotFoundError
+from imaging_api.utils.exceptions import LocalStorageError, NotFoundError
 
 _REQUEST_BODY = {
     "encrypted_central_hub_project_id": "encrypted-id",
@@ -86,3 +86,27 @@ def test_download_images_server_error(client):
 
     assert response.status_code == 500
     assert "Failed to download and unzip" in response.json()["detail"]
+
+
+def test_download_images_local_storage_error_returns_500_not_404(client):
+    """Trust-side storage failures must surface as 500 with a storage-specific
+    detail, never as a 404 with an XNAT URL — the latter sent us on a wild
+    goose chase hunting for missing DICOMs when the real issue was a missing
+    bind-mount subdirectory."""
+    with (
+        patch("imaging_api.routers.download.decrypt", return_value="decrypted-project-id"),
+        patch(
+            "imaging_api.routers.download.download_and_unzip_images",
+            new_callable=AsyncMock,
+            side_effect=LocalStorageError(
+                "Cannot create image download directory '/app/data/images/net-1' on the trust host: "
+                "[Errno 13] Permission denied"
+            ),
+        ),
+    ):
+        response = client.post("/download/images/net1", json=_REQUEST_BODY)
+
+    assert response.status_code == 500
+    body = response.json()["detail"]
+    assert "Trust-side storage error" in body
+    assert "Resource not found" not in body
