@@ -105,7 +105,7 @@ import ModelDetails from "@/partials/models/ModelDetails.vue";
 import ModelUpload from "@/partials/models/ModelUpload.vue";
 import Training from "@/partials/models/Training.vue";
 import { routeChange } from "@/router";
-import { getJobTypeFromConfig } from "@/services/file-service";
+import { resolveModelConfigState } from "@/services/file-service";
 import { DEFAULT_JOB_TYPE, editModel, fetchJobTypes, getModel, getRequiredFilesForJobType, ModelStatusEnum, type JobType, type JobTypesResponse } from "@/services/model-service";
 import { useAuthStore, UserPermissions } from "@/store/auth";
 import { useErrorStore } from "@/store/error";
@@ -263,20 +263,16 @@ const trainingStartedOrStopped = computed(() => {
 watch([modelData, jobTypes], async () => {
     if (!modelData.value || !Object.keys(jobTypes.value).length) return;
     if (modelData.value?.files?.length) {
-        const configFile = modelData.value.files.find(
-            (f: { name: string; status: string }) => f.name === "config.json"
+        const resolved = await resolveModelConfigState(
+            modelData.value.files,
+            resolvedConfigFileStatus.value,
+            jobTypes.value,
+            modelData.value.modelId
         );
-        const configStatus = configFile?.status ?? null;
-
-        // Only re-fetch config.json when its status actually changes
-        if (configStatus !== resolvedConfigFileStatus.value) {
-            resolvedConfigFileStatus.value = configStatus;
-            let jobType = DEFAULT_JOB_TYPE;
-            if (configFile && configStatus === FileUploadStatus.COMPLETED) {
-                jobType = await getJobTypeFromConfig(modelData.value.modelId, jobTypes.value);
-            }
-            currentJobType.value = jobType;
-            requiredFiles.value = getRequiredFilesForJobType(jobTypes.value, jobType);
+        if (resolved.changed) {
+            resolvedConfigFileStatus.value = resolved.configStatus;
+            currentJobType.value = resolved.jobType;
+            requiredFiles.value = resolved.requiredFiles;
         }
 
         allFilesUploaded.value = stringArrayContainsAll(
