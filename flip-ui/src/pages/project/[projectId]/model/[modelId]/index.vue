@@ -126,6 +126,7 @@ const allFilesUploaded = ref(false);
 const allFilesPassScan = ref(false);
 const jobTypes = ref<JobTypesResponse>({});
 const currentJobType = ref<JobType>(DEFAULT_JOB_TYPE);
+const resolvedConfigFileStatus = ref<string | null>(null);
 const requiredFiles = ref<string[]>([]);
 const editProjectPermissions = ref(["CanManageProjects"] as UserPermissions[]);
 const editDrawerOpen = ref(false);
@@ -262,21 +263,29 @@ const trainingStartedOrStopped = computed(() => {
 watch([modelData, jobTypes], async () => {
     if (!modelData.value || !Object.keys(jobTypes.value).length) return;
     if (modelData.value?.files?.length) {
-        // Check if config.json exists in uploaded files and is fully scanned
-    const configFile = modelData.value.files.find((f: { name: string; status: string }) => f.name === "config.json");
-        const hasCompletedConfigJson = configFile && configFile.status === FileUploadStatus.COMPLETED;
-        let jobType = DEFAULT_JOB_TYPE;
-        if (hasCompletedConfigJson) {
-            // Fetch job type from config.json (only if file is ready)
-            jobType = await getJobTypeFromConfig(modelData.value.modelId, jobTypes.value);
+        const configFile = modelData.value.files.find(
+            (f: { name: string; status: string }) => f.name === "config.json"
+        );
+        const configStatus = configFile?.status ?? null;
+
+        // Only re-fetch config.json when its status actually changes
+        if (configStatus !== resolvedConfigFileStatus.value) {
+            resolvedConfigFileStatus.value = configStatus;
+            let jobType = DEFAULT_JOB_TYPE;
+            if (configFile && configStatus === FileUploadStatus.COMPLETED) {
+                jobType = await getJobTypeFromConfig(modelData.value.modelId, jobTypes.value);
+            }
+            currentJobType.value = jobType;
+            requiredFiles.value = getRequiredFilesForJobType(jobTypes.value, jobType);
         }
-        currentJobType.value = jobType;
-        requiredFiles.value = getRequiredFilesForJobType(jobTypes.value, jobType);
+
         allFilesUploaded.value = stringArrayContainsAll(
             modelData.value.files.map((f: { name: string }) => f.name),
             requiredFiles.value
         );
-        allFilesPassScan.value = modelData.value.files.every((f: { status: string }) => f.status === FileUploadStatus.COMPLETED);
+        allFilesPassScan.value = modelData.value.files.every(
+            (f: { status: string }) => f.status === FileUploadStatus.COMPLETED
+        );
     }
 }, { immediate: true });
 
@@ -286,7 +295,8 @@ const update = () => {
 };
 
 const onFileDeleted = () => {
-    // Re-fetch model data and trigger job type/required files logic
+    // Force re-evaluation of config.json on the next poll
+    resolvedConfigFileStatus.value = null;
     update();
 };
 
