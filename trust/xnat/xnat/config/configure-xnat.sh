@@ -31,65 +31,40 @@ until $(curl --output /dev/null --silent --head --fail $XNAT_URL/app/template/Lo
   sleep 1
 done
 echo "XNAT is up!"
-echo "Configuring XNAT instance..."
-sleep 10 # Additional wait to ensure XNAT is fully up before proceeding
 
-# Idempotent setup: detect which admin password currently works.
-# On a fresh XNAT, the initial password applies; on a re-run against persisted
-# DB state, the password has already been rotated to XNAT_ADMIN_PASSWORD.
-# We need ACTIVE_ADMIN_PASSWORD for all subsequent calls.
-xnat_probe_auth() {
-  # Returns HTTP status when hitting /xapi/siteConfig/initialized with the given password.
-  local pw="$1"
-  curl -s -o /dev/null -w '%{http_code}' \
-    -u "${XNAT_ADMIN_USER}:${pw}" \
-    "$XNAT_URL/xapi/siteConfig/initialized"
-}
-
-ACTIVE_ADMIN_PASSWORD=""
-if [[ "$(xnat_probe_auth "${XNAT_ADMIN_PASSWORD}")" == "200" ]]; then
-  ACTIVE_ADMIN_PASSWORD="${XNAT_ADMIN_PASSWORD}"
-  echo "Admin password already rotated — using XNAT_ADMIN_PASSWORD."
-elif [[ "$(xnat_probe_auth "${XNAT_ADMIN_INITIAL_PASSWORD}")" == "200" ]]; then
-  ACTIVE_ADMIN_PASSWORD="${XNAT_ADMIN_INITIAL_PASSWORD}"
-  echo "Fresh XNAT — using XNAT_ADMIN_INITIAL_PASSWORD (will rotate)."
-else
-  echo "ERROR: neither XNAT_ADMIN_PASSWORD nor XNAT_ADMIN_INITIAL_PASSWORD authenticates against XNAT." >&2
-  exit 1
-fi
-
-# Check if the 'initialized' flag is already set. Until this is true, every
-# authenticated non-setup request gets silently redirected to the setup wizard
-# (returns HTTP 200 with HTML body), so downstream calls would fail opaquely.
-INITIALIZED=$(curl -s -u "${XNAT_ADMIN_USER}:${ACTIVE_ADMIN_PASSWORD}" \
+# Idempotency short-circuit: if XNAT is already initialized AND the initial
+# admin password no longer authenticates, this instance was fully configured
+# by a prior run. Re-running the rest of the script would silently 401 on the
+# initial-password curls and then produce duplicate-key errors for the service
+# account, PACS registration, and PACS availability intervals — so skip it.
+init_pw_status=$(curl -s -o /dev/null -w '%{http_code}' \
+  -u "${XNAT_ADMIN_USER}:${XNAT_ADMIN_INITIAL_PASSWORD}" \
   "$XNAT_URL/xapi/siteConfig/initialized")
-if [[ "${INITIALIZED}" == "true" ]]; then
-  echo "XNAT already initialized — skipping activation."
-else
-  echo "Activating XNAT instance (initialized=${INITIALIZED})..."
-  ACTIVATE_STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
-    -X POST "$XNAT_URL/xapi/siteConfig" \
-    -u "${XNAT_ADMIN_USER}:${ACTIVE_ADMIN_PASSWORD}" \
-    -H "Content-Type: application/json" \
-    -d '{"initialized": true}')
-  if [[ "${ACTIVATE_STATUS}" != "200" ]]; then
-    echo "ERROR: failed to set initialized=true (HTTP ${ACTIVATE_STATUS})." >&2
-    exit 1
+if [[ "${init_pw_status}" != "200" ]]; then
+  initialized=$(curl -s -u "${XNAT_ADMIN_USER}:${XNAT_ADMIN_PASSWORD}" \
+    "$XNAT_URL/xapi/siteConfig/initialized")
+  if [[ "${initialized}" == "true" ]]; then
+    echo "XNAT already configured (initialized=true, initial password no longer works) — skipping."
+    exit 0
   fi
 fi
 
-# Rotate admin password only if we're still on the initial password.
-if [[ "${ACTIVE_ADMIN_PASSWORD}" == "${XNAT_ADMIN_INITIAL_PASSWORD}" \
-    && "${XNAT_ADMIN_INITIAL_PASSWORD}" != "${XNAT_ADMIN_PASSWORD}" ]]; then
-  echo "Changing admin password..."
-  curl -s -X PUT "$XNAT_URL/xapi/users/admin" \
-    -u "${XNAT_ADMIN_USER}:${XNAT_ADMIN_INITIAL_PASSWORD}" \
-    -H "Content-Type: application/json" \
-    -d "{\"username\": \"${XNAT_ADMIN_USER}\", \"password\": \"${XNAT_ADMIN_PASSWORD}\"}"
-  ACTIVE_ADMIN_PASSWORD="${XNAT_ADMIN_PASSWORD}"
-else
-  echo "Admin password already set — skipping rotation."
-fi
+echo "Configuring XNAT instance..."
+sleep 10 # Additional wait to ensure XNAT is fully up before proceeding
+
+# Activate XNAT instance
+echo "Activating XNAT instance..."
+curl -s -X POST "$XNAT_URL/xapi/siteConfig" \
+  -u "${XNAT_ADMIN_USER}:${XNAT_ADMIN_INITIAL_PASSWORD}" \
+  -H "Content-Type: application/json" \
+  -d '{"initialized": true}'
+
+# Change admin password
+echo "Changing admin password..."
+curl -s -X PUT "$XNAT_URL/xapi/users/admin" \
+  -u "${XNAT_ADMIN_USER}:${XNAT_ADMIN_INITIAL_PASSWORD}" \
+  -H "Content-Type: application/json" \
+  -d "{\"username\": \"${XNAT_ADMIN_USER}\", \"password\": \"${XNAT_ADMIN_PASSWORD}\"}"
 
 # Create service account
 echo "Creating service account..."
