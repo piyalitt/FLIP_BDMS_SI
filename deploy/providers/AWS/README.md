@@ -304,17 +304,17 @@ Press Ctrl+C to stop all forwards. The Central Hub UI and API are accessed direc
 
 To connect a local (on-premises) Trust host to the AWS Central Hub:
 
-Recommended orchestration target (staging):
+Recommended orchestration target (works for both `PROD=stag` and `PROD=true`):
 
 ```bash
 cd deploy/providers/AWS
-make full-deploy-stag-hybrid LOCAL_TRUST_IP=<public-ip> [LOCAL_TRUST_SSH_KEY=~/.ssh/trust_key]
+make full-deploy-hybrid PROD=<stag|true> LOCAL_TRUST_IP=<public-ip> [LOCAL_TRUST_SSH_KEY=~/.ssh/trust_key]
 ```
 
-This wrapper target runs the full AWS deployment, provisions the local trust, and redeploys the Central Hub so the new secret values are loaded.
+This wrapper target runs the full AWS deployment, provisions the local trust, and redeploys the Central Hub so the new secret values are loaded. `PROD` is inherited from the environment — omit `LOCAL_TRUST_IP` to auto-detect the operator machine's public IP via `curl ipify.org`.
 You still need to:
 
-1. Start the trust stack on the host: `cd trust && env PROD=stag make up-local-trust-stag`
+1. Start the trust stack on the host: `cd trust && env PROD=<stag|true> make up-local-trust`
 2. Verify the trust can poll the hub (check trust-api logs for successful task polling)
 
 Or run provisioning directly:
@@ -489,7 +489,7 @@ EC2 instances are accessed through AWS Systems Manager Session Manager — port 
 - AWS CLI authenticated for the correct account and region:
 
   ```bash
-  export AWS_PROFILE=<your-profile>   # e.g. FlipDeveloperAccess-046651569599
+  export AWS_PROFILE=<your-profile>   # e.g. stag or prod
   export AWS_REGION=eu-west-2         # must match the region where instances are deployed
   aws sso login --profile $AWS_PROFILE
   ```

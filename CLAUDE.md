@@ -298,7 +298,7 @@ Ctrl+C stops all forwards.
 1. **Hub-side**: Trust name in `TRUST_NAMES` env var (seeded into DB at startup), API key hash in `TRUST_API_KEY_HASHES`, and hub redeployed with updated secrets
 2. **Trust-side**: Matching `TRUST_NAME`, `TRUST_API_KEY`, `CENTRAL_HUB_API_URL`, and `AES_KEY_BASE64` in the trust's `.env` file
 
-Keys are generated via `make generate-trust-api-keys` (in `deploy/providers/AWS/`). The `full-deploy-stag` target handles key generation, secrets update, and hub redeployment automatically. When using `add-local-trust` standalone, keys must already be configured.
+Keys are generated via `make generate-trust-api-keys` (in `deploy/providers/AWS/`). The `full-deploy-with-local-trust` / `full-deploy-hybrid` targets handle key generation, secrets update, and hub redeployment automatically (both honour `PROD=stag|true`). When using `add-local-trust` standalone, keys must already be configured.
 
 ### Docker Compose (Development vs Production)
 
@@ -345,7 +345,8 @@ Infrastructure-as-code lives in `deploy/providers/AWS/`. Key resources:
 # From deploy/providers/AWS/
 make full-deploy PROD=stag           # Full staging deployment
 make full-deploy PROD=true           # Full production deployment
-make full-deploy-stag-hybrid LOCAL_TRUST_IP=<ip>  # Hybrid with on-prem trust
+make full-deploy-hybrid PROD=stag LOCAL_TRUST_IP=<ip>   # Hybrid with on-prem trust (staging)
+make full-deploy-hybrid PROD=true LOCAL_TRUST_IP=<ip>   # Hybrid with on-prem trust (production)
 
 # Individual steps
 make init                            # Terraform init (S3 backend)
