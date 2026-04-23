@@ -70,15 +70,22 @@ export const getJobTypeFromConfig = async (
     jobTypes?: JobTypesResponse
 ): Promise<JobType> => {
     try {
+        // Fetch job types if not provided
         const availableJobTypes = jobTypes ?? await fetchJobTypes();
         const config = await getModelConfig(modelId);
 
+        // If config exists and has a valid job_type, use it
         if (config && config.job_type && isValidJobType(availableJobTypes, config.job_type)) {
             return config.job_type;
         }
 
+        // Default to standard if:
+        // - config.json couldn't be fetched
+        // - config.json doesn't have job_type field
+        // - job_type has an invalid/unknown value
         return DEFAULT_JOB_TYPE;
     } catch {
+        // If anything goes wrong, default to standard
         return DEFAULT_JOB_TYPE;
     }
 };

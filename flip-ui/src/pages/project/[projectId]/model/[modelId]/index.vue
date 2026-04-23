@@ -263,6 +263,9 @@ const trainingStartedOrStopped = computed(() => {
 watch([modelData, jobTypes], async () => {
     if (!modelData.value || !Object.keys(jobTypes.value).length) return;
     if (modelData.value?.files?.length) {
+        // Only re-fetch config.json when its upload status transitions;
+        // the file is immutable once uploaded, so re-downloading every
+        // 5s poll tick is wasteful.
         const resolved = await resolveModelConfigState(
             modelData.value.files,
             resolvedConfigFileStatus.value,
