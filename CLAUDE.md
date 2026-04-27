@@ -251,6 +251,19 @@ GitHub Actions workflows in `.github/workflows/`:
 
 Run CI locally: `make ci` (uses [act](https://github.com/nektos/act))
 
+### Docker image builds: manual trigger required for branches
+
+**The `docker_build_*.yml` workflows only auto-publish to GHCR on merges to `develop` and `main`.** Branch pushes do NOT build images. If you pin a branch-named tag in a compose file (e.g. `ghcr.io/londonaicentre/flip-api:my-feature-branch`) for prod testing, you must manually trigger the relevant build workflow first via `workflow_dispatch`:
+
+```bash
+gh workflow run docker_build_flip_api.yml --ref <branch-name>
+gh workflow run docker_build_flip_ui.yml --ref <branch-name>          # only if UI image is consumed; deploy-ui builds locally
+gh workflow run docker_build_trust_trust_api.yml --ref <branch-name>
+# ...one per service whose image you've pinned
+```
+
+Wait for green completion (`gh run list --workflow=docker_build_flip_api.yml --branch <branch>`) before redeploying. The `flip-ui` is rebuilt locally by `make deploy-ui` and does not consume GHCR; the rest do.
+
 ## Pre-commit Hooks
 
 Configured in `.pre-commit-config.yaml`:
