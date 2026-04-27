@@ -25,6 +25,7 @@ from flip_api.utils.cognito_helpers import (
     filter_enabled_users,
     get_cognito_users,
     get_pool_id,
+    get_user_by_email_or_id,
     is_mfa_enabled,
     reset_user_mfa,
 )
@@ -1585,3 +1586,31 @@ class TestRevokeToken:
         assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
         assert exc_info.value.detail == "Failed to revoke token"
         assert str(client_error) not in exc_info.value.detail
+
+
+class TestGetUserByEmailOrId:
+    """Cover get_user_by_email_or_id — the PR rewrote its `except HTTPException`
+    branch to re-raise the sanitised 500 from get_cognito_users instead of
+    wrapping it (which would have echoed the inner detail through `str(e)`
+    and risked leaking Cognito internals)."""
+
+    def test_raises_400_when_no_email_or_id(self, mock_logger):
+        """Caller must supply at least one of email/user_id."""
+        with pytest.raises(HTTPException) as exc_info:
+            get_user_by_email_or_id(USER_POOL_ID)
+
+        assert exc_info.value.status_code == HTTP_400_BAD_REQUEST
+        assert "No user email address or ID provided" in exc_info.value.detail
+
+    def test_reraises_http_exception_from_get_cognito_users(self, mock_logger):
+        """A sanitised HTTPException from get_cognito_users must be re-raised
+        verbatim — the wrapper would otherwise re-leak the inner detail."""
+        inner = HTTPException(status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get Cognito users")
+
+        with patch("flip_api.utils.cognito_helpers.get_cognito_users", side_effect=inner):
+            with pytest.raises(HTTPException) as exc_info:
+                get_user_by_email_or_id(USER_POOL_ID, email="user@example.com")
+
+        # Same instance, not a re-wrapped one — verifies the `raise` (no `from`).
+        assert exc_info.value is inner
+        mock_logger.exception.assert_called_with("SKIPPING COGNITO USER LISTING")
