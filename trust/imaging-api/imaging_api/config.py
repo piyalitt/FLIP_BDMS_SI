@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     #
     AES_KEY_BASE64: str
 
+    # Trust-internal service auth — protects every router except /health from
+    # unauthenticated callers on the trust Docker network or via SSM port-forward.
+    # Callers (trust-api, fl-client) send the plaintext key in TRUST_INTERNAL_SERVICE_KEY_HEADER;
+    # imaging-api validates it against the SHA-256 hash below using constant-time compare.
+    # The plaintext key is never read by imaging-api itself.
+    TRUST_INTERNAL_SERVICE_KEY_HEADER: str = "X-Trust-Internal-Service-Key"
+    TRUST_INTERNAL_SERVICE_KEY_HASH: str = ""
+
     # Reimport settings
     REIMPORT_STUDIES_ENABLED: bool = True
 

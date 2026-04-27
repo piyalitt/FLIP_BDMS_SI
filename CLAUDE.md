@@ -234,6 +234,9 @@ When in doubt, update the docs. Outdated documentation is worse than no document
 - `INTERNAL_SERVICE_KEY_HEADER` — HTTP header name for internal service auth
 - `INTERNAL_SERVICE_KEY` — internal service key for fl-server-to-hub auth (Central Hub only)
 - `INTERNAL_SERVICE_KEY_HASH` — hub-side SHA-256 hash of the internal service key
+- `TRUST_INTERNAL_SERVICE_KEY_HEADER` — HTTP header name for trust-internal service auth (trust-api / fl-client → imaging-api)
+- `TRUST_INTERNAL_SERVICE_KEYS` — JSON dict of per-trust plaintext keys; `trust/Makefile` extracts the per-trust value at deploy time
+- `TRUST_INTERNAL_SERVICE_KEY_HASHES` — JSON dict of SHA-256 hashes used by imaging-api to validate incoming requests. Distinct from `INTERNAL_SERVICE_KEY*`: per-trust scope, never sent to or stored on the hub.
 - `CENTRAL_HUB_API_URL` — public base URL of flip-api (with `/api`); read by flip-ui and trust-api. In prod this is the CloudFront URL.
 - `FLIP_API_INTERNAL_URL` — Central-Hub-internal base URL of flip-api (with `/api`); read **only** by fl-server. Must resolve over the Docker network (e.g. `http://flip-api:8000/api`), never the CloudFront URL — CloudFront strips `X-Internal-Service-Key` at the edge.
 
@@ -292,6 +295,8 @@ This prints the URLs to open in your browser:
 Ctrl+C stops all forwards.
 
 **FL Service Authentication**: The fl-server (on the Central Hub) authenticates to flip-api using `INTERNAL_SERVICE_KEY` via the `INTERNAL_SERVICE_KEY_HEADER` header. This is separate from trust API keys. FL clients (on the trust side) do **not** have Central Hub API credentials — only the fl-server communicates with flip-api. FL clients relay metrics and exceptions to the fl-server, which forwards them to the Central Hub.
+
+**Trust-internal Service Authentication (imaging-api)**: imaging-api proxies privileged XNAT operations using a service account, so it must authenticate its own callers. trust-api and fl-client send `TRUST_INTERNAL_SERVICE_KEY` in the `TRUST_INTERNAL_SERVICE_KEY_HEADER` header on every imaging-api call; imaging-api validates against `TRUST_INTERNAL_SERVICE_KEY_HASH` with constant-time compare. Each trust has a distinct key (so a leak in one trust never affects another) and the key never leaves the trust environment — the hub does not see it. Generate per-trust keys with `make generate-trust-internal-service-keys`. `/health` remains unauthenticated for Docker healthchecks.
 
 **FL Traffic Direction**: FL clients on trusts connect **outbound** to the FL server on the Central Hub via the NLB. The FL server listens on port 8002; FL clients do not listen on any port. No inbound firewall rules are needed on trust hosts for FL traffic.
 
@@ -409,6 +414,7 @@ When making infrastructure or deployment changes, **always think through both en
 - Use `AES_KEY_BASE64` for encrypted trust communication
 - AWS Cognito for hub authentication, per-trust API keys for trust-to-hub auth
 - Internal service key (`INTERNAL_SERVICE_KEY`) for fl-server-to-hub auth — separate from trust keys
+- Trust-internal service key (`TRUST_INTERNAL_SERVICE_KEY`) for trust-api / fl-client → imaging-api auth — per-trust, never leaves the trust environment
 - FL clients (trust side) intentionally have no access to Central Hub API credentials
 - Do not hardcode environment values in Dockerfiles or compose files
 

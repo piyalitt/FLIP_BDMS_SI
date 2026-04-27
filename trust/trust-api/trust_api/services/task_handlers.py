@@ -36,6 +36,19 @@ CENTRAL_HUB_API_URL = get_settings().CENTRAL_HUB_API_URL
 IMAGING_API_URL = get_settings().IMAGING_API_URL
 TRUST_API_KEY = get_settings().TRUST_API_KEY
 TRUST_API_KEY_HEADER = get_settings().TRUST_API_KEY_HEADER
+TRUST_INTERNAL_SERVICE_KEY = get_settings().TRUST_INTERNAL_SERVICE_KEY
+TRUST_INTERNAL_SERVICE_KEY_HEADER = get_settings().TRUST_INTERNAL_SERVICE_KEY_HEADER
+
+
+def _imaging_api_headers() -> dict[str, str]:
+    """Return the auth header sent on every imaging-api call.
+
+    Returns:
+        dict[str, str]: Single-entry dict mapping the configured header name
+        to the trust-internal service key.
+    """
+    return {TRUST_INTERNAL_SERVICE_KEY_HEADER: TRUST_INTERNAL_SERVICE_KEY}
+
 
 # Task type constants — must match TaskType enum in flip-api/src/flip_api/domain/schemas/status.py
 TASK_COHORT_QUERY = "cohort_query"
@@ -112,6 +125,7 @@ async def handle_create_imaging(payload: dict[str, Any]) -> dict[str, Any]:
             method="POST",
             url=f"{IMAGING_API_URL}/projects/create-project-from-central-hub-project",
             json_body=payload,
+            headers=_imaging_api_headers(),
         )
 
         logger.info(f"Imaging project created: id={response.get('ID')}, name={response.get('name')}")
@@ -141,6 +155,7 @@ async def handle_delete_imaging(payload: dict[str, Any]) -> dict[str, Any]:
             method="DELETE",
             url=f"{IMAGING_API_URL}/projects/",
             params={"project_id": imaging_project_id},
+            headers=_imaging_api_headers(),
         )
 
         logger.info(f"Imaging project deleted: {imaging_project_id}")
@@ -173,6 +188,7 @@ async def handle_get_imaging_status(payload: dict[str, Any]) -> dict[str, Any]:
             method="GET",
             url=f"{IMAGING_API_URL}/retrieval/import_status_count/{imaging_project_id}",
             params={"encoded_query": encoded_query},
+            headers=_imaging_api_headers(),
         )
 
         logger.info(f"Imaging status retrieved: {imaging_project_id}")
@@ -203,6 +219,7 @@ async def handle_reimport_studies(payload: dict[str, Any]) -> dict[str, Any]:
             method="PUT",
             url=f"{IMAGING_API_URL}/retrieval/reimport_imaging_project_studies/{imaging_project_id}",
             params={"encoded_query": encoded_query},
+            headers=_imaging_api_headers(),
         )
 
         logger.info(f"Reimport initiated: {imaging_project_id}")
@@ -231,6 +248,7 @@ async def handle_update_user_profile(payload: dict[str, Any]) -> dict[str, Any]:
             method="PUT",
             url=f"{IMAGING_API_URL}/users",
             json_body=payload,
+            headers=_imaging_api_headers(),
         )
 
         logger.info(f"User profile updated: {payload.get('email')}")

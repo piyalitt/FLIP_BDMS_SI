@@ -144,6 +144,22 @@ Key environment variables (set in [`.env.development.example`](../../.env.develo
 | `XNAT_DATABASE_URL` | PostgreSQL connection string for the XNAT database |
 | `DATA_ACCESS_API_URL` | Internal URL of the data-access-api |
 | `AES_KEY_BASE64` | AES encryption key for decrypting project identifiers |
+| `TRUST_INTERNAL_SERVICE_KEY_HEADER` | Header name for trust-internal service auth (default `X-Trust-Internal-Service-Key`) |
+| `TRUST_INTERNAL_SERVICE_KEY_HASH` | SHA-256 hex digest of the trust-internal service key. Required for every router except `/health`. |
+
+## Authentication
+
+imaging-api exposes privileged XNAT operations via a service account. To prevent any container on the trust Docker network — or any operator with SSM port-forward access — from acting as that service account, every router except `/health` requires callers to send `TRUST_INTERNAL_SERVICE_KEY` in the configured header. The plaintext key is held only by trust-api and fl-client; imaging-api stores only the SHA-256 hash and uses constant-time comparison.
+
+Each trust has a distinct key. Generate them with:
+
+```bash
+make -C ../../flip-api generate-trust-internal-service-keys
+```
+
+This populates `TRUST_INTERNAL_SERVICE_KEYS` and `TRUST_INTERNAL_SERVICE_KEY_HASHES` JSON dicts in your env file. `trust/Makefile` extracts the per-trust value into each container's environment at deploy time, mirroring how `TRUST_API_KEYS` is handled.
+
+For more on the threat model, see the **Trust-internal Service Authentication** section in [`CLAUDE.md`](../../CLAUDE.md).
 
 ## Further Reading
 
