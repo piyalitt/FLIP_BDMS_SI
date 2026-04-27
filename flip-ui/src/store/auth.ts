@@ -30,6 +30,7 @@ import { defineStore } from "pinia";
 import { IChangePassword } from "@/interfaces/auth/interfaces";
 import { routeChange } from "@/router";
 import { getMfaStatus, getUserPermissions } from "@/services/user-service";
+import { Snackbar } from "@/utils/snackbar";
 
 /**
  * Available User Permissions
@@ -115,6 +116,17 @@ const buildUserWithPermissions = async (
 // which Login.vue surfaces as "There was a problem logging you in".
 // Pause until either the tokens appear or a forceRefresh produces
 // them, so callers can assume `hydrate()` sees a real session.
+//
+// Throws if no idToken can be obtained — the caller's catch handler
+// can then surface a real error to the user instead of silently
+// proceeding to hydrate which will 401.
+class MissingSessionTokensError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "MissingSessionTokensError";
+    }
+}
+
 const waitForSessionTokens = async (): Promise<void> => {
     let session = await fetchAuthSession();
     if (session.tokens?.idToken) return;
@@ -124,13 +136,16 @@ const waitForSessionTokens = async (): Promise<void> => {
         console.error("waitForSessionTokens: forceRefresh threw:", e);
     }
     if (!session.tokens?.idToken) {
-        // Still nothing. Log what Amplify *thinks* the session is so
-        // DevTools can distinguish "no session at all" (bad storage /
-        // misconfigured client) from "session exists but tokens are
-        // empty" (token-refresh issue).
+        // Log what Amplify *thinks* the session is so DevTools can
+        // distinguish "no session at all" (bad storage / misconfigured
+        // client) from "session exists but tokens are empty"
+        // (token-refresh issue), then throw so the caller surfaces it.
         console.warn(
             "waitForSessionTokens: no idToken after forceRefresh",
             { userSub: session.userSub, hasCredentials: !!session.credentials }
+        );
+        throw new MissingSessionTokensError(
+            "Authenticated but no session tokens — local storage may be blocked or your session has expired."
         );
     }
 };
@@ -329,32 +344,51 @@ export const useAuthStore = defineStore("auth", {
         // the user back to enrol with a fresh secret.
         //
         // Once `confirmSignIn` resolves with `isSignedIn=true` the code was
-        // already accepted by Cognito — any subsequent failure
-        // (updateMFAPreference, hydrate) is a post-success cleanup issue,
-        // not a code mismatch. Swallow those errors so the user isn't told
-        // "Invalid code" about a code Cognito accepted.
+        // already accepted by Cognito — any subsequent failure is a
+        // post-success cleanup issue, not a code mismatch.
+        //
+        // updateMFAPreference failure is treated as fatal-to-enrolment and
+        // re-thrown: Cognito has the verified token but the preference
+        // didn't stick, so the user is *not* MFA-enabled despite a clean
+        // confirmSignIn. Painting `mfaEnabled=true` would let them into
+        // the app where every API call 403s under the app-gate. We reset
+        // state and re-throw so the page does not navigate to /projects
+        // on a half-failed enrolment; the page is responsible for the
+        // user-facing snackbar (mfa-setup.vue's submit catch).
+        // hydrate failure on its own is non-fatal — the router guard will
+        // re-fetch on the next navigation.
         async confirmTotpSetup(code: string) {
             const out = await confirmSignIn({ challengeResponse: code });
             if (!out.isSignedIn) return;
 
             await waitForSessionTokens();
+            // Clear the setup secret regardless of what happens below —
+            // it has been used (Cognito accepted the code) and must not
+            // be re-rendered as a QR.
+            this.totpSetup = null;
             try {
                 await updateMFAPreference({ totp: "PREFERRED" });
             } catch (e) {
+                // Cognito accepted the verification code but the
+                // preference didn't stick — the user is *not* MFA-enabled
+                // despite a clean confirmSignIn. Reset state so the next
+                // navigation re-fetches authoritative status, then rethrow
+                // so the calling page's catch surfaces the error and
+                // skips the navigate-to-/projects success path. The page
+                // (mfa-setup.vue) shows the user-facing snackbar; we
+                // don't double-notify here.
                 console.error("Failed to set MFA preference post-setup:", e);
+                this.signInStep = "DONE";
+                this.mfaEnabled = null;
+                throw e;
             }
-            this.totpSetup = null;
             try {
                 await this.hydrate({ enabled: true, required: true });
             } catch (e) {
                 console.error("Failed to hydrate user post-MFA setup:", e);
                 // Leave `mfaEnabled=null` so the router guard re-fetches
                 // the authoritative backend state on the next navigation
-                // (via `fetchInfo()` at utils/auth.ts). Forcing it to
-                // `true` here would let the user into the app even if
-                // `updateMFAPreference` silently failed — every API call
-                // would then 403 under the app-gate and the UI would be
-                // half-broken with no recovery.
+                // (via `fetchInfo()` at utils/auth.ts).
                 this.signInStep = "DONE";
                 this.mfaEnabled = null;
             }
@@ -387,16 +421,26 @@ export const useAuthStore = defineStore("auth", {
         async completeMfaEnrolment(code: string) {
             // `verifyTOTPSetup` is the code-mismatch site: if the user's
             // code is wrong this throws and the caller shows "Invalid
-            // code". Everything after is post-success cleanup; swallow
-            // those errors so a transient follow-up failure doesn't
-            // misleadingly surface as a code error.
+            // code". Everything after is post-success cleanup.
+            //
+            // updateMFAPreference failure is fatal: see confirmTotpSetup
+            // for the reasoning (Cognito has the verified token but the
+            // preference didn't stick — a `mfaEnabled=true` shortcut
+            // would 403 every subsequent API call). Surface, rethrow.
             await verifyTOTPSetup({ code });
+            // Setup secret was just used; clear before further work so a
+            // post-success failure can't leave it lingering for re-render.
+            this.totpSetup = null;
             try {
                 await updateMFAPreference({ totp: "PREFERRED" });
             } catch (e) {
+                // See confirmTotpSetup: rethrow so the page can keep the
+                // user on the form. Snackbar is the page's job.
                 console.error("Failed to set MFA preference post-enrolment:", e);
+                this.signInStep = "DONE";
+                this.mfaEnabled = null;
+                throw e;
             }
-            this.totpSetup = null;
             try {
                 await this.hydrate({ enabled: true, required: true });
             } catch (e) {
@@ -409,16 +453,36 @@ export const useAuthStore = defineStore("auth", {
         },
 
         async signOut() {
+            let serverSideSignOutFailed = false;
             try {
                 // global:true calls Cognito's GlobalSignOut, which invalidates
                 // all tokens (including the refresh token) for this user session.
                 await signOut({ global: true });
             } catch (error) {
+                // Local state is wiped regardless so the user can't keep
+                // using the app from this tab. But the server-side
+                // refresh token may still be valid and replayable by
+                // anything with access to where it was stored (XSS
+                // payload, hostile extension), so warn the user — except
+                // when the failure is just "tokens were already invalid"
+                // (NotAuthorizedException), which is the expected case
+                // when sign-out is triggered from the 401 interceptor.
                 console.error("Sign out error:", error);
+                const name = (error as { name?: string }).name;
+                if (name !== "NotAuthorizedException") {
+                    serverSideSignOutFailed = true;
+                }
             }
 
             this.$reset();
             routeChange.gotoLogin();
+
+            if (serverSideSignOutFailed) {
+                Snackbar.error({
+                    title: "Sign-out incomplete",
+                    text: "We couldn't fully end your session on the server. Please close all browser windows for this site."
+                });
+            }
         },
 
         async resetPassword(email: string) {

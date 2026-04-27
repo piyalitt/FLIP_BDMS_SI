@@ -71,9 +71,14 @@ class Http {
                         try {
                             session = await fetchAuthSession({ forceRefresh: true });
                             token = session.tokens?.idToken?.toString();
-                        } catch {
-                            // swallow — request will go out unauthenticated
-                            // and the 401 handler below will clean up.
+                        } catch (e) {
+                            // The request will go out unauthenticated and
+                            // the 401 handler will force a sign-out, but
+                            // we log the underlying Amplify error so
+                            // DevTools surfaces *why* (throttle, expired
+                            // refresh token, storage blocked) instead of
+                            // collapsing every cause to "signed out".
+                            console.warn("Token forceRefresh failed:", e);
                         }
                     }
 

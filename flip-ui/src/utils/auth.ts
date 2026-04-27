@@ -25,6 +25,13 @@ import { Snackbar } from "./snackbar";
 /**
  * By default all routes are guarded and authentication is required.
  * This serves as an allowed list of routes which will bypass the auth check.
+ *
+ * MFA pages (/auth/mfa-setup, /auth/mfa-verify) are intentionally NOT
+ * unguarded: they must be reachable only mid-challenge or post-auth-with-
+ * MFA-required. Listing them here would let an unauthenticated visitor
+ * mount the page and trigger Amplify TOTP calls. Instead, the explicit
+ * signInStep / mfa-required redirects below route legitimate users to
+ * these pages and a same-path guard prevents recursive redirects.
  * @type {string[]}
  */
 const unguardedRoutes: string[] = [
@@ -32,8 +39,6 @@ const unguardedRoutes: string[] = [
     "/auth/new-password",
     "/auth/change-password",
     "/auth/access-request",
-    "/auth/mfa-setup",
-    "/auth/mfa-verify",
     "/privacy-policy",
     "/terms-of-service"
 ];
@@ -62,7 +67,7 @@ export const authCheck = async (
             return next();
         }
 
-        if (process.env.VITE_LOCAL === "true") {
+        if (import.meta.env.VITE_LOCAL === "true") {
             return next();
         }
 
@@ -81,14 +86,17 @@ export const authCheck = async (
             return next('/auth/new-password');
         }
 
-        // First-time MFA enrollment (TOTP setup with QR code), sign-in chain
+        // First-time MFA enrollment (TOTP setup with QR code), sign-in chain.
+        // Same-path guard: if the user is already on /auth/mfa-setup let
+        // them stay there — re-issuing `next('/auth/mfa-setup')` would
+        // raise NavigationDuplicated in vue-router.
         if (auth.signInStep === 'CONTINUE_SIGN_IN_WITH_TOTP_SETUP') {
-            return next('/auth/mfa-setup');
+            return to.path === '/auth/mfa-setup' ? next() : next('/auth/mfa-setup');
         }
 
-        // Returning user — enter the code from their authenticator app
+        // Returning user — enter the code from their authenticator app.
         if (auth.signInStep === 'CONFIRM_SIGN_IN_WITH_TOTP_CODE') {
-            return next('/auth/mfa-verify');
+            return to.path === '/auth/mfa-verify' ? next() : next('/auth/mfa-verify');
         }
 
         // Load user info if needed (page reload after sign-in). This also

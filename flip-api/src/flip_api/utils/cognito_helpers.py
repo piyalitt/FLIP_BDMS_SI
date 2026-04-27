@@ -124,10 +124,13 @@ def get_cognito_users(params: dict[str, Any] | None = None) -> list[CognitoUser]
 
         return users
     except ClientError as e:
-        logger.error(f"Error getting Cognito users: {str(e)}")
+        # boto3 ClientError messages can carry request IDs and ARNs that
+        # don't belong in a 500 detail surfaced to API clients. Log the
+        # full error server-side, return a generic message.
+        logger.exception("Error getting Cognito users")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get Cognito users: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get Cognito users"
+        ) from e
 
 
 def get_user_by_email_or_id(
@@ -159,11 +162,12 @@ def get_user_by_email_or_id(
 
     try:
         users: Sequence[CognitoUser] = get_cognito_users(params)
-    except HTTPException as e:
-        logger.error(f"SKIPPING COGNITO USER LISTING: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get Cognito users: {str(e)}"
-        )
+    except HTTPException:
+        # `get_cognito_users` already raised a sanitised 500; preserve it
+        # rather than re-wrapping (which would echo the inner detail back
+        # through `str(e)` and risk leaking Cognito internals).
+        logger.exception("SKIPPING COGNITO USER LISTING")
+        raise
 
     logger.debug(f"Found users: {users}")
 
@@ -237,10 +241,10 @@ def update_user(username: str, user_pool_id: str, disabled: bool) -> Disabled:
 
         return Disabled(disabled=disabled)
     except ClientError as e:
-        logger.error(f"Error updating user: {str(e)}")
+        logger.exception("Error updating user")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update user: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update user"
+        ) from e
 
 
 def delete_cognito_user(username: str, user_pool_id: str) -> None:
@@ -266,10 +270,10 @@ def delete_cognito_user(username: str, user_pool_id: str) -> None:
 
         logger.info(f"Successfully deleted user: {username}")
     except ClientError as e:
-        logger.error(f"Error deleting user: {str(e)}")
+        logger.exception("Error deleting user")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete user: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete user"
+        ) from e
 
 
 def reset_user_mfa(username: str, user_pool_id: str) -> None:
@@ -404,10 +408,10 @@ def revoke_token(refresh_token: str, client_id: str) -> None:
 
         logger.info("Successfully revoked refresh token")
     except ClientError as e:
-        logger.error(f"Error revoking token: {str(e)}")
+        logger.exception("Error revoking token")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to revoke token: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to revoke token"
+        ) from e
 
 
 def get_user_role_data(
@@ -554,12 +558,12 @@ def create_cognito_user(email: str, user_pool_id: str) -> UUID:
             logger.error(f"User with email {email} already exists")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=f"User with email {email} already exists"
-            )
+            ) from e
         else:
-            logger.error(f"Error creating user: {str(e)}")
+            logger.exception("Error creating user")
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create user: {str(e)}"
-            )
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create user"
+            ) from e
 
 
 def filter_enabled_users(user_pool_id: str, users: list[UUID]) -> list[UUID]:

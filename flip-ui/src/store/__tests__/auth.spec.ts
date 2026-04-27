@@ -29,6 +29,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { routeChange } from "@/router";
 import { getMfaStatus, getUserPermissions } from "@/services/user-service";
 import { useAuthStore } from "@/store/auth";
+import { Snackbar } from "@/utils/snackbar";
 
 // Amplify auth functions are all called via named imports; mock every
 // symbol the store touches. Individual tests re-arm these via
@@ -60,6 +61,15 @@ vi.mock("@/router", () => ({
     routeChange: { gotoLogin: vi.fn() }
 }));
 
+vi.mock("@/utils/snackbar", () => ({
+    Snackbar: {
+        show: vi.fn(),
+        error: vi.fn(),
+        success: vi.fn(),
+        warning: vi.fn()
+    }
+}));
+
 describe("authStore", () => {
     let store: ReturnType<typeof useAuthStore>;
 
@@ -80,6 +90,7 @@ describe("authStore", () => {
         vi.mocked(getUserPermissions).mockReset();
         vi.mocked(routeChange.gotoLogin).mockReset();
         vi.mocked(fetchAuthSession).mockReset();
+        vi.mocked(Snackbar.error).mockReset();
         // Default: tokens are visible immediately so waitForSessionTokens
         // resolves without triggering the forceRefresh fallback. Tests that
         // exercise the race re-arm this with mockResolvedValueOnce.
@@ -412,12 +423,12 @@ describe("authStore", () => {
             expect(getCurrentUser).not.toHaveBeenCalled();
         });
 
-        it("logs but tolerates a forceRefresh that throws (still lets hydrate attempt)", async () => {
+        it("throws MissingSessionTokensError when forceRefresh fails and no idToken is available", async () => {
             // Amplify's forceRefresh can throw on its own (expired refresh
-            // token, Cognito transient failure). The wait helper swallows
-            // it and moves on — the downstream hydrate is what surfaces
-            // the error to the user with richer context. We just need
-            // to make sure the throw is logged, not unhandled.
+            // token, Cognito transient failure). The wait helper logs the
+            // throw and the "no idToken" warn, then throws a typed error
+            // so the caller can surface a real message instead of letting
+            // hydrate proceed unauthenticated and 401 generically.
             const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
             const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
             vi.mocked(fetchAuthSession)
@@ -428,11 +439,15 @@ describe("authStore", () => {
                 isSignedIn: true,
                 nextStep: { signInStep: "DONE" }
             } as never);
-            // hydrate throws — we expect signIn to rethrow, which is fine;
-            // the test target is the console.error about the refresh.
-            vi.mocked(getCurrentUser).mockRejectedValue(new Error("401"));
 
-            await expect(store.signIn({ username: "u", password: "p" })).rejects.toThrow();
+            await expect(store.signIn({ username: "u", password: "p" })).rejects.toMatchObject({
+                name: "MissingSessionTokensError"
+            });
+
+            // hydrate must not have been attempted — `getCurrentUser` is
+            // hydrate's first Amplify call and would proceed if the wait
+            // helper had silently returned.
+            expect(getCurrentUser).not.toHaveBeenCalled();
 
             expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "waitForSessionTokens: forceRefresh threw:",
@@ -667,7 +682,14 @@ describe("authStore", () => {
             expect(getMfaStatus).not.toHaveBeenCalled();
         });
 
-        it("swallows updateMFAPreference failure but still hydrates", async () => {
+        it("rethrows updateMFAPreference failure and does NOT mark MFA enabled", async () => {
+            // Cognito accepted the verification code but the preference
+            // didn't stick. Painting `mfaEnabled=true` here would let the
+            // user into the app where every API call 403s under the
+            // app-gate. The store rethrows so the calling page (mfa-setup
+            // or mfa-verify) keeps the user on the form; the page is
+            // responsible for the user-facing snackbar so we don't
+            // double-notify.
             vi.mocked(confirmSignIn).mockResolvedValue({
                 isSignedIn: true,
                 nextStep: undefined
@@ -675,24 +697,23 @@ describe("authStore", () => {
             vi.mocked(updateMFAPreference).mockRejectedValue(
                 new Error("Cognito boom")
             );
-            vi.mocked(getCurrentUser).mockResolvedValue({
-                username: "u",
-                userId: "id"
-            } as never);
-            vi.mocked(fetchUserAttributes).mockResolvedValue({
-                sub: "s",
-                email: "e@f.com"
-            } as never);
-            vi.mocked(getUserPermissions).mockResolvedValue({ permissions: [] });
             const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-            await expect(store.confirmTotpSetup("123456")).resolves.toBeUndefined();
+            await expect(store.confirmTotpSetup("123456")).rejects.toThrow("Cognito boom");
 
             expect(consoleSpy).toHaveBeenCalledWith(
                 "Failed to set MFA preference post-setup:",
                 expect.any(Error)
             );
-            expect(store.mfaEnabled).toBe(true);
+            expect(store.mfaEnabled).toBeNull();
+            expect(store.totpSetup).toBeNull();
+            // hydrate must not run after a fatal preference failure —
+            // forcing a fresh authoritative read happens on the next
+            // navigation via the router guard.
+            expect(getCurrentUser).not.toHaveBeenCalled();
+            expect(getMfaStatus).not.toHaveBeenCalled();
+            // Snackbar is the page's job, not the store's.
+            expect(Snackbar.error).not.toHaveBeenCalled();
             consoleSpy.mockRestore();
         });
 
@@ -824,27 +845,25 @@ describe("authStore", () => {
             expect(updateMFAPreference).not.toHaveBeenCalled();
         });
 
-        it("swallows updateMFAPreference failure but still hydrates", async () => {
+        it("rethrows updateMFAPreference failure and does NOT mark MFA enabled", async () => {
+            // Same reasoning as confirmTotpSetup: TOTP was verified but
+            // the preference didn't stick — letting the page navigate to
+            // /projects with mfaEnabled=true would 403 every API call
+            // under the app-gate. Page handles the snackbar.
             vi.mocked(verifyTOTPSetup).mockResolvedValue(undefined as never);
             vi.mocked(updateMFAPreference).mockRejectedValue(new Error("Boom"));
-            vi.mocked(getCurrentUser).mockResolvedValue({
-                username: "u",
-                userId: "id"
-            } as never);
-            vi.mocked(fetchUserAttributes).mockResolvedValue({
-                sub: "s",
-                email: "e@f.com"
-            } as never);
-            vi.mocked(getUserPermissions).mockResolvedValue({ permissions: [] });
             const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-            await store.completeMfaEnrolment("123456");
+            await expect(store.completeMfaEnrolment("123456")).rejects.toThrow("Boom");
 
             expect(consoleSpy).toHaveBeenCalledWith(
                 "Failed to set MFA preference post-enrolment:",
                 expect.any(Error)
             );
-            expect(store.mfaEnabled).toBe(true);
+            expect(store.mfaEnabled).toBeNull();
+            expect(store.totpSetup).toBeNull();
+            expect(getCurrentUser).not.toHaveBeenCalled();
+            expect(Snackbar.error).not.toHaveBeenCalled();
             consoleSpy.mockRestore();
         });
 
@@ -885,7 +904,10 @@ describe("authStore", () => {
             expect(routeChange.gotoLogin).toHaveBeenCalledTimes(1);
         });
 
-        it("still resets state and routes to login when Amplify signOut throws", async () => {
+        it("warns the user when GlobalSignOut fails on a real error", async () => {
+            // Network/server failure means the refresh token may still be
+            // valid in Cognito; the user needs to be told so they can
+            // close the browser to invalidate any cached storage.
             vi.mocked(signOut).mockRejectedValue(new Error("network"));
             const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
             store.user = {
@@ -903,6 +925,36 @@ describe("authStore", () => {
             );
             expect(store.user).toBeNull();
             expect(routeChange.gotoLogin).toHaveBeenCalledTimes(1);
+            expect(Snackbar.error).toHaveBeenCalledWith(expect.objectContaining({
+                title: "Sign-out incomplete"
+            }));
+            consoleSpy.mockRestore();
+        });
+
+        it("does NOT warn when GlobalSignOut throws NotAuthorizedException", async () => {
+            // The api.ts 401 interceptor calls signOut() with already-
+            // invalid tokens; Cognito rejects GlobalSignOut with
+            // NotAuthorizedException as expected. Surfacing "Sign-out
+            // incomplete" here would stack a second snackbar on top of
+            // the interceptor's "Not Authorised" message every time the
+            // session expires.
+            const expected = Object.assign(new Error("Access Token has been revoked"), {
+                name: "NotAuthorizedException"
+            });
+            vi.mocked(signOut).mockRejectedValue(expected);
+            const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+            store.user = {
+                username: "u",
+                userId: "id",
+                attributes: { sub: "s", email: "e@f.com" },
+                permissions: []
+            };
+
+            await store.signOut();
+
+            expect(store.user).toBeNull();
+            expect(routeChange.gotoLogin).toHaveBeenCalledTimes(1);
+            expect(Snackbar.error).not.toHaveBeenCalled();
             consoleSpy.mockRestore();
         });
     });

@@ -158,6 +158,28 @@ describe("api.ts Http client", () => {
             expect((out.headers as Record<string, string>).Authorization).toBeUndefined();
         });
 
+        it("logs a warning when forceRefresh throws so the cause is visible in DevTools", async () => {
+            // First fetchAuthSession returns no tokens, then forceRefresh
+            // throws — without the warn log, the user would just be
+            // signed out by the 401 handler with no clue which Amplify
+            // class fired (TooManyRequestsException, network error, etc.).
+            vi.mocked(fetchAuthSession)
+                .mockResolvedValueOnce({ tokens: undefined } as never)
+                .mockRejectedValueOnce(Object.assign(new Error("throttle"), { name: "TooManyRequestsException" }));
+            const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+            primeHttp();
+
+            const cfg = { headers: {} } as Record<string, unknown>;
+            const out = await interceptors.requestOnFulfilled!(cfg);
+
+            expect((out.headers as Record<string, string>).Authorization).toBeUndefined();
+            expect(consoleWarn).toHaveBeenCalledWith(
+                "Token forceRefresh failed:",
+                expect.objectContaining({ name: "TooManyRequestsException" })
+            );
+            consoleWarn.mockRestore();
+        });
+
         it("rejects when request preparation errors", async () => {
             primeHttp();
             const err = new Error("cfg failed");

@@ -279,11 +279,15 @@ class TestCreateCognitoUser:
             create_cognito_user(email, user_pool_id)
 
         assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
-        assert f"Failed to create user: {str(client_error)}" in exc_info.value.detail
+        # Detail is intentionally generic — boto3 ClientError messages can
+        # contain request IDs and ARNs that don't belong in a 500 response
+        # body. The full error stays in server-side logs only.
+        assert exc_info.value.detail == "Failed to create user"
+        assert str(client_error) not in exc_info.value.detail
 
         # Verify logging
         mock_logger.debug.assert_called_with("Attempting to register the user...")
-        mock_logger.error.assert_called_with(f"Error creating user: {str(client_error)}")
+        mock_logger.exception.assert_called_with("Error creating user")
 
     def test_user_created_but_no_user_id(self, mock_boto3_client, mock_settings, mock_logger):
         """Test handling when user is created but user ID cannot be extracted."""
@@ -976,10 +980,12 @@ class TestGetCognitoUsers:
             get_cognito_users()
 
         assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
-        assert f"Failed to get Cognito users: {str(client_error)}" in exc_info.value.detail
+        # Generic detail — boto3 error string would leak request IDs / ARNs.
+        assert exc_info.value.detail == "Failed to get Cognito users"
+        assert str(client_error) not in exc_info.value.detail
 
         # Verify logging
-        mock_logger.error.assert_called_with(f"Error getting Cognito users: {str(client_error)}")
+        mock_logger.exception.assert_called_with("Error getting Cognito users")
 
     def test_various_client_errors(self, mock_boto3_client, mock_get_settings, mock_logger):
         """Test handling of various ClientError types."""
@@ -1002,7 +1008,7 @@ class TestGetCognitoUsers:
                 get_cognito_users()
 
             assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
-            assert f"Failed to get Cognito users: {str(client_error)}" in exc_info.value.detail
+            assert exc_info.value.detail == "Failed to get Cognito users"
 
     def test_complex_user_attributes(self, mock_boto3_client, mock_get_settings, mock_logger):
         """Test parsing user with complex attributes."""
@@ -1468,20 +1474,23 @@ class TestUpdateUser:
         mock_boto3_client.return_value.admin_disable_user.assert_not_called()
 
     def test_client_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
-        """A boto3 failure surfaces as HTTP 500 with the error text tacked
-        on — the admin users page relies on this to render a banner."""
+        """A boto3 failure surfaces as HTTP 500 with a generic detail —
+        the underlying ClientError text (which can carry request IDs and
+        ARNs) is logged server-side but not echoed in the response."""
         from flip_api.utils.cognito_helpers import update_user
 
-        mock_boto3_client.return_value.admin_disable_user.side_effect = ClientError(
+        client_error = ClientError(
             error_response={"Error": {"Code": "UserNotFoundException", "Message": "nope"}},
             operation_name="AdminDisableUser",
         )
+        mock_boto3_client.return_value.admin_disable_user.side_effect = client_error
 
         with pytest.raises(HTTPException) as exc_info:
             update_user("missing@example.com", "pool-id", disabled=True)
 
         assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
-        assert "Failed to update user" in exc_info.value.detail
+        assert exc_info.value.detail == "Failed to update user"
+        assert str(client_error) not in exc_info.value.detail
 
 
 class TestDeleteCognitoUser:
@@ -1513,19 +1522,22 @@ class TestDeleteCognitoUser:
         )
 
     def test_client_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
-        """A boto3 failure during delete surfaces as HTTP 500."""
+        """A boto3 failure during delete surfaces as HTTP 500 with a
+        generic detail — boto3 string is server-side log only."""
         from flip_api.utils.cognito_helpers import delete_cognito_user
 
-        mock_boto3_client.return_value.admin_delete_user.side_effect = ClientError(
+        client_error = ClientError(
             error_response={"Error": {"Code": "ResourceNotFoundException", "Message": "gone"}},
             operation_name="AdminDeleteUser",
         )
+        mock_boto3_client.return_value.admin_delete_user.side_effect = client_error
 
         with pytest.raises(HTTPException) as exc_info:
             delete_cognito_user("ghost@example.com", "pool-id")
 
         assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
-        assert "Failed to delete user" in exc_info.value.detail
+        assert exc_info.value.detail == "Failed to delete user"
+        assert str(client_error) not in exc_info.value.detail
 
 
 class TestRevokeToken:
@@ -1561,13 +1573,15 @@ class TestRevokeToken:
         the API's perspective because the user already hit logout."""
         from flip_api.utils.cognito_helpers import revoke_token
 
-        mock_boto3_client.return_value.revoke_token.side_effect = ClientError(
+        client_error = ClientError(
             error_response={"Error": {"Code": "NotAuthorizedException", "Message": "invalid"}},
             operation_name="RevokeToken",
         )
+        mock_boto3_client.return_value.revoke_token.side_effect = client_error
 
         with pytest.raises(HTTPException) as exc_info:
             revoke_token("bad-token", "client-id")
 
         assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
-        assert "Failed to revoke token" in exc_info.value.detail
+        assert exc_info.value.detail == "Failed to revoke token"
+        assert str(client_error) not in exc_info.value.detail

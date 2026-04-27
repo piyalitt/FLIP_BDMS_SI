@@ -173,6 +173,14 @@ With `mfa_configuration = "OPTIONAL"`, disabling the preference actually takes e
 
 SMS MFA is intentionally disabled — it would introduce an SNS dependency and reintroduce SIM-swap risk. The rationale is documented inline at `deploy/providers/AWS/modules/cognito/main.tf` (around the `mfa_configuration` line) and the enforcement point lives in `flip-api/src/flip_api/auth/dependencies.py` (`verify_token`).
 
+##### `ENFORCE_MFA` flag
+
+The MFA gate is controlled by `flip-api`'s `ENFORCE_MFA` setting. The Settings default is `true` — when active, `verify_token` returns 403 for any signed-in user without an active TOTP and the UI's router guard redirects them through enrolment.
+
+The dev override lives in `deploy/compose.development.yml` (`ENFORCE_MFA=false`) so local development doesn't force enrolment on a burner authenticator. **The flag is intentionally not exposed in `.env.development.example` or AWS Secrets Manager** — the dev compose override is the only place it should appear, and stag/prod leave it untouched so the gate stays on. Adding `ENFORCE_MFA` to a stag/prod environment file would silently disable MFA for the entire deployment.
+
+The flag is mirrored to the UI via `/users/me/mfa/status` (`required: bool`) so the router guard knows when to skip the enrolment redirect.
+
 ##### Resetting MFA for another user
 
 For users other than yourself, use the FLIP Admin UI. See the *Reset User MFA* subsection in [`docs/source/sys-admin/admin-project-and-user-management.rst`](../docs/source/sys-admin/admin-project-and-user-management.rst) for the step-by-step flow. The UI calls `POST /users/{user_id}/mfa/reset` on `flip-api`, which runs the same two Cognito operations documented below but under the FLIP permission model (requires `CAN_MANAGE_USERS`) and leaves an application-level audit trail.

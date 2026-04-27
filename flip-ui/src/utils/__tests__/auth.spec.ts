@@ -79,7 +79,7 @@ describe("authCheck", () => {
         vi.mocked(routeChange.gotoLogin).mockReset();
         vi.mocked(Snackbar.error).mockReset();
         // Reset env each time — some tests touch VITE_LOCAL.
-        delete process.env.VITE_LOCAL;
+        vi.unstubAllEnvs();
     });
 
     it("bypasses auth check on unguarded routes", async () => {
@@ -93,7 +93,7 @@ describe("authCheck", () => {
     });
 
     it("bypasses auth check when VITE_LOCAL=true", async () => {
-        process.env.VITE_LOCAL = "true";
+        vi.stubEnv("VITE_LOCAL", "true");
         const { next, calls } = makeNext();
 
         await authCheck(route("/projects") as never, route("/") as never, next as never);
@@ -143,6 +143,18 @@ describe("authCheck", () => {
         expect(calls).toEqual(["/auth/mfa-setup"]);
     });
 
+    it("lets a TOTP-setup-challenge user stay on /auth/mfa-setup without recursing", async () => {
+        vi.mocked(fetchAuthSession).mockResolvedValue({} as never);
+        const { next, calls } = makeNext();
+        const auth = useAuthStore();
+        auth.signInStep = "CONTINUE_SIGN_IN_WITH_TOTP_SETUP";
+
+        await authCheck(route("/auth/mfa-setup") as never, route("/") as never, next as never);
+
+        // next() with no argument — no further redirect.
+        expect(calls).toEqual([undefined]);
+    });
+
     it("routes TOTP-code challenge users to /auth/mfa-verify", async () => {
         vi.mocked(fetchAuthSession).mockResolvedValue({} as never);
         const { next, calls } = makeNext();
@@ -152,6 +164,17 @@ describe("authCheck", () => {
         await authCheck(route("/projects") as never, route("/") as never, next as never);
 
         expect(calls).toEqual(["/auth/mfa-verify"]);
+    });
+
+    it("lets a TOTP-code-challenge user stay on /auth/mfa-verify without recursing", async () => {
+        vi.mocked(fetchAuthSession).mockResolvedValue({} as never);
+        const { next, calls } = makeNext();
+        const auth = useAuthStore();
+        auth.signInStep = "CONFIRM_SIGN_IN_WITH_TOTP_CODE";
+
+        await authCheck(route("/auth/mfa-verify") as never, route("/") as never, next as never);
+
+        expect(calls).toEqual([undefined]);
     });
 
     it("loads user info when session valid but store empty, then continues", async () => {
@@ -220,11 +243,23 @@ describe("authCheck", () => {
     });
 
     it("allows MFA-pending user to stay on /auth/mfa-setup", async () => {
+        // Post-auth (signed in, mfaRequired=true, mfaEnabled=false) the
+        // user is legitimately on /auth/mfa-setup. The mfaRequired check
+        // already short-circuits with a same-path guard, so we should
+        // pass through without a redirect.
         vi.mocked(fetchAuthSession).mockResolvedValue({} as never);
         const { next, calls } = makeNext();
+        const auth = useAuthStore();
+        auth.user = {
+            username: "u",
+            userId: "id",
+            attributes: { sub: "s", email: "u@e.com" },
+            permissions: []
+        };
+        auth.mfaEnabled = false;
+        auth.mfaRequired = true;
+        auth.signInStep = "DONE";
 
-        // /auth/mfa-setup is in unguardedRoutes so it short-circuits before
-        // the mfaEnabled check — exercise that path too.
         await authCheck(route("/auth/mfa-setup") as never, route("/") as never, next as never);
 
         expect(calls).toEqual([undefined]);
