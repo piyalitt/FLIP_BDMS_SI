@@ -110,3 +110,29 @@ def test_download_images_local_storage_error_returns_500_not_404(client):
     body = response.json()["detail"]
     assert "Trust-side storage error" in body
     assert "Resource not found" not in body
+
+
+def test_download_images_xnat_genuine_404_returns_404_not_500(client):
+    """Symmetric counterpart to the local-storage test: a genuine XNAT empty
+    response must surface as 404 with an XNAT-shaped detail, never as 500
+    with a 'Trust-side storage error' message."""
+    xnat_msg = (
+        "No DICOM data in XNAT at "
+        "http://xnat/data/projects/PROJ1/subjects/SUBJ1/experiments/EXP1/"
+        "scans/ALL/resources/NIFTI/files?format=zip: 404 Not Found"
+    )
+    with (
+        patch("imaging_api.routers.download.decrypt", return_value="decrypted-project-id"),
+        patch(
+            "imaging_api.routers.download.download_and_unzip_images",
+            new_callable=AsyncMock,
+            side_effect=NotFoundError(xnat_msg),
+        ),
+    ):
+        response = client.post("/download/images/net1", json=_REQUEST_BODY)
+
+    assert response.status_code == 404
+    body = response.json()["detail"]
+    assert "Resource not found" in body
+    assert "No DICOM data in XNAT" in body
+    assert "Trust-side storage error" not in body
