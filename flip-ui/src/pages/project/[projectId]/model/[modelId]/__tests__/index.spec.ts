@@ -187,6 +187,53 @@ describe("pages/project/[projectId]/model/[modelId]", () => {
         expect(latest?.[1]).toBe(FileUploadStatus.COMPLETED);
     });
 
+    it("does not advance the tracked status when the helper reports no change", async () => {
+        // Phase 1: helper reports a real transition to SCANNING; tracker advances.
+        resolveModelConfigStateMock.mockResolvedValue({
+            changed: true,
+            configStatus: FileUploadStatus.SCANNING,
+            jobType: "standard",
+            requiredFiles: jobTypes.standard
+        });
+        mockSwrvData.value = makeModel([
+            { name: "config.json", status: FileUploadStatus.SCANNING }
+        ]);
+        const wrapper = await mountPage();
+        await flushPromises();
+        await wrapper.vm.$nextTick();
+        await flushPromises();
+
+        // Phase 2: helper returns no-change (e.g. transient fetch failure).
+        // Tracker must stay at SCANNING regardless of how many times the watch fires.
+        resolveModelConfigStateMock.mockResolvedValue({ changed: false });
+        mockSwrvData.value = makeModel([
+            { name: "config.json", status: FileUploadStatus.COMPLETED }
+        ]);
+        await flushPromises();
+        await wrapper.vm.$nextTick();
+        await flushPromises();
+
+        // Phase 3: clear history and capture the next watch fire's previousStatus.
+        // It must still be SCANNING — proving the page did not advance during Phase 2.
+        resolveModelConfigStateMock.mockClear();
+        resolveModelConfigStateMock.mockResolvedValue({
+            changed: true,
+            configStatus: FileUploadStatus.COMPLETED,
+            jobType: "diffusion",
+            requiredFiles: jobTypes.diffusion
+        });
+        mockSwrvData.value = makeModel([
+            { name: "config.json", status: FileUploadStatus.COMPLETED }
+        ]);
+        await flushPromises();
+        await wrapper.vm.$nextTick();
+        await flushPromises();
+
+        expect(resolveModelConfigStateMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+        const firstPhase3Call = resolveModelConfigStateMock.mock.calls[0];
+        expect(firstPhase3Call?.[1]).toBe(FileUploadStatus.SCANNING);
+    });
+
     it("resets the tracked status when ModelUpload emits deleted-file", async () => {
         resolveModelConfigStateMock.mockResolvedValue({
             changed: true,

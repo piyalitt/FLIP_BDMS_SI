@@ -80,10 +80,21 @@ describe("getJobTypeFromConfig", () => {
         expect(result).toBe(DEFAULT_JOB_TYPE);
     });
 
-    it("falls back to DEFAULT_JOB_TYPE when the download fails", async () => {
-        httpGet.mockRejectedValueOnce(new Error("boom"));
+    it("falls back to DEFAULT_JOB_TYPE when config.json is not yet uploaded (404)", async () => {
+        httpGet.mockRejectedValueOnce(Object.assign(new Error("not found"), {
+            isAxiosError: true,
+            response: { status: 404 }
+        }));
         const result = await getJobTypeFromConfig("model-5", jobTypes);
         expect(result).toBe(DEFAULT_JOB_TYPE);
+    });
+
+    it("propagates non-404 fetch errors so the caller can decide retry policy", async () => {
+        httpGet.mockRejectedValueOnce(Object.assign(new Error("bad gateway"), {
+            isAxiosError: true,
+            response: { status: 502 }
+        }));
+        await expect(getJobTypeFromConfig("model-5b", jobTypes)).rejects.toThrow("bad gateway");
     });
 
     it("fetches job types from the API when none are provided", async () => {
@@ -110,7 +121,6 @@ describe("resolveModelConfigState", () => {
             "model-id"
         );
         expect(result.changed).toBe(false);
-        expect(result.configStatus).toBe(FileUploadStatus.COMPLETED);
         expect(httpGet).not.toHaveBeenCalled();
     });
 
@@ -118,14 +128,29 @@ describe("resolveModelConfigState", () => {
         const files = [{ name: "trainer.py", status: FileUploadStatus.COMPLETED }];
         const result = await resolveModelConfigState(files, null, jobTypes, "model-id");
         expect(result.changed).toBe(false);
-        expect(result.configStatus).toBeNull();
         expect(httpGet).not.toHaveBeenCalled();
+    });
+
+    it("returns changed:false on transient fetch failure so the next poll can retry", async () => {
+        httpGet.mockRejectedValueOnce(Object.assign(new Error("bad gateway"), {
+            isAxiosError: true,
+            response: { status: 502 }
+        }));
+        const files = [{ name: "config.json", status: FileUploadStatus.COMPLETED }];
+        const result = await resolveModelConfigState(
+            files,
+            FileUploadStatus.SCANNING,
+            jobTypes,
+            "model-id"
+        );
+        expect(result.changed).toBe(false);
+        expect(httpGet).toHaveBeenCalledTimes(1);
     });
 
     it("transitions to SCANNING without downloading config.json", async () => {
         const files = [{ name: "config.json", status: FileUploadStatus.SCANNING }];
         const result = await resolveModelConfigState(files, null, jobTypes, "model-id");
-        expect(result.changed).toBe(true);
+        if (!result.changed) throw new Error("expected changed:true");
         expect(result.configStatus).toBe(FileUploadStatus.SCANNING);
         expect(result.jobType).toBe(DEFAULT_JOB_TYPE);
         expect(result.requiredFiles).toEqual(jobTypes.standard);
@@ -141,7 +166,7 @@ describe("resolveModelConfigState", () => {
             jobTypes,
             "model-id"
         );
-        expect(result.changed).toBe(true);
+        if (!result.changed) throw new Error("expected changed:true");
         expect(result.configStatus).toBe(FileUploadStatus.COMPLETED);
         expect(result.jobType).toBe("diffusion");
         expect(result.requiredFiles).toEqual(jobTypes.diffusion);
@@ -156,7 +181,7 @@ describe("resolveModelConfigState", () => {
             jobTypes,
             "model-id"
         );
-        expect(result.changed).toBe(true);
+        if (!result.changed) throw new Error("expected changed:true");
         expect(result.configStatus).toBeNull();
         expect(result.jobType).toBe(DEFAULT_JOB_TYPE);
         expect(result.requiredFiles).toEqual(jobTypes.standard);

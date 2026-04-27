@@ -126,7 +126,7 @@ const allFilesUploaded = ref(false);
 const allFilesPassScan = ref(false);
 const jobTypes = ref<JobTypesResponse>({});
 const currentJobType = ref<JobType>(DEFAULT_JOB_TYPE);
-const resolvedConfigFileStatus = ref<string | null>(null);
+const resolvedConfigFileStatus = ref<FileUploadStatus | null>(null);
 const requiredFiles = ref<string[]>([]);
 const editProjectPermissions = ref(["CanManageProjects"] as UserPermissions[]);
 const editDrawerOpen = ref(false);
@@ -263,9 +263,6 @@ const trainingStartedOrStopped = computed(() => {
 watch([modelData, jobTypes], async () => {
     if (!modelData.value || !Object.keys(jobTypes.value).length) return;
     if (modelData.value?.files?.length) {
-        // Only re-fetch config.json when its upload status transitions;
-        // the file is immutable once uploaded, so re-downloading every
-        // 5s poll tick is wasteful.
         const resolved = await resolveModelConfigState(
             modelData.value.files,
             resolvedConfigFileStatus.value,
@@ -294,7 +291,8 @@ const update = () => {
 };
 
 const onFileDeleted = () => {
-    // Force re-evaluation of config.json on the next poll
+    // A new config.json after deletion may declare a different job_type;
+    // clear the cached status so the next poll re-resolves required files.
     resolvedConfigFileStatus.value = null;
     update();
 };
