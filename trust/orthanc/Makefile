@@ -33,14 +33,14 @@ network2 = deploy_trust-network-2
 
 TRUST_1_VARS = \
 	PACS_UI_PORT=${PACS_UI_PORT_TRUST_1} \
-	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_1} \
+	ORTHANC_STORAGE_DIR=${ORTHANC_STORAGE_DIR_TRUST_1} \
 	ORTHANC_USERNAME=${ORTHANC_USERNAME} \
 	ORTHANC_PASSWORD=${ORTHANC_PASSWORD} \
 	XNAT_PORT=${XNAT_PORT_TRUST_1} \
 	TRUST_NETWORK_NAME=${network1}
 TRUST_2_VARS = \
 	PACS_UI_PORT=${PACS_UI_PORT_TRUST_2} \
-	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_2} \
+	ORTHANC_STORAGE_DIR=${ORTHANC_STORAGE_DIR_TRUST_2} \
 	ORTHANC_USERNAME=${ORTHANC_USERNAME} \
 	ORTHANC_PASSWORD=${ORTHANC_PASSWORD} \
 	XNAT_PORT=${XNAT_PORT_TRUST_2} \
@@ -62,8 +62,13 @@ shell:
 sync-data-from-s3:
 	aws s3 sync s3://$(AICENTRE_BUCKET_NAME)/orthanc/ ./volumes
 
+# ORTHANC_STORAGE_DIR_TRUST_* values are absolute or relative to trust/, but
+# this Makefile runs from trust/orthanc/ — prepend `../` for relative paths.
+EXTRACT_DIR_1 := $(if $(filter /%,$(ORTHANC_STORAGE_DIR_TRUST_1)),$(ORTHANC_STORAGE_DIR_TRUST_1),../$(ORTHANC_STORAGE_DIR_TRUST_1))
+EXTRACT_DIR_2 := $(if $(filter /%,$(ORTHANC_STORAGE_DIR_TRUST_2)),$(ORTHANC_STORAGE_DIR_TRUST_2),../$(ORTHANC_STORAGE_DIR_TRUST_2))
+
 extract-data:
-	mkdir -p ./${ORTHANC_STORAGE_TRUST_1} ./${ORTHANC_STORAGE_TRUST_2}
-	tar -xzf ./volumes/trust1_orthanc_data_20260106.tar.gz -C ./${ORTHANC_STORAGE_TRUST_1}
-	tar -xzf ./volumes/trust2_orthanc_data_20260106.tar.gz -C ./${ORTHANC_STORAGE_TRUST_2}
+	mkdir -p $(EXTRACT_DIR_1) $(EXTRACT_DIR_2)
+	tar -xzf ./volumes/trust1_orthanc_data_20260106.tar.gz -C $(EXTRACT_DIR_1)
+	tar -xzf ./volumes/trust2_orthanc_data_20260106.tar.gz -C $(EXTRACT_DIR_2)
 	rm ./volumes/trust1_orthanc_data_20260106.tar.gz ./volumes/trust2_orthanc_data_20260106.tar.gz
