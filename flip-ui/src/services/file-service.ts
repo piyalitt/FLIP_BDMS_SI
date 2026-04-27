@@ -134,6 +134,8 @@ export const resolveModelConfigState = async (
         jobType = await getJobTypeFromConfig(modelId, jobTypes);
     }
 
+    console.debug(`config.json status changed: ${previousStatus} -> ${configStatus}; jobType=${jobType}`);
+
     return {
         changed: true,
         configStatus,
