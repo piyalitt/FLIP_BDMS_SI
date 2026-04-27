@@ -24,6 +24,7 @@ from flip_api.cohort_services import (
     save_cohort_query,
     submit_cohort_query,
 )
+from flip_api.config import get_settings
 from flip_api.file_services import (
     delete_file,
     download_file,
@@ -133,10 +134,11 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) 
     return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Try again later."})
 
 
-# CORS middleware
+# CORS middleware — explicit allowlist required because allow_credentials=True. Starlette
+# reflects matching origins back and emits Vary: Origin automatically when allow_origins != ["*"].
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust as needed
+    allow_origins=get_settings().CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     NET_ENDPOINTS: dict[str, str]
     TRUST_NAMES: list[str]
 
+    # Browser origins permitted to call this API with credentials. Must be an explicit allowlist —
+    # the CORSMiddleware reflects matching origins back per-request and emits Vary: Origin, so a
+    # wildcard combined with allow_credentials=True would let any site issue credentialed requests.
+    CORS_ALLOWED_ORIGINS: list[str]
+
     # FL settings
     FL_BACKEND: Literal["nvflare", "flower"] = "nvflare"
 
