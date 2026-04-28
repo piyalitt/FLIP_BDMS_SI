@@ -59,7 +59,7 @@ Managed policies that cover these requirements:
 - `ElasticLoadBalancingFullAccess`
 - `AmazonSESFullAccess` (optional)
 
-**Note**: The deployed EC2 instances use minimal IAM permissions (SSM, CloudWatch, and a scoped inline policy for `secretsmanager:GetSecretValue` on specific secrets) following the principle of least privilege.
+**Note**: The deployed EC2 instances use minimal IAM permissions (SSM, CloudWatch, and scoped inline policies for `secretsmanager:GetSecretValue` on specific secrets, Cognito user-pool admin actions on the FLIP user pool, S3 object access on the FLIP and AI Centre buckets, and SES `SendEmail` on the verified sender identity) following the principle of least privilege.
 
 ## Deployment Workflow
 

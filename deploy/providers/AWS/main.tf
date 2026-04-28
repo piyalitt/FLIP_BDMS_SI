@@ -165,6 +165,12 @@ module "flip_api_secret" {
 ############################
 
 # IAM Role for EC2 instance
+#
+# The role is shared between the Central Hub EC2 (flip-api caller of Cognito,
+# S3 and SES) and the Trust EC2 (only needs SSM + CloudWatch + S3 reads of the
+# aicentre bucket for participant-kit downloads during Ansible provisioning).
+# Scoping is via resource ARN, not separate roles, to keep the deployment
+# topology simple while still avoiding the AWS-managed *FullAccess policies.
 module "ec2_role" {
   source                = "terraform-aws-modules/iam/aws//modules/iam-assumable-role"
   version               = "~> 5.0"
@@ -174,9 +180,6 @@ module "ec2_role" {
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
     "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
-    "arn:aws:iam::aws:policy/AmazonCognitoPowerUser", # TODO Restrict this policy to only what we need in production
-    "arn:aws:iam::aws:policy/AmazonS3FullAccess",     # TODO Restrict this policy to only what we need in production
-    "arn:aws:iam::aws:policy/AmazonSESFullAccess",    # TODO Restrict this policy to only what we need in production
   ]
   role_requires_mfa = "false"
 }
@@ -200,6 +203,83 @@ resource "aws_iam_role_policy" "ec2_secret" {
         module.flip_db.db_instance_master_user_secret_arn,
         module.flip_api_secret.secret_arn
       ]
+    }]
+  })
+}
+
+# Cognito user-pool admin actions used by flip-api (see
+# flip_api/utils/cognito_helpers.py). Scoped to the FLIP user pool ARN.
+resource "aws_iam_role_policy" "ec2_cognito" {
+  name = "cognito-user-admin"
+  role = module.ec2_role.iam_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "cognito-idp:ListUsers",
+        "cognito-idp:AdminCreateUser",
+        "cognito-idp:AdminDeleteUser",
+        "cognito-idp:AdminEnableUser",
+        "cognito-idp:AdminDisableUser",
+        "cognito-idp:RevokeToken",
+      ]
+      Resource = [module.cognito.user_pool_arn]
+    }]
+  })
+}
+
+# S3 access scoped to the two FLIP-managed buckets:
+# - flip_bucket: model files / FL results / FL app destination (flip-api).
+# - aicentre_bucket: FL participant kits, fetched via `aws s3 cp` during
+#   Ansible provisioning on both Central Hub and Trust EC2 hosts.
+resource "aws_iam_role_policy" "ec2_s3" {
+  name = "s3-bucket-access"
+  role = module.ec2_role.iam_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+          "s3:GetBucketLocation",
+        ]
+        Resource = [
+          aws_s3_bucket.flip_bucket.arn,
+          aws_s3_bucket.aicentre_bucket.arn,
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+        ]
+        Resource = [
+          "${aws_s3_bucket.flip_bucket.arn}/*",
+          "${aws_s3_bucket.aicentre_bucket.arn}/*",
+        ]
+      },
+    ]
+  })
+}
+
+# SES SendEmail (used by flip-api access requests and imaging notifications).
+# Scoped to the verified sender identity provisioned by module.ses.
+resource "aws_iam_role_policy" "ec2_ses" {
+  name = "ses-send-email"
+  role = module.ec2_role.iam_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ses:SendEmail"]
+      Resource = [module.ses.sender_identity_arn]
     }]
   })
 }
