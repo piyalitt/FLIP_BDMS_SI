@@ -188,10 +188,13 @@ After changes, evaluate if docs need updating:
 - `FL_BACKEND` — `flower` (default) or `nvflare`
 - `PROD` — `true` (production), `stag` (staging), unset (development)
 - `AES_KEY_BASE64` — encryption key for trust communication
-- `TRUST_API_KEYS` / `TRUST_API_KEY_HASHES` — per-trust API key pairs
-- `INTERNAL_SERVICE_KEY` / `INTERNAL_SERVICE_KEY_HASH` — fl-server-to-hub auth
-- `CENTRAL_HUB_API_URL` — public base URL of flip-api
-- `FLIP_API_INTERNAL_URL` — internal base URL (Docker network, not CloudFront)
+- `TRUST_API_KEYS` — JSON dict of per-trust plaintext API keys for trust-to-hub auth
+- `TRUST_API_KEY_HASHES` — hub-side JSON dict mapping trust names to SHA-256 hashes of their API keys
+- `INTERNAL_SERVICE_KEY_HEADER` — HTTP header name for internal service auth
+- `INTERNAL_SERVICE_KEY` — internal service key for fl-server-to-hub auth (Central Hub only)
+- `INTERNAL_SERVICE_KEY_HASH` — hub-side SHA-256 hash of the internal service key
+- `CENTRAL_HUB_API_URL` — public base URL of flip-api (with `/api`); read by flip-ui and trust-api. In prod this is the CloudFront URL.
+- `FLIP_API_INTERNAL_URL` — Central-Hub-internal base URL of flip-api (with `/api`); read **only** by fl-server. Must resolve over the Docker network (e.g. `http://flip-api:8000/api`), never the CloudFront URL — CloudFront strips `X-Internal-Service-Key` at the edge.
 
 ## Deployment Architecture
 
