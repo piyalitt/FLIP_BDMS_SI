@@ -211,11 +211,13 @@ resource "aws_iam_role_policy" "s3_access" {
     Statement = [{
       Effect = "Allow"
       Action = [
-        "s3:GetObject",
-        "s3:PutObject",
+        "s3:CopyObject",
         "s3:DeleteObject",
-        "s3:ListBucket",
         "s3:GetBucketLocation",
+        "s3:GetObject",
+        "s3:HeadObject",
+        "s3:ListBucket",
+        "s3:PutObject",
       ]
       Resource = [
         aws_s3_bucket.flip_bucket.arn,
