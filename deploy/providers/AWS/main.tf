@@ -164,13 +164,13 @@ module "flip_api_secret" {
 # EC2
 ############################
 
-# IAM Role for EC2 instance
+# IAM Role for the Central Hub EC2.
 #
-# The role is shared between the Central Hub EC2 (flip-api caller of Cognito,
-# S3 and SES) and the Trust EC2 (only needs SSM + CloudWatch + S3 reads of the
-# aicentre bucket for participant-kit downloads during Ansible provisioning).
-# Scoping is via resource ARN, not separate roles, to keep the deployment
-# topology simple while still avoiding the AWS-managed *FullAccess policies.
+# Scoped to exactly what flip-api / fl-server need at runtime, plus the SSM
+# and CloudWatch managed policies required by Session Manager and the agent.
+# The Trust EC2 uses a separate, narrower role (`trust_ec2_role` below) so
+# that Cognito / SES / flip-bucket access is not granted on a host that has
+# no business calling those APIs.
 module "ec2_role" {
   source                = "terraform-aws-modules/iam/aws//modules/iam-assumable-role"
   version               = "~> 5.0"
@@ -230,10 +230,10 @@ resource "aws_iam_role_policy" "ec2_cognito" {
   })
 }
 
-# S3 access scoped to the two FLIP-managed buckets:
+# S3 access for the Central Hub:
 # - flip_bucket: model files / FL results / FL app destination (flip-api).
 # - aicentre_bucket: FL participant kits, fetched via `aws s3 cp` during
-#   Ansible provisioning on both Central Hub and Trust EC2 hosts.
+#   Ansible provisioning on the Central Hub host.
 resource "aws_iam_role_policy" "ec2_s3" {
   name = "s3-bucket-access"
   role = module.ec2_role.iam_role_name
@@ -281,6 +281,57 @@ resource "aws_iam_role_policy" "ec2_ses" {
       Action   = ["ses:SendEmail"]
       Resource = [module.ses.sender_identity_arn]
     }]
+  })
+}
+
+# IAM Role for the Trust EC2.
+#
+# The Trust host runs trust-api, imaging-api, data-access-api, fl-client, XNAT,
+# Orthanc and the OMOP DB — none of those services use boto3. The only AWS
+# call from the Trust host is `aws s3 sync` against the AI Centre bucket
+# during Ansible provisioning to fetch the FL participant kit (see
+# deploy/providers/AWS/site.yml). Cognito, SES and the FLIP application
+# bucket are deliberately *not* granted here.
+module "trust_ec2_role" {
+  source                = "terraform-aws-modules/iam/aws//modules/iam-assumable-role"
+  version               = "~> 5.0"
+  role_name             = "trust-ec2-role"
+  create_role           = "true"
+  trusted_role_services = ["ec2.amazonaws.com"]
+  custom_role_policy_arns = [
+    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
+    "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
+  ]
+  role_requires_mfa = "false"
+}
+
+resource "aws_iam_instance_profile" "trust_ec2_profile" {
+  name = "trust-ec2-role-profile"
+  role = module.trust_ec2_role.iam_role_name
+}
+
+# Read-only access to the AI Centre bucket for FL participant-kit downloads.
+resource "aws_iam_role_policy" "trust_ec2_s3" {
+  name = "s3-aicentre-read"
+  role = module.trust_ec2_role.iam_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+          "s3:GetBucketLocation",
+        ]
+        Resource = [aws_s3_bucket.aicentre_bucket.arn]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = ["${aws_s3_bucket.aicentre_bucket.arn}/*"]
+      },
+    ]
   })
 }
 
@@ -677,8 +728,10 @@ module "trust_ec2" {
   # use the trust SG, not the central EC2 SG
   security_group_ids = [module.trust_security_group.security_group.id]
 
-  # attaches the same ec2-role-profile instance profile to the Trust instance
-  iam_instance_profile_name = aws_iam_instance_profile.ec2_profile.name
+  # Trust EC2 uses its own narrower instance profile (SSM + CloudWatch +
+  # read-only S3 on the AI Centre bucket). It does not get Central Hub
+  # permissions like Cognito, SES or the FLIP application bucket.
+  iam_instance_profile_name = aws_iam_instance_profile.trust_ec2_profile.name
 }
 
 resource "aws_key_pair" "host_key" {
