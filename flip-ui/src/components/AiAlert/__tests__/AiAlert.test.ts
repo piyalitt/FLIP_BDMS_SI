@@ -47,4 +47,20 @@ describe("Ai Alert", () => {
         expect(comp.html()).not.toContain("<img");
         expect(comp.text()).toContain(payload);
     });
+
+    it("renders the default slot when provided", () => {
+        const comp = mount(AiAlert, {
+            global: { plugins: [createPinia()] },
+            props: { variant: "info" },
+            slots: {
+                default: "<strong data-test=\"slot-marker\">authored content</strong>"
+            }
+        });
+
+        const html = comp.html();
+
+        expect(html).toContain("data-test=\"slot-marker\"");
+        expect(html).toContain("<strong");
+        expect(html).toContain("authored content");
+    });
 });
