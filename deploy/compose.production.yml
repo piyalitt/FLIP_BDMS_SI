@@ -50,6 +50,5 @@ services:
       - NET_ENDPOINTS=${NET_ENDPOINTS}
       - FL_BACKEND=${FL_BACKEND}
       - TRUST_NAMES=${TRUST_NAMES}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
     restart: unless-stopped
     container_name: flip-api

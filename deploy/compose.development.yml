@@ -98,7 +98,6 @@ services:
       - FL_BACKEND=${FL_BACKEND}
       - ADMIN_USER_PASSWORD=${ADMIN_USER_PASSWORD}
       - TRUST_NAMES=${TRUST_NAMES}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
     restart: unless-stopped
     container_name: flip-api
 

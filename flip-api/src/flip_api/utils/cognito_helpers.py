@@ -14,6 +14,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID
 
 import boto3
@@ -28,6 +29,56 @@ from flip_api.utils.logger import logger
 from flip_api.utils.paging_utils import PagingInfo
 
 boto3.set_stream_logger("boto3.resources", logging.INFO)
+
+
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def _origin_from_url(url: str) -> str | None:
+    """Return ``scheme://host[:port]`` for ``url``, omitting ports that match the scheme default.
+
+    Browsers strip default ports from the ``Origin`` header (RFC 6454), so an allowlist entry
+    like ``https://localhost:443`` would never match an actual request — normalize before use.
+    Returns ``None`` for URLs without a usable scheme/host.
+    """
+    parsed = urlparse(url)
+    if not parsed.scheme or not parsed.hostname:
+        return None
+    host = parsed.hostname
+    port = parsed.port
+    if port is None or port == _DEFAULT_PORTS.get(parsed.scheme):
+        return f"{parsed.scheme}://{host}"
+    return f"{parsed.scheme}://{host}:{port}"
+
+
+def get_cors_allowed_origins() -> list[str]:
+    """Derive the CORS allowlist from the Cognito user pool client's CallbackURLs.
+
+    The same Cognito app client that authenticates UI logins already enumerates the trusted UI
+    origins per environment (see ``deploy/providers/AWS/services.tf``). Reusing it as the CORS
+    allowlist keeps "where users can sign in" and "where the UI may call this API" in lockstep,
+    without a separate env var.
+
+    Returns:
+        list[str]: Unique normalized origins (``scheme://host[:port]``) suitable for
+        ``CORSMiddleware(allow_origins=...)``.
+    """
+    settings = get_settings()
+    client = boto3.client("cognito-idp", region_name=settings.AWS_REGION)
+    response = client.describe_user_pool_client(
+        UserPoolId=settings.AWS_COGNITO_USER_POOL_ID,
+        ClientId=settings.AWS_COGNITO_APP_CLIENT_ID,
+    )
+    callback_urls: list[str] = response.get("UserPoolClient", {}).get("CallbackURLs", []) or []
+
+    seen: set[str] = set()
+    origins: list[str] = []
+    for url in callback_urls:
+        origin = _origin_from_url(url)
+        if origin and origin not in seen:
+            seen.add(origin)
+            origins.append(origin)
+    return origins
 
 
 def get_pool_id(request: Request) -> str:
