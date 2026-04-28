@@ -26,7 +26,10 @@ describe("AiSwitch", () => {
         vi.spyOn(helpers, "getRandomId").mockImplementationOnce(() => "random-id");
 
         const comp = mount(AiSwitch, {
-            props: { name: "something", value: "test" },
+            props: {
+ name: "something",
+value: "test"
+},
             global: {
                 plugins: [createTestingPinia({
                     createSpy: vi.fn,
@@ -37,6 +40,6 @@ describe("AiSwitch", () => {
 
         // Test functionality instead of snapshots
         expect(comp.exists()).toBe(true);
-        expect(comp.find('button[role="switch"]').exists()).toBe(true);
+        expect(comp.find("button[role=\"switch\"]").exists()).toBe(true);
     });
 });

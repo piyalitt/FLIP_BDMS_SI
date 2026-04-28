@@ -15,6 +15,7 @@
 
 
 import type { AxiosResponse } from "axios";
+
 import { _http } from "./api";
 import { DEFAULT_JOB_TYPE, fetchJobTypes, isValidJobType, type JobType, type JobTypesResponse } from "./model-service";
 
@@ -43,6 +44,7 @@ export const getModelConfig = async (modelId: string): Promise<IModelConfig | nu
         const path = `/files/model/${modelId}/${encodeURIComponent("config.json")}`;
         const blob = await downloadModelFile(path);
         const text = await blob.text();
+
         return JSON.parse(text) as IModelConfig;
     } catch {
         // Config file doesn't exist or is invalid JSON
@@ -73,6 +75,7 @@ export const getJobTypeFromConfig = async (
         // If config exists and has a valid job_type, use it
         if (config && config.job_type && isValidJobType(availableJobTypes, config.job_type)) {
             console.log("[getJobTypeFromConfig] Using job_type from config:", config.job_type);
+
             return config.job_type;
         }
 
@@ -81,10 +84,12 @@ export const getJobTypeFromConfig = async (
         // - config.json doesn't have job_type field
         // - job_type has an invalid/unknown value
         console.log("[getJobTypeFromConfig] Defaulting to standard");
+
         return DEFAULT_JOB_TYPE;
     } catch (error) {
         // If anything goes wrong, default to standard
         console.error("[getJobTypeFromConfig] Error:", error);
+
         return DEFAULT_JOB_TYPE;
     }
 };

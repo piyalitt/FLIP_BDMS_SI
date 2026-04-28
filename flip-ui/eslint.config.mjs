@@ -90,6 +90,14 @@ export default defineConfigWithVueTs(
     },
 
     {
+        name: "flip-ui/pages",
+        files: ["src/pages/**/*.vue", "src/layouts/**/*.vue"],
+        rules: {
+            "vue/multi-word-component-names": "off",
+        },
+    },
+
+    {
         name: "flip-ui/tests",
         files: [
             "**/__tests__/**/*.{js,ts,jsx,tsx}",

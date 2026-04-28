@@ -83,6 +83,7 @@ const fileUpload = ref<HTMLInputElement | null>(null);
  */
 const requiredFilesMessage = computed(() => {
     const filesList = props.requiredFiles.join(", ");
+
     return `Your current job type is: <strong><code>${props.jobType}</code></strong>. If you want to change it, add it as a <code>job_type</code> variable in your <code>config.json</code> file.<br/>Required files: ${filesList}`;
 });
 

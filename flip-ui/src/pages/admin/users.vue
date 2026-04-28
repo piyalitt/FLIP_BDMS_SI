@@ -261,12 +261,10 @@
 </template>
 
 <script setup lang="ts">
-import {
-    Popover,
+import { Popover,
     PopoverButton,
     PopoverGroup,
-    PopoverPanel
-} from "@headlessui/vue";
+    PopoverPanel } from "@headlessui/vue";
 import useSWRV from "swrv";
 import { onBeforeMount, ref } from "vue";
 
@@ -278,13 +276,11 @@ import AiPagination from "@/components/AiPagination/AiPagination.vue";
 import RegisterUserModal from "@/partials/users/RegisterUserModal.vue";
 import { routeChange } from "@/router";
 import { getRoles, IRole } from "@/services/role-service";
-import {
-    getUsers,
+import { getUsers,
     IUser,
     IUserDisabledStateDto,
     updateUserDisabledState,
-    updateUserRoles
-} from "@/services/user-service";
+    updateUserRoles } from "@/services/user-service";
 import { useAuthStore } from "@/store/auth";
 import { useErrorStore } from "@/store/error";
 import { canAccessRoute } from "@/utils/route-validator";

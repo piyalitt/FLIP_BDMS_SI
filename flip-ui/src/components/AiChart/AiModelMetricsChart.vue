@@ -20,8 +20,7 @@
 <script lang="ts" setup>
 import { useDebounceFn, useResizeObserver } from "@vueuse/core";
 import { BarChart, BarSeriesOption, LineChart, LineSeriesOption } from "echarts/charts";
-import {
-    DataZoomComponent,
+import { DataZoomComponent,
     DataZoomComponentOption,
     GridComponent,
     GridComponentOption,
@@ -30,8 +29,7 @@ import {
     TitleComponentOption,
     ToolboxComponent,
     ToolboxComponentOption,
-    TooltipComponent
-} from "echarts/components";
+    TooltipComponent } from "echarts/components";
 import * as echarts from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import _ from "underscore";
@@ -100,8 +98,15 @@ onMounted(() => {
                     fontWeight: 700
                 },
                 dataZoom: [
-                { type: "slider", bottom: 30, minSpan: 10 },  // visible bar
-                { type: "inside", minSpan: 10 }               // scroll/trackpad zoom
+                {
+ type: "slider",
+bottom: 30,
+minSpan: 10
+},  // visible bar
+                {
+ type: "inside",
+minSpan: 10
+}               // scroll/trackpad zoom
                 ],
                 calculable: true,
                 toolbox: {

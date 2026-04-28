@@ -112,11 +112,10 @@ import AiConfirmModal from "@/components/AiModal/AiConfirmModal.vue";
 import { FileInfo, FileUploadStatus } from "@/interfaces/model/types";
 import { deleteModelFile, downloadModelFile, processScannedFile } from "@/services/file-service";
 import { JobTypes } from "@/services/model-service";
+import { useAuthStore } from "@/store/auth";
 import { createPreSignedUrl, uploadFile as uploadFileService } from "@/utils/file";
 import { formatBytes, getRandomId } from "@/utils/helpers";
 import { Snackbar } from "@/utils/snackbar";
-
-import { useAuthStore } from "@/store/auth";
 
 import FileUpload from "./FileUpload.vue";
 
@@ -195,7 +194,7 @@ const uploadFile = async (fileList: FileList) => {
 
     if (blacklistedEnvVar) {
         // Handling model files: before, this was using JSON parsing. Now it takes a simple string of files.
-        blacklistedModelFiles = blacklistedEnvVar.split(',').map(file => file.trim());
+        blacklistedModelFiles = blacklistedEnvVar.split(",").map(file => file.trim());
     }
 
     for (const file of fileList) {

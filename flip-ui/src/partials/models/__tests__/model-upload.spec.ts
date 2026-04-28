@@ -63,7 +63,7 @@ function fileListFromArray(files: File[]): FileList {
         []
     ) as any;
 
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
+
     fileListMock.item = () => { };
 
     return fileListMock as FileList;

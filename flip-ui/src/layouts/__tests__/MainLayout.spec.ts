@@ -11,7 +11,7 @@
  * limitations under the License.
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { createTestingPinia } from "@pinia/testing";
 import { mount } from "@vue/test-utils";
 import { reactive, ref } from "vue";
@@ -29,6 +29,7 @@ const mockRouterPush = vi.fn();
 
 vi.mock("vue-router", async (importOriginal) => {
     const actual = await importOriginal<typeof import("vue-router")>();
+
     return {
         ...actual,
         useRoute: () => mockRoute,
@@ -50,9 +51,7 @@ vi.mock("@vueuse/core", () => ({
     whenever: vi.fn()
 }));
 
-vi.mock("@/services/project-service", () => ({
-    getProject: vi.fn()
-}));
+vi.mock("@/services/project-service", () => ({ getProject: vi.fn() }));
 
 vi.mock("@/utils/snackbar", () => ({
     Snackbar: {
@@ -90,7 +89,11 @@ function mountMainLayout(options: {
     mockRoute.params = routeParams;
 
     const banner = bannerEnabled !== undefined
-        ? { message: bannerMessage, link: "", enabled: bannerEnabled }
+        ? {
+ message: bannerMessage,
+link: "",
+enabled: bannerEnabled
+}
         : undefined;
 
     return mount(MainLayout, {
@@ -104,7 +107,10 @@ function mountMainLayout(options: {
                             user: {
                                 username: "testuser",
                                 userId: "1",
-                                attributes: { sub: "1", email },
+                                attributes: {
+ sub: "1",
+email
+},
                                 permissions
                             },
                             signInStep: "DONE"
@@ -114,7 +120,10 @@ function mountMainLayout(options: {
                             deploymentMode
                         },
                         error: { hasError },
-                        modals: { createProjectOpen: false, createModelOpen: false },
+                        modals: {
+ createProjectOpen: false,
+createModelOpen: false
+},
                         siteSettings: { darkMode: false }
                     }
                 })
@@ -123,7 +132,10 @@ function mountMainLayout(options: {
                 AiBanner: { template: "<div data-test='banner' />" },
                 AiMainNavigation: true,
                 AiHeader: { template: "<div data-test='header'><slot /></div>" },
-                AiUserDropdown: { template: "<div data-test='user-dropdown' />", props: ["isDark", "emailAddress", "role"] },
+                AiUserDropdown: {
+ template: "<div data-test='user-dropdown' />",
+props: ["isDark", "emailAddress", "role"]
+},
                 AiErrorAlert: { template: "<div data-test='error-alert' />" },
                 AiLoader: { template: "<div data-test='loader' />" },
                 DeploymentMode: { template: "<div data-test='deployment-mode' />" },
@@ -218,13 +230,19 @@ describe("MainLayout", () => {
 
     describe("deployment mode", () => {
         it("shows DeploymentMode when deploymentMode is true on non-admin route", () => {
-            const wrapper = mountMainLayout({ deploymentMode: true, routePath: "/" });
+            const wrapper = mountMainLayout({
+ deploymentMode: true,
+routePath: "/"
+});
 
             expect(wrapper.find("[data-test='deployment-mode']").exists()).toBe(true);
         });
 
         it("hides DeploymentMode on admin routes even when deploymentMode is true", () => {
-            const wrapper = mountMainLayout({ deploymentMode: true, routePath: "/admin/users" });
+            const wrapper = mountMainLayout({
+ deploymentMode: true,
+routePath: "/admin/users"
+});
 
             expect(wrapper.find("[data-test='deployment-mode']").exists()).toBe(false);
         });

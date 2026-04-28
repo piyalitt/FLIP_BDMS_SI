@@ -143,13 +143,13 @@ export async function fetchJobTypes(): Promise<JobTypesResponse> {
     try {
         const response = await _http.get<JobTypesResponse>("/model/job-types");
         _jobTypesCache = response.data as JobTypesResponse;
+
         return _jobTypesCache!;
     } catch (error) {
         console.error("[fetchJobTypes] Error fetching job types:", error);
+
         // Return a minimal default if API fails
-        return {
-            [DEFAULT_JOB_TYPE]: ["trainer.py", "validator.py", "models.py", "config.json"]
-        };
+        return { [DEFAULT_JOB_TYPE]: ["trainer.py", "validator.py", "models.py", "config.json"] };
     }
 }
 

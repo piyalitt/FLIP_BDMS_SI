@@ -106,7 +106,7 @@ import ModelUpload from "@/partials/models/ModelUpload.vue";
 import Training from "@/partials/models/Training.vue";
 import { routeChange } from "@/router";
 import { getJobTypeFromConfig } from "@/services/file-service";
-import { DEFAULT_JOB_TYPE, editModel, fetchJobTypes, getModel, getRequiredFilesForJobType, ModelStatusEnum, type JobType, type JobTypesResponse } from "@/services/model-service";
+import { DEFAULT_JOB_TYPE, editModel, fetchJobTypes, getModel, getRequiredFilesForJobType, type JobType, type JobTypesResponse,ModelStatusEnum } from "@/services/model-service";
 import { useAuthStore, UserPermissions } from "@/store/auth";
 import { useErrorStore } from "@/store/error";
 import { useProjectStore } from "@/store/project";
@@ -139,6 +139,7 @@ onBeforeMount(async () => {
             text: "Unable to view this model as this project is not yet approved."
         });
         routeChange.viewProject(projectStore.getProject?.id ?? "");
+
         return;
     }
     // Fetch job types from API
@@ -196,6 +197,7 @@ watch(error, () => {
 function getStatusEnumValue(status: string | undefined): number {
     // Map string status (e.g. "PENDING") to ModelStatusEnum value
     if (!status || !(status in ModelStatusEnum)) return ModelStatusEnum.ERROR;
+
     // @ts-ignore
     return ModelStatusEnum[status];
 }
@@ -221,7 +223,7 @@ const steps = computed((): IStep[] => {
             name: "Model Prepared",
             description: statusValue === ModelStatusEnum.INITIATED ? "Model Queued" : undefined,
             inProgress: statusValue === ModelStatusEnum.INITIATED,
-            completed: statusValue >= ModelStatusEnum.PREPARED || isStopped || isError,
+            completed: statusValue >= ModelStatusEnum.PREPARED || isStopped || isError
         },
         {
             id: "03",
@@ -254,6 +256,7 @@ const readyToTrain = computed(() => {
 
 const trainingStartedOrStopped = computed(() => {
     const statusValue = getStatusEnumValue(modelData.value?.status);
+
     return statusValue > ModelStatusEnum.PENDING ||
         statusValue === ModelStatusEnum.ERROR ||
         statusValue === ModelStatusEnum.STOPPED;

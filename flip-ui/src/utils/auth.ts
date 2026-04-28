@@ -71,12 +71,13 @@ export const authCheck = async (
             // No valid session, redirect to login
             auth.user = null;
             auth.signInStep = null;
+
             return next("/auth/login");
         }
 
         // If we are in new-password challenge
-        if (auth.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
-            return next('/auth/new-password');
+        if (auth.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
+            return next("/auth/new-password");
         }
 
         // Load user info if needed
@@ -86,7 +87,7 @@ export const authCheck = async (
 
         return next();
 
-    } catch (error) {
+    } catch {
         auth.$reset();
         localStorage.clear();
         routeChange.gotoLogin();
@@ -111,16 +112,14 @@ export const isUserUnconfirmedCheck = async (
 
 export const apiGateway = "CentralHubAPIGateway";
 
-const devMode = process.env.NODE_ENV === "development";
-
 export const authConfig = {
     Auth: {
         Cognito: {
-            region: process.env.VITE_AWS_REGION || 'eu-west-2',
+            region: process.env.VITE_AWS_REGION || "eu-west-2",
             userPoolId: process.env.VITE_AWS_USER_POOL_ID,
             userPoolClientId: process.env.VITE_AWS_CLIENT_ID,
             clientSecret: process.env.VITE_AWS_CLIENT_SECRET,
-            authenticationFlowType: 'USER_PASSWORD_AUTH',
+            authenticationFlowType: "USER_PASSWORD_AUTH",
             loginWith: {}
         }
     }

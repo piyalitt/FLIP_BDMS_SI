@@ -29,20 +29,20 @@ const mockRoute = reactive({
 
 vi.mock("vue-router", async (importOriginal) => {
     const actual = await importOriginal<typeof import("vue-router")>();
+
     return {
         ...actual,
         useRoute: () => mockRoute
     };
 });
 
-vi.mock("@/router", () => ({
-    default: { push: vi.fn() }
-}));
+vi.mock("@/router", () => ({ default: { push: vi.fn() } }));
 
 const mockSendQuery = vi.fn();
 
 vi.mock("@/services/cohort-query-service", async (importOriginal) => {
     const actual = await importOriginal<typeof import("@/services/cohort-query-service")>();
+
     return {
         ...actual,
         sendQuery: (...args: unknown[]) => mockSendQuery(...args)
@@ -67,11 +67,9 @@ const stubs = {
         props: ["initialValue", "inputProps", "name", "label"]
     },
     QueryResultCharts: { template: "<div data-test='query-result-charts' />" },
-    Form: {
-        template: "<form @submit.prevent=\"$emit('submit', { query: 'SELECT * FROM patients' })\"><slot /></form>"
-    },
+    Form: { template: "<form @submit.prevent=\"$emit('submit', { query: 'SELECT * FROM patients' })\"><slot /></form>" },
     "icon-heroicons-outline-clock": { template: "<span />" },
-    Transition: { template: "<div><slot /></div>" },
+    Transition: { template: "<div><slot /></div>" }
 };
 
 const unstagedProject: IProject = {
@@ -114,6 +112,7 @@ function mountCohortQuery(options: {
     permissions?: string[];
 } = {}) {
     const { project, permissions = ["CanManageProjects"] } = options;
+
     return mount(CohortQuery, {
         global: {
             plugins: [createTestingPinia({
@@ -124,7 +123,10 @@ function mountCohortQuery(options: {
                         user: {
                             username: "testuser",
                             userId: "1",
-                            attributes: { sub: "1", email: "test@example.com" },
+                            attributes: {
+ sub: "1",
+email: "test@example.com"
+},
                             permissions
                         },
                         signInStep: "DONE"
@@ -197,14 +199,20 @@ describe("CohortQuery", () => {
         });
 
         it("sets readonly on AiCodeTextArea when user is observer", () => {
-            const wrapper = mountCohortQuery({ project: unstagedProject, permissions: [] });
+            const wrapper = mountCohortQuery({
+ project: unstagedProject,
+permissions: []
+});
             const codeTextArea = wrapper.findComponent({ name: "AiCodeTextArea" });
 
             expect(codeTextArea.props("inputProps")).toEqual({ readonly: true });
         });
 
         it("does not set readonly when project is UNSTAGED and user has permissions", () => {
-            const wrapper = mountCohortQuery({ project: unstagedProject, permissions: ["CanManageProjects"] });
+            const wrapper = mountCohortQuery({
+ project: unstagedProject,
+permissions: ["CanManageProjects"]
+});
             const codeTextArea = wrapper.findComponent({ name: "AiCodeTextArea" });
 
             expect(codeTextArea.props("inputProps")).toEqual({ readonly: false });
@@ -223,7 +231,10 @@ describe("CohortQuery", () => {
         });
 
         it("hides the button when user is observer", () => {
-            const wrapper = mountCohortQuery({ project: unstagedProject, permissions: [] });
+            const wrapper = mountCohortQuery({
+ project: unstagedProject,
+permissions: []
+});
 
             expect(wrapper.find(CohortQueryPage.runCohortQueryButton).exists()).toBe(false);
         });
@@ -247,7 +258,11 @@ describe("CohortQuery", () => {
         it("calls sendQuery with correct parameters on form submit", async () => {
             mockSendQuery.mockResolvedValue({
                 queryId: "new-query-id",
-                trust: [{ statusCode: 200, name: "Trust A", message: "OK" }]
+                trust: [{
+ statusCode: 200,
+name: "Trust A",
+message: "OK"
+}]
             });
 
             const wrapper = mountCohortQuery({ project: unstagedProject });
@@ -266,7 +281,11 @@ describe("CohortQuery", () => {
         it("shows success snackbar on successful query", async () => {
             mockSendQuery.mockResolvedValue({
                 queryId: "new-query-id",
-                trust: [{ statusCode: 200, name: "Trust A", message: "OK" }]
+                trust: [{
+ statusCode: 200,
+name: "Trust A",
+message: "OK"
+}]
             });
 
             const wrapper = mountCohortQuery({ project: unstagedProject });
@@ -297,7 +316,11 @@ describe("CohortQuery", () => {
         it("emits UpdateProject on successful query", async () => {
             mockSendQuery.mockResolvedValue({
                 queryId: "new-query-id",
-                trust: [{ statusCode: 200, name: "Trust A", message: "OK" }]
+                trust: [{
+ statusCode: 200,
+name: "Trust A",
+message: "OK"
+}]
             });
 
             const wrapper = mountCohortQuery({ project: unstagedProject });

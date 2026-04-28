@@ -94,12 +94,10 @@ import { useRoute } from "vue-router";
 import { array, lazy, object, string } from "yup";
 
 import AiAlert from "@/components/AiAlert/AiAlert.vue";
-import {
-    IInitTraining, initialiseTraining,
+import { IInitTraining, initialiseTraining,
     JobTypes,
     ModelStatus,
-    ModelStatusEnum
-} from "@/services/model-service";
+    ModelStatusEnum } from "@/services/model-service";
 import { useAuthStore } from "@/store/auth";
 import { Snackbar } from "@/utils/snackbar";
 

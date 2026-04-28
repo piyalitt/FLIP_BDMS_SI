@@ -11,17 +11,14 @@
  * limitations under the License.
  */
 
-import {
-    confirmResetPassword,
+import { confirmResetPassword,
     confirmSignIn,
     fetchAuthSession,
     fetchUserAttributes,
     getCurrentUser,
     resetPassword,
     signIn,
-    signOut
-} from "aws-amplify/auth";
-
+    signOut } from "aws-amplify/auth";
 import { defineStore } from "pinia";
 
 import { IChangePassword } from "@/interfaces/auth/interfaces";
@@ -99,7 +96,10 @@ export const useAuthStore = defineStore("auth", {
         async fetchInfo() {
             // Get the currently signed-in user (no sign-in step here)
             const { username, userId } = await getCurrentUser();
-            this.user = await buildUserWithPermissions({ username, userId });
+            this.user = await buildUserWithPermissions({
+ username,
+userId
+});
             this.signInStep = "DONE";
         },
 
@@ -129,8 +129,12 @@ export const useAuthStore = defineStore("auth", {
             if (out.isSignedIn) {
                 // Fully signed in
                 const { username, userId } = await getCurrentUser();
-                this.user = await buildUserWithPermissions({ username, userId });
+                this.user = await buildUserWithPermissions({
+ username,
+userId
+});
                 this.signInStep = "DONE";
+
                 return;
             }
 
@@ -142,7 +146,10 @@ export const useAuthStore = defineStore("auth", {
 
             // After confirming new password, user should be signed in
             const { username, userId } = await getCurrentUser();
-            this.user = await buildUserWithPermissions({ username, userId });
+            this.user = await buildUserWithPermissions({
+ username,
+userId
+});
             this.signInStep = "DONE";
         },
 
@@ -167,12 +174,9 @@ export const useAuthStore = defineStore("auth", {
         async resetPassword(email: string) {
             const response = await resetPassword({
                 username: email,
-                options: {
-                clientMetadata: {
-                    source: "web-app"
-                }
-                }
+                options: { clientMetadata: { source: "web-app" } }
             });
+
             return response;
         },
 
@@ -181,12 +185,9 @@ export const useAuthStore = defineStore("auth", {
                 username: email,
                 confirmationCode: code,
                 newPassword,
-                options: {
-                    clientMetadata: {
-                        source: "web-app"
-                    }
-                }
+                options: { clientMetadata: { source: "web-app" } }
             });
+
             return response;
         },
 
