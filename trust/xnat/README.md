@@ -103,9 +103,11 @@ This can also be done manually from XNAT:
 
 ## DICOM Anonymization
 
-XNAT includes a built-in anonymization engine that processes incoming DICOM data to remove Protected Health Information (PHI) from DICOM headers. FLIP replaces the default XNAT anonymization script with a comprehensive site-wide script (`anon_script.das`) that removes patient identifiers, institutional identifiers, physician/operator identifiers, and pseudonymizes UIDs.
+XNAT includes a built-in anonymization engine that processes incoming DICOM data to remove Protected Health Information (PHI) from DICOM headers. FLIP replaces the default XNAT anonymization script with a comprehensive site-wide script (`anon_script.das`) that removes patient identifiers, institutional identifiers, physician/operator identifiers, and pseudonymizes UIDs (including Patient ID, Patient Name and SOP/Study/Series Instance UIDs).
 
 The anonymization script is configured automatically during XNAT initialization via `configure-xnat.sh`. It is applied to all incoming DICOM data when the SCP receiver has `anonymizationEnabled` set to `true`.
+
+The script is covered by an automated test pack in [`tests/`](./tests/) which parses `anon_script.das`, applies the rules to a synthetic DICOM study populated with PHI in every targeted tag, and asserts the resulting dataset is clean. Run with `make unit_test` from this directory or `make -C tests unit_test`. Update `PHI_TAGS_REQUIRED` in `tests/test_anon_script_static.py` whenever you change the script's PHI coverage.
 
 ## DICOM to NIfTI Conversion
 

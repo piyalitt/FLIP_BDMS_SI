@@ -14,7 +14,8 @@
 	xnat-reset xnat-configure xnat-configure-trust-1 xnat-configure-trust-2 xnat-configure-local \
 	create-network-trust-1 create-network-trust-2 create-network-trust-local \
 	up-xnat-1 up-xnat-2 up-xnat-local \
-	down-xnat-1 down-xnat-2 down-xnat-local
+	down-xnat-1 down-xnat-2 down-xnat-local \
+	test unit_test local_test
 
 # if tag PROD=true is passed, set PROD=true
 ifeq ($(PROD),true)
@@ -231,3 +232,7 @@ create-network-trust-local:
 	@echo "🔧 Ensuring external Docker networks exist..."
 	@docker network inspect ${network_local} >/dev/null 2>&1 || \
 		docker network create --driver overlay --attachable ${network_local}
+
+# Anonymization-script tests (pure Python; no XNAT or Docker required)
+test unit_test local_test:
+	$(MAKE) -C tests $@
