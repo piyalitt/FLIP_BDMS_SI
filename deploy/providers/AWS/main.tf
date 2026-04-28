@@ -122,23 +122,23 @@ resource "aws_db_subnet_group" "flip_db_subnet_group" {
 }
 
 module "flip_db" {
-  source                     = "terraform-aws-modules/rds/aws"
-  version                    = "~> 6.0"
-  identifier                 = "flip-database"
-  engine                     = "postgres"
-  engine_version             = var.postgres_version
-  auto_minor_version_upgrade = true
-  instance_class             = "db.t3.micro"
-  allocated_storage          = 20
-  username                   = var.POSTGRES_USER
-  db_name                    = var.POSTGRES_DB
-  db_subnet_group_name       = aws_db_subnet_group.flip_db_subnet_group.name
-  vpc_security_group_ids     = [module.rds_security_group.security_group.id]
-  backup_retention_period    = 7
-  skip_final_snapshot        = var.environment != "prod"
-  deletion_protection        = var.environment == "prod"
-  final_snapshot_identifier  = var.environment == "prod" ? "flip-database-final-${formatdate("YYYYMMDDhhmmss", timestamp())}" : null
-  family                     = "postgres${split(".", var.postgres_version)[0]}"
+  source                           = "terraform-aws-modules/rds/aws"
+  version                          = "~> 6.0"
+  identifier                       = "flip-database"
+  engine                           = "postgres"
+  engine_version                   = var.postgres_version
+  auto_minor_version_upgrade       = true
+  instance_class                   = "db.t3.micro"
+  allocated_storage                = 20
+  username                         = var.POSTGRES_USER
+  db_name                          = var.POSTGRES_DB
+  db_subnet_group_name             = aws_db_subnet_group.flip_db_subnet_group.name
+  vpc_security_group_ids           = [module.rds_security_group.security_group.id]
+  backup_retention_period          = 7
+  skip_final_snapshot              = var.environment != "prod"
+  deletion_protection              = var.environment == "prod"
+  final_snapshot_identifier_prefix = "flip-database-final"
+  family                           = "postgres${split(".", var.postgres_version)[0]}"
 }
 
 ############################
