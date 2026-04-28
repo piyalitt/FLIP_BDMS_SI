@@ -49,7 +49,7 @@
                         <div class="overflow-hidden border border-gray-300 rounded-lg shadow-lg dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
                             <div class="w-full">
                                 <div class="p-2 transition bg-primary-500 sm:p-3">
-                                    <div class="flex flex-wrap items-center justify-between mx-auto max-w-7xl">
+                                    <div class="flex flex-wrap items-center justify-between">
                                         <div class="flex items-center flex-1">
                                             <span class="flex p-2 rounded-lg bg-primary-700">
                                                 <icon-ph-megaphone-duotone
