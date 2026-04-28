@@ -32,4 +32,19 @@ describe("Ai Alert", () => {
 
         expect(comp.element).toMatchSnapshot();
     });
+
+    it("escapes HTML in the text prop to prevent XSS", () => {
+        const payload = "<img src=x onerror=alert(1)>";
+
+        const comp = mount(AiAlert, {
+            global: { plugins: [createPinia()] },
+            props: {
+                variant: "info",
+                text: payload
+            }
+        });
+
+        expect(comp.html()).not.toContain("<img");
+        expect(comp.text()).toContain(payload);
+    });
 });
