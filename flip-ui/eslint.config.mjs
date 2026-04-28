@@ -53,6 +53,7 @@ export default defineConfigWithVueTs(
         rules: {
             "simple-import-sort/imports": "error",
             "@stylistic/indent": ["error", 4, { SwitchCase: 1 }],
+            "comma-spacing": ["error", { before: false, after: true }],
             "object-curly-spacing": ["error", "always"],
             "object-curly-newline": ["error", {
                 ObjectExpression: { multiline: true, minProperties: 2 },

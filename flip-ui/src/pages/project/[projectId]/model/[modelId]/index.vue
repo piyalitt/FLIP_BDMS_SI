@@ -106,7 +106,7 @@ import ModelUpload from "@/partials/models/ModelUpload.vue";
 import Training from "@/partials/models/Training.vue";
 import { routeChange } from "@/router";
 import { getJobTypeFromConfig } from "@/services/file-service";
-import { DEFAULT_JOB_TYPE, editModel, fetchJobTypes, getModel, getRequiredFilesForJobType, type JobType, type JobTypesResponse,ModelStatusEnum } from "@/services/model-service";
+import { DEFAULT_JOB_TYPE, editModel, fetchJobTypes, getModel, getRequiredFilesForJobType, type JobType, type JobTypesResponse, ModelStatusEnum } from "@/services/model-service";
 import { useAuthStore, UserPermissions } from "@/store/auth";
 import { useErrorStore } from "@/store/error";
 import { useProjectStore } from "@/store/project";
