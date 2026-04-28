@@ -50,6 +50,7 @@ def _decode_cognito_jwt(token: str) -> dict[str, Any]:
         issuer=issuer,
         options={
             # aud is validated manually below so we can also handle access tokens (which use client_id).
+            # TODO(#344): drop ID-token support and validate aud directly via PyJWT once flip-ui sends access tokens.
             "verify_aud": False,
             "require": ["exp", "iss", "sub", "token_use"],
         },
