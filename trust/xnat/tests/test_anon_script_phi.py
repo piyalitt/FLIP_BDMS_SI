@@ -145,6 +145,33 @@ def test_distinct_studies_get_distinct_uids(
     assert a.SOPInstanceUID != b.SOPInstanceUID
 
 
+def test_accession_number_tag_is_removed(anonymized: Dataset) -> None:
+    """OMOP <-> XNAT linkage is via XNAT's session label, NOT the DICOM tag.
+
+    imaging-api sets ``relabelMap.Session = accession_number`` at import time
+    (see trust/imaging-api/imaging_api/routers/schemas.py:201-206), and
+    downstream lookups use ``experiment_id_or_label=accession_id``. The DICOM
+    Accession Number tag must therefore be stripped from the stored object so
+    we don't leak it as PHI; the linkage continues to work via XNAT metadata.
+    """
+    assert 0x00080050 not in anonymized, (
+        "Accession Number (0008,0050) must be removed from the stored DICOM. "
+        "OMOP <-> XNAT linkage is preserved via XNAT's session label (set by "
+        "imaging-api's relabelMap), not via this tag."
+    )
+
+
+def test_xnat_session_label_preserved_for_linkage(anonymized: Dataset, xnat_labels: XnatLabels) -> None:
+    """Study Description holds the XNAT session label after anonymization.
+
+    The script writes ``(0008,1030) := session``. In production the session
+    label is the accession number, so this test pins the OMOP <-> XNAT join
+    key into the anonymized payload's Study Description. If a future change
+    drops this rule, downstream DICOM-only consumers lose the linkage.
+    """
+    assert anonymized.StudyDescription == xnat_labels.session
+
+
 def test_deidentification_flags_set(anonymized: Dataset) -> None:
     assert anonymized[0x00120062].value == "YES", "Patient Identity Removed must be 'YES'"
     assert "FLIP" in anonymized[0x00120063].value, "De-identification Method must reference FLIP"

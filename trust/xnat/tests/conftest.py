@@ -36,7 +36,12 @@ def anon_rules(anon_script_path: Path) -> list[Rule]:
 
 @pytest.fixture
 def xnat_labels() -> XnatLabels:
-    return XnatLabels(project="FLIP_TEST_PROJECT", subject="FLIP_SUBJ_001", session="FLIP_SESS_001")
+    # In production the XNAT session label is set by imaging-api's
+    # `relabelMap.Session = accession_number` (see
+    # trust/imaging-api/imaging_api/routers/schemas.py:201-206), so the
+    # session label IS the accession number. Encode that here so tests
+    # exercise the same invariant the OMOP <-> XNAT linkage relies on.
+    return XnatLabels(project="FLIP_TEST_PROJECT", subject="FLIP_SUBJ_001", session="ACC-FAK-77115197")
 
 
 def _phi_study() -> Dataset:
