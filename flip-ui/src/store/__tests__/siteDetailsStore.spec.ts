@@ -67,9 +67,9 @@ describe("siteDetailsStore", () => {
     describe("setSiteDetails", () => {
         it("sets state with full details", () => {
             store.setSiteDetails({
- banner: mockBanner,
-deploymentMode: true
-});
+                banner: mockBanner,
+                deploymentMode: true
+            });
 
             expect(store.banner).toEqual(mockBanner);
             expect(store.deploymentMode).toBe(true);
@@ -101,9 +101,9 @@ deploymentMode: true
         it("preserves current deploymentMode in the API call", async () => {
             store.setSiteDetails({ deploymentMode: false });
             vi.mocked(updateSiteDetails).mockResolvedValue({
- banner: mockBanner,
-deploymentMode: false
-});
+                banner: mockBanner,
+                deploymentMode: false
+            });
 
             await store.updateBanner(mockBanner);
 
@@ -141,9 +141,9 @@ deploymentMode: false
     describe("updateDeploymentMode", () => {
         it("calls updateSiteDetails with correct payload and updates state on success", async () => {
             store.setSiteDetails({
- banner: mockBanner,
-deploymentMode: false
-});
+                banner: mockBanner,
+                deploymentMode: false
+            });
             vi.mocked(updateSiteDetails).mockResolvedValue(mockResponse);
 
             await store.updateDeploymentMode(true);
@@ -157,13 +157,13 @@ deploymentMode: false
 
         it("includes current banner in the API call", async () => {
             store.setSiteDetails({
- banner: mockBanner,
-deploymentMode: false
-});
+                banner: mockBanner,
+                deploymentMode: false
+            });
             vi.mocked(updateSiteDetails).mockResolvedValue({
- banner: mockBanner,
-deploymentMode: true
-});
+                banner: mockBanner,
+                deploymentMode: true
+            });
 
             await store.updateDeploymentMode(true);
 
@@ -188,14 +188,14 @@ deploymentMode: true
         // Asserting actual behavior here.
         it("shows error snackbar and does not update state on failure", async () => {
             const initialBanner: ISiteBanner = {
- message: "Initial",
-link: "",
-enabled: false
-};
+                message: "Initial",
+                link: "",
+                enabled: false
+            };
             store.setSiteDetails({
- banner: initialBanner,
-deploymentMode: false
-});
+                banner: initialBanner,
+                deploymentMode: false
+            });
             vi.mocked(updateSiteDetails).mockRejectedValue(new Error("API error"));
 
             await store.updateDeploymentMode(true);

@@ -63,12 +63,12 @@ const mockTrustData: IImagingProjectStatus[] = [
         trustName: "Alpha Trust",
         projectCreationCompleted: true,
         importStatus: {
- successful: 10,
-failed: 2,
-processing: 3,
-queued: 5,
-queueFailed: 1
-},
+            successful: 10,
+            failed: 2,
+            processing: 3,
+            queued: 5,
+            queueFailed: 1
+        },
         reimportCount: 2
     },
     {

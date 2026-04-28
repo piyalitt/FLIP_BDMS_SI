@@ -90,10 +90,10 @@ function mountMainLayout(options: {
 
     const banner = bannerEnabled !== undefined
         ? {
- message: bannerMessage,
-link: "",
-enabled: bannerEnabled
-}
+            message: bannerMessage,
+            link: "",
+            enabled: bannerEnabled
+        }
         : undefined;
 
     return mount(MainLayout, {
@@ -108,9 +108,9 @@ enabled: bannerEnabled
                                 username: "testuser",
                                 userId: "1",
                                 attributes: {
- sub: "1",
-email
-},
+                                    sub: "1",
+                                    email
+                                },
                                 permissions
                             },
                             signInStep: "DONE"
@@ -121,9 +121,9 @@ email
                         },
                         error: { hasError },
                         modals: {
- createProjectOpen: false,
-createModelOpen: false
-},
+                            createProjectOpen: false,
+                            createModelOpen: false
+                        },
                         siteSettings: { darkMode: false }
                     }
                 })
@@ -133,9 +133,9 @@ createModelOpen: false
                 AiMainNavigation: true,
                 AiHeader: { template: "<div data-test='header'><slot /></div>" },
                 AiUserDropdown: {
- template: "<div data-test='user-dropdown' />",
-props: ["isDark", "emailAddress", "role"]
-},
+                    template: "<div data-test='user-dropdown' />",
+                    props: ["isDark", "emailAddress", "role"]
+                },
                 AiErrorAlert: { template: "<div data-test='error-alert' />" },
                 AiLoader: { template: "<div data-test='loader' />" },
                 DeploymentMode: { template: "<div data-test='deployment-mode' />" },
@@ -231,18 +231,18 @@ describe("MainLayout", () => {
     describe("deployment mode", () => {
         it("shows DeploymentMode when deploymentMode is true on non-admin route", () => {
             const wrapper = mountMainLayout({
- deploymentMode: true,
-routePath: "/"
-});
+                deploymentMode: true,
+                routePath: "/"
+            });
 
             expect(wrapper.find("[data-test='deployment-mode']").exists()).toBe(true);
         });
 
         it("hides DeploymentMode on admin routes even when deploymentMode is true", () => {
             const wrapper = mountMainLayout({
- deploymentMode: true,
-routePath: "/admin/users"
-});
+                deploymentMode: true,
+                routePath: "/admin/users"
+            });
 
             expect(wrapper.find("[data-test='deployment-mode']").exists()).toBe(false);
         });

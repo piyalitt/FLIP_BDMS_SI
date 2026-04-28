@@ -44,10 +44,10 @@ type Attributes = {
 };
 
 type AmplifyUser = {
-  username: string;
-  userId: string;
-  attributes: Attributes;
-  permissions: string[];
+    username: string;
+    userId: string;
+    attributes: Attributes;
+    permissions: string[];
 };
 
 type UserCredentials = {
@@ -64,21 +64,21 @@ type UserCredentials = {
 type SignInStep = "DONE" | "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED" | string;
 
 type AuthState = {
-  user: AmplifyUser | null;
-  signInStep: SignInStep | null; // track v6 nextStep
+    user: AmplifyUser | null;
+    signInStep: SignInStep | null; // track v6 nextStep
 };
 
 const buildUserWithPermissions = async (
-  base: Pick<AmplifyUser, "username" | "userId">
+    base: Pick<AmplifyUser, "username" | "userId">
 ): Promise<AmplifyUser> => {
-  const attributes = (await fetchUserAttributes()) as Attributes;
-  const permsRes = await getUserPermissions(attributes.sub);
+    const attributes = (await fetchUserAttributes()) as Attributes;
+    const permsRes = await getUserPermissions(attributes.sub);
 
-  return {
-    ...base,
-    attributes,
-    permissions: permsRes.permissions ?? []
-  };
+    return {
+        ...base,
+        attributes,
+        permissions: permsRes.permissions ?? []
+    };
 };
 
 
@@ -97,9 +97,9 @@ export const useAuthStore = defineStore("auth", {
             // Get the currently signed-in user (no sign-in step here)
             const { username, userId } = await getCurrentUser();
             this.user = await buildUserWithPermissions({
- username,
-userId
-});
+                username,
+                userId
+            });
             this.signInStep = "DONE";
         },
 
@@ -130,9 +130,9 @@ userId
                 // Fully signed in
                 const { username, userId } = await getCurrentUser();
                 this.user = await buildUserWithPermissions({
- username,
-userId
-});
+                    username,
+                    userId
+                });
                 this.signInStep = "DONE";
 
                 return;
@@ -147,9 +147,9 @@ userId
             // After confirming new password, user should be signed in
             const { username, userId } = await getCurrentUser();
             this.user = await buildUserWithPermissions({
- username,
-userId
-});
+                username,
+                userId
+            });
             this.signInStep = "DONE";
         },
 

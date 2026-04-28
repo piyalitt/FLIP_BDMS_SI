@@ -124,9 +124,9 @@ function mountCohortQuery(options: {
                             username: "testuser",
                             userId: "1",
                             attributes: {
- sub: "1",
-email: "test@example.com"
-},
+                                sub: "1",
+                                email: "test@example.com"
+                            },
                             permissions
                         },
                         signInStep: "DONE"
@@ -200,9 +200,9 @@ describe("CohortQuery", () => {
 
         it("sets readonly on AiCodeTextArea when user is observer", () => {
             const wrapper = mountCohortQuery({
- project: unstagedProject,
-permissions: []
-});
+                project: unstagedProject,
+                permissions: []
+            });
             const codeTextArea = wrapper.findComponent({ name: "AiCodeTextArea" });
 
             expect(codeTextArea.props("inputProps")).toEqual({ readonly: true });
@@ -210,9 +210,9 @@ permissions: []
 
         it("does not set readonly when project is UNSTAGED and user has permissions", () => {
             const wrapper = mountCohortQuery({
- project: unstagedProject,
-permissions: ["CanManageProjects"]
-});
+                project: unstagedProject,
+                permissions: ["CanManageProjects"]
+            });
             const codeTextArea = wrapper.findComponent({ name: "AiCodeTextArea" });
 
             expect(codeTextArea.props("inputProps")).toEqual({ readonly: false });
@@ -232,9 +232,9 @@ permissions: ["CanManageProjects"]
 
         it("hides the button when user is observer", () => {
             const wrapper = mountCohortQuery({
- project: unstagedProject,
-permissions: []
-});
+                project: unstagedProject,
+                permissions: []
+            });
 
             expect(wrapper.find(CohortQueryPage.runCohortQueryButton).exists()).toBe(false);
         });
@@ -259,10 +259,10 @@ permissions: []
             mockSendQuery.mockResolvedValue({
                 queryId: "new-query-id",
                 trust: [{
- statusCode: 200,
-name: "Trust A",
-message: "OK"
-}]
+                    statusCode: 200,
+                    name: "Trust A",
+                    message: "OK"
+                }]
             });
 
             const wrapper = mountCohortQuery({ project: unstagedProject });
@@ -282,10 +282,10 @@ message: "OK"
             mockSendQuery.mockResolvedValue({
                 queryId: "new-query-id",
                 trust: [{
- statusCode: 200,
-name: "Trust A",
-message: "OK"
-}]
+                    statusCode: 200,
+                    name: "Trust A",
+                    message: "OK"
+                }]
             });
 
             const wrapper = mountCohortQuery({ project: unstagedProject });
@@ -317,10 +317,10 @@ message: "OK"
             mockSendQuery.mockResolvedValue({
                 queryId: "new-query-id",
                 trust: [{
- statusCode: 200,
-name: "Trust A",
-message: "OK"
-}]
+                    statusCode: 200,
+                    name: "Trust A",
+                    message: "OK"
+                }]
             });
 
             const wrapper = mountCohortQuery({ project: unstagedProject });

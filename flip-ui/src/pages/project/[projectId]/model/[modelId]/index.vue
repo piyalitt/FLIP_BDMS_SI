@@ -266,7 +266,7 @@ watch([modelData, jobTypes], async () => {
     if (!modelData.value || !Object.keys(jobTypes.value).length) return;
     if (modelData.value?.files?.length) {
         // Check if config.json exists in uploaded files and is fully scanned
-    const configFile = modelData.value.files.find((f: { name: string; status: string }) => f.name === "config.json");
+        const configFile = modelData.value.files.find((f: { name: string; status: string }) => f.name === "config.json");
         const hasCompletedConfigJson = configFile && configFile.status === FileUploadStatus.COMPLETED;
         let jobType = DEFAULT_JOB_TYPE;
         if (hasCompletedConfigJson) {

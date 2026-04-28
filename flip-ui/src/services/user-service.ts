@@ -80,7 +80,7 @@ export async function registerUser(user: IRegisterUserDto): Promise<IRegisterUse
 }
 
 export async function updateUserDisabledState(userId: string, state: IUserDisabledStateDto):
-    Promise<IUserDisabledStateDto> {
+Promise<IUserDisabledStateDto> {
     const response = await _http.put<IUserDisabledStateDto>(`/users/${userId}`, state);
 
     return response.data;

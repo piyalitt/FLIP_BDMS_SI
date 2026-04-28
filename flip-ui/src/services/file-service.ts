@@ -29,9 +29,9 @@ export interface IModelConfig {
 }
 
 export const downloadModelFile = async (url: string): Promise<Blob> => {
-  const response: AxiosResponse<Blob> = await _http.get(url, { responseType: "blob" });
+    const response: AxiosResponse<Blob> = await _http.get(url, { responseType: "blob" });
 
-  return response.data;
+    return response.data;
 };
 
 /**

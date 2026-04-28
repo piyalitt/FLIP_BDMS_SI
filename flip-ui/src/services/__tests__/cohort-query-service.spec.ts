@@ -23,13 +23,13 @@ vi.mock("@/services/api", () => {
 describe("getOMOPResults", () => {
     test("returns parsed results on HTTP 200", async () => {
         const payload = {
- name: "X",
-results: []
-};
+            name: "X",
+            results: []
+        };
         vi.mocked(_http.get).mockResolvedValueOnce({
- status: 200,
-data: payload
-});
+            status: 200,
+            data: payload
+        });
 
         const result = await getOMOPResults("/cohort/abc");
 
@@ -38,9 +38,9 @@ data: payload
 
     test("returns null on HTTP 202 so SWRV keeps polling without logging an error", async () => {
         vi.mocked(_http.get).mockResolvedValueOnce({
- status: 202,
-data: { status: "pending" }
-});
+            status: 202,
+            data: { status: "pending" }
+        });
 
         const result = await getOMOPResults("/cohort/abc");
 
@@ -51,9 +51,9 @@ data: { status: "pending" }
         // Regression guard: without validateStatus including 202, axios would throw and surface
         // a noisy console error to the user while the UI polls for a freshly-submitted query.
         vi.mocked(_http.get).mockResolvedValueOnce({
- status: 202,
-data: { status: "pending" }
-});
+            status: 202,
+            data: { status: "pending" }
+        });
 
         await getOMOPResults("/cohort/abc");
 

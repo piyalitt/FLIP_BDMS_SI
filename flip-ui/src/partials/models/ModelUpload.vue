@@ -295,24 +295,24 @@ const closeFileDeletion = () => {
 };
 
 const downloadFile = async (fileName: string) => {
-  downloadingFile.value = fileName;
+    downloadingFile.value = fileName;
 
-  try {
-    const path = `/files/model/${props.modelId}/${encodeURIComponent(fileName)}`;
-    const blob = await downloadModelFile(path);
+    try {
+        const path = `/files/model/${props.modelId}/${encodeURIComponent(fileName)}`;
+        const blob = await downloadModelFile(path);
 
-    const blobUrl = URL.createObjectURL(blob);
+        const blobUrl = URL.createObjectURL(blob);
 
-    const a = document.createElement("a");
-    a.href = blobUrl;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
 
-    URL.revokeObjectURL(blobUrl);
-  } finally {
-    downloadingFile.value = undefined;
-  }
+        URL.revokeObjectURL(blobUrl);
+    } finally {
+        downloadingFile.value = undefined;
+    }
 };
 </script>

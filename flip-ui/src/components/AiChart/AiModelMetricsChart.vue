@@ -98,15 +98,15 @@ onMounted(() => {
                     fontWeight: 700
                 },
                 dataZoom: [
-                {
- type: "slider",
-bottom: 30,
-minSpan: 10
-},  // visible bar
-                {
- type: "inside",
-minSpan: 10
-}               // scroll/trackpad zoom
+                    {
+                        type: "slider",
+                        bottom: 30,
+                        minSpan: 10
+                    },  // visible bar
+                    {
+                        type: "inside",
+                        minSpan: 10
+                    }               // scroll/trackpad zoom
                 ],
                 calculable: true,
                 toolbox: {

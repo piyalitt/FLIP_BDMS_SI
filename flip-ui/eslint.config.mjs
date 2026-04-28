@@ -11,6 +11,7 @@
  * limitations under the License.
  */
 
+import stylistic from "@stylistic/eslint-plugin";
 import { defineConfigWithVueTs, vueTsConfigs } from "@vue/eslint-config-typescript";
 import simpleImportSort from "eslint-plugin-simple-import-sort";
 import pluginVue from "eslint-plugin-vue";
@@ -47,9 +48,11 @@ export default defineConfigWithVueTs(
         name: "flip-ui/rules",
         plugins: {
             "simple-import-sort": simpleImportSort,
+            "@stylistic": stylistic,
         },
         rules: {
             "simple-import-sort/imports": "error",
+            "@stylistic/indent": ["error", 4, { SwitchCase: 1 }],
             "object-curly-spacing": ["error", "always"],
             "object-curly-newline": ["error", {
                 ObjectExpression: { multiline: true, minProperties: 2 },
