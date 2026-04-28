@@ -135,7 +135,9 @@ module "flip_db" {
   db_subnet_group_name       = aws_db_subnet_group.flip_db_subnet_group.name
   vpc_security_group_ids     = [module.rds_security_group.security_group.id]
   backup_retention_period    = 7
-  skip_final_snapshot        = true
+  skip_final_snapshot        = var.environment != "prod"
+  deletion_protection        = var.environment == "prod"
+  final_snapshot_identifier  = var.environment == "prod" ? "flip-database-final-${formatdate("YYYYMMDDhhmmss", timestamp())}" : null
   family                     = "postgres${split(".", var.postgres_version)[0]}"
 }
 
