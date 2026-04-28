@@ -41,7 +41,7 @@
                         variant === 'error' && 'text-red-500 dark:text-red-200',
                         variant === 'warning' && 'text-yellow-700 dark:text-yellow-300']"
                 >
-                    <span v-html="text" />
+                    <span>{{ text }}</span>
                 </p>
                 <div v-if="!!actionText" class="flex">
                     <p class="mt-3 text-sm md:mt-0 md:ml-6">
