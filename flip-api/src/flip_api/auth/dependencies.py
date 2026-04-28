@@ -22,13 +22,55 @@ from flip_api.config import get_settings
 from flip_api.utils.logger import logger
 
 security = HTTPBearer()
-AWS_REGION = get_settings().AWS_REGION
-USER_POOL_ID = get_settings().AWS_COGNITO_USER_POOL_ID
+
+
+def _decode_cognito_jwt(token: str) -> dict[str, Any]:
+    """
+    Verify a Cognito-issued JWT and return its claims.
+
+    Performs the verification steps documented by AWS for Cognito user pool tokens:
+    signature, expiry, issuer, token_use, and audience binding to this app client.
+
+    Raises ``jwt.InvalidTokenError`` (or a subclass) on any validation failure.
+    """
+    settings = get_settings()
+    aws_region = settings.AWS_REGION
+    user_pool_id = settings.AWS_COGNITO_USER_POOL_ID
+    app_client_id = settings.AWS_COGNITO_APP_CLIENT_ID
+    issuer = f"https://cognito-idp.{aws_region}.amazonaws.com/{user_pool_id}"
+
+    jwks_url = f"{issuer}/.well-known/jwks.json"
+    jwks_client = PyJWKClient(jwks_url)
+    signing_key = jwks_client.get_signing_key_from_jwt(token)
+
+    payload: dict[str, Any] = jwt.decode(
+        token,
+        signing_key.key,
+        algorithms=["RS256"],
+        issuer=issuer,
+        options={
+            # aud is validated manually below so we can also handle access tokens (which use client_id).
+            "verify_aud": False,
+            "require": ["exp", "iss", "sub", "token_use"],
+        },
+    )
+
+    token_use = payload.get("token_use")
+    if token_use == "id":
+        if payload.get("aud") != app_client_id:
+            raise jwt.InvalidTokenError("Invalid audience")
+    elif token_use == "access":
+        if payload.get("client_id") != app_client_id:
+            raise jwt.InvalidTokenError("Invalid client_id")
+    else:
+        raise jwt.InvalidTokenError(f"Unsupported token_use: {token_use!r}")
+
+    return payload
 
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> UUID:
     """
-    Uses PyJWT and PyJWKClient to verify credential token with AWS Cognito
+    Uses PyJWT and PyJWKClient to verify credential token with AWS Cognito.
 
     Args:
         credentials (HTTPAuthorizationCredentials): The HTTP authorization credentials in the result of using
@@ -43,43 +85,12 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
     token = credentials.credentials
 
     try:
-        # Get the JWK (JSON Web Key) from Cognito
-        jwks_url = f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json"
-        jwks_client = PyJWKClient(jwks_url)
+        payload = _decode_cognito_jwt(token)
 
-        # Get the signing key from the JWT header
-        signing_key = jwks_client.get_signing_key_from_jwt(token)
-
-        # Decode and verify the token
-        payload = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256"],
-            audience=None,  # Cognito tokens don't typically have audience validation
-            options={"verify_aud": False},  # Disable audience verification for Cognito
-        )
-
-        # Verify token type and usage
-        if payload.get("token_use") not in ["id", "access"]:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token type. Expected ID token.",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        # Extract user ID from the 'sub' claim
         user_id_str = payload.get("sub")
-        if not user_id_str:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token missing user identifier",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        # Convert to UUID
         try:
-            user_id = UUID(user_id_str)
-        except ValueError:
+            user_id = UUID(str(user_id_str))
+        except (TypeError, ValueError):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid user identifier format",
@@ -102,48 +113,11 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Unexpected error during token verification: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error during authentication",
-        )
-
-
-def get_token_payload(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict[str, Any]:
-    """
-    Alternative function to get the full token payload if needed elsewhere.
-
-    Args:
-        credentials (HTTPAuthorizationCredentials): The HTTP authorization credentials from the Bearer token.
-
-    Returns:
-        dict[str, Any]: The decoded JWT payload.
-
-    Raises:
-        HTTPException: If the credentials are invalid or if there is an error during decoding.
-    """
-    token = credentials.credentials
-
-    try:
-        jwks_url = f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json"
-        jwks_client = PyJWKClient(jwks_url)
-        signing_key = jwks_client.get_signing_key_from_jwt(token)
-
-        # TODO Review -- see above call with argument 'audience=None'
-        payload = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256"],
-            options={"verify_aud": False},
-        )
-
-        return payload
-
-    except Exception as e:
-        logger.error(f"Failed to decode token payload: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
         )
