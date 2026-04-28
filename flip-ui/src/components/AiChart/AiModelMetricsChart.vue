@@ -102,11 +102,11 @@ onMounted(() => {
                         type: "slider",
                         bottom: 30,
                         minSpan: 10
-                    },  // visible bar
+                    }, // visible bar
                     {
                         type: "inside",
                         minSpan: 10
-                    }               // scroll/trackpad zoom
+                    } // scroll/trackpad zoom
                 ],
                 calculable: true,
                 toolbox: {
