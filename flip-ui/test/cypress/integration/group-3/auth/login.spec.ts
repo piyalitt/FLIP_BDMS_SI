@@ -22,7 +22,7 @@ describe("the login page", () => {
     it("validates form fields and logs in as expected", () => {
         cy.getBySel("login-btn").click();
         cy.contains("An email address is required").should("be.visible");
-        cy.contains("Your password must be at least 8 characters").should("be.visible");
+        cy.contains("A password is required").should("be.visible");
         cy.getBySel("username").clear().type("username@@");
         cy.getBySel("password").clear().type("NewPassword!1");
         cy.getBySel("login-btn").click();

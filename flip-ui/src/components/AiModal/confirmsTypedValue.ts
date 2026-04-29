@@ -17,10 +17,11 @@
  * Returns true when the user-typed value matches the expected confirmation
  * word (case-insensitive), or when no confirmation is required at all.
  *
- * The `typed` arg is undefined on the first validation pass (before the user
- * has touched the input) — we coalesce to an empty string so callers don't
- * have to guard against that themselves and the `.toUpperCase()` call here
- * never throws "Cannot read properties of undefined".
+ * `typed` is undefined on the first yup validation pass (before the user
+ * touches the input). Coalescing to "" inside the function keeps callers
+ * — and the schema's test() callback — from having to guard against that.
+ * `expected` is required and typed as `string`, so callers can't pass
+ * undefined; if they ever do, the early-return on "" still applies.
  */
 export function confirmsTypedValue(
     typed: unknown,

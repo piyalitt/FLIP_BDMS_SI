@@ -165,9 +165,8 @@ const close = () => {
 };
 
 // HeadlessUI's Dialog teleports the form out of the SFC's render tree,
-// which makes the schema's confirmation-match validator hard to drive
-// from a vue-test-utils mount in jsdom. Exposing the schema lets unit
-// tests invoke it directly (see AiConfirmModal.spec.ts).
+// so vue-test-utils can't reach the schema validator through the wrapper.
+// Exposing the schema lets a unit test invoke it directly.
 defineExpose({ schema });
 
 </script>

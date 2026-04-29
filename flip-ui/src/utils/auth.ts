@@ -23,6 +23,17 @@ import { useErrorStore } from "@/store/error";
 import { Snackbar } from "./snackbar";
 
 /**
+ * True when the bundle was built with the Cypress E2E flag set
+ * (VITE_E2E=true). Vite inlines this at build time and dead-code-
+ * eliminates the surrounding branches in any other build, so the
+ * test seams below cannot be enabled from a production bundle —
+ * even by an attacker who flips `window.Cypress` in dev tools.
+ */
+function isCypressMode(): boolean {
+    return import.meta.env.VITE_E2E === "true";
+}
+
+/**
  * By default all routes are guarded and authentication is required.
  * This serves as an allowed list of routes which will bypass the auth check.
  *
@@ -71,19 +82,13 @@ export const authCheck = async (
             return next();
         }
 
-        // Cypress E2E tests can't simulate Cognito's SRP handshake against a
-        // static fixture, so they populate `cypress.auth.user` in localStorage
-        // (see test/cypress/support/cognito.ts) and skip the live session
-        // check. Amplify v6's `fetchAuthSession()` would otherwise hang on
-        // forged tokens because `fetchUserAttributes()` expects a multi-step
-        // SDK round-trip the fixture can't reproduce.
-        //
-        // Auth challenges (new-password, MFA setup/verify) still run their
-        // real Login.vue → authStore.signIn() codepath against a stubbed
-        // Cognito response, so this guard handles them the same way the
-        // production flow below does — by redirecting to the page that
-        // owns the challenge — without going through fetchAuthSession.
-        if (window.Cypress) {
+        // Cypress E2E test seam. Gated on a build-time mode flag rather than
+        // a runtime window probe so a stray script setting `window.Cypress`
+        // can never enable it in a production bundle.
+        // Tests can't simulate Cognito's SRP handshake against a static
+        // fixture; the `cypress.auth.user` localStorage key is the
+        // documented contract (see test/cypress/support/cognito.ts).
+        if (isCypressMode()) {
             if (auth.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
                 return to.path === '/auth/new-password' ? next() : next('/auth/new-password');
             }
@@ -96,8 +101,18 @@ export const authCheck = async (
 
             const stored = window.localStorage.getItem("cypress.auth.user");
             if (stored && !auth.user) {
-                auth.user = JSON.parse(stored);
-                auth.signInStep = "DONE";
+                try {
+                    auth.user = JSON.parse(stored);
+                    auth.signInStep = "DONE";
+                } catch (e) {
+                    // Don't fall through to the umbrella catch — that path
+                    // would clear localStorage and show a generic
+                    // "signed out" snackbar, hiding the real cause from a
+                    // confused test author. Treat malformed JSON as
+                    // "no fixture present" and let the redirect below run.
+                    console.error("Cypress auth fixture is malformed JSON:", e);
+                    window.localStorage.removeItem("cypress.auth.user");
+                }
             }
             if (!auth.user) {
                 return next("/auth/login");
@@ -247,7 +262,11 @@ Hub.listen("auth", listener);
 // window-mounted dispatcher (vs poking the SDK from the spec) keeps the
 // test surface narrow — specs only see the user-visible behaviour, not
 // the internal Hub event names.
-if (typeof window !== "undefined" && window.Cypress) {
+//
+// Build-time gate so the dispatcher never ships in production. A runtime
+// `window.Cypress` check would let any browser extension or injected
+// script enable this hook and force-sign-out a real user.
+if (typeof window !== "undefined" && isCypressMode()) {
     (window as unknown as { __cypressTriggerSessionExpiry?: () => void })
         .__cypressTriggerSessionExpiry = () => {
             Hub.dispatch("auth", { event: "tokenRefresh_failure" });

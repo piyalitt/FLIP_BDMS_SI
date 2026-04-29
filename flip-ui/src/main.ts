@@ -34,15 +34,18 @@ app.use(pinia);
 
 Amplify.configure(authConfig);
 
-// Skip the MirageJS dev mock server when running under Cypress — Cypress has
-// its own `cy.intercept` network layer in test/cypress/support/globalIntercepts.ts
-// and a second mock layer would just race with it.
-if (import.meta.env.VITE_LOCAL === "true" && !window.Cypress) {
+// Cypress E2E uses its own `cy.intercept` network layer; running MirageJS
+// alongside it produces racing handlers. The VITE_E2E gate is build-time
+// (Vite inlines it), so non-E2E bundles never ship this branch and there's
+// no runtime-flippable bypass to worry about.
+const isE2E = import.meta.env.VITE_E2E === "true";
+
+if (import.meta.env.VITE_LOCAL === "true" && !isE2E) {
     console.info("Running locally, will use mocked API.");
     makeServer();
 }
 
-if (window.Cypress) {
+if (isE2E) {
     window.pinia = pinia;
 }
 

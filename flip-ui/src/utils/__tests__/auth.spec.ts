@@ -288,22 +288,21 @@ describe("authCheck", () => {
     });
 });
 
-describe("authCheck — Cypress hook (window.Cypress)", () => {
-    // The src code branches at the top of authCheck on `window.Cypress`
-    // so unit tests can drive the same code paths Cypress E2E exercises
-    // without needing to spin up Amplify. Each test sets the flag,
-    // populates / omits `cypress.auth.user` in localStorage, and asserts
-    // the redirect behaviour mirrors the production flow below it.
+describe("authCheck — Cypress hook (VITE_E2E build flag)", () => {
+    // The src code branches at the top of authCheck on isCypressMode(),
+    // which reads `import.meta.env.VITE_E2E` and is dead-code-eliminated
+    // in non-E2E builds. Stubbing the env var lets unit tests drive the
+    // same paths Cypress E2E exercises without spinning up Amplify.
 
     beforeEach(() => {
         setActivePinia(createPinia());
         vi.mocked(fetchAuthSession).mockReset();
         window.localStorage.clear();
-        (window as unknown as { Cypress?: unknown }).Cypress = {};
+        vi.stubEnv("VITE_E2E", "true");
     });
 
     afterEach(() => {
-        delete (window as unknown as { Cypress?: unknown }).Cypress;
+        vi.unstubAllEnvs();
         window.localStorage.clear();
     });
 
@@ -375,6 +374,27 @@ describe("authCheck — Cypress hook (window.Cypress)", () => {
         expect(calls).toEqual(["/auth/mfa-verify"]);
     });
 
+    it("treats a malformed cypress.auth.user as 'no fixture' rather than nuking the session", async () => {
+        // The earlier version threw inside JSON.parse and the umbrella
+        // catch in authCheck would call $reset() + clear localStorage +
+        // show "You've been signed out", masking the real cause from a
+        // confused test author. We now log the error, drop the bad
+        // fixture, and redirect to /auth/login deliberately.
+        window.localStorage.setItem("cypress.auth.user", "{not json");
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        const { next, calls } = makeNext();
+
+        await authCheck(route("/projects") as never, route("/") as never, next as never);
+
+        expect(calls).toEqual(["/auth/login"]);
+        expect(consoleError).toHaveBeenCalled();
+        expect(window.localStorage.getItem("cypress.auth.user")).toBeNull();
+        // The umbrella "signed out" snackbar must NOT fire — that's the
+        // generic error path we explicitly skirt.
+        expect(Snackbar.error).not.toHaveBeenCalled();
+        consoleError.mockRestore();
+    });
+
     it("does not overwrite a preloaded auth.user", async () => {
         const auth = useAuthStore();
         auth.user = {
@@ -397,14 +417,14 @@ describe("authCheck — Cypress hook (window.Cypress)", () => {
 });
 
 describe("__cypressTriggerSessionExpiry", () => {
-    // The auth.ts module installs this onto `window` at import time when
-    // `window.Cypress` is set, so the session-expired Cypress spec can
-    // dispatch the Hub event without simulating a Cognito refresh
-    // round-trip. We reset modules and re-import under our own
-    // window.Cypress to exercise the module-level installer.
+    // auth.ts installs this onto `window` at module import time when the
+    // VITE_E2E build flag is set. The session-expired Cypress spec
+    // dispatches the Hub event through it without having to simulate a
+    // Cognito refresh round-trip. We resetModules + stubEnv so the
+    // module-level installer runs under our control.
 
     it("is a function that dispatches the tokenRefresh_failure Hub event", async () => {
-        (window as unknown as { Cypress?: unknown }).Cypress = {};
+        vi.stubEnv("VITE_E2E", "true");
         vi.resetModules();
 
         // Re-mock aws-amplify/utils for this resetModules scope so the
@@ -427,9 +447,30 @@ describe("__cypressTriggerSessionExpiry", () => {
         expect(dispatch).toHaveBeenCalledWith("auth", { event: "tokenRefresh_failure" });
 
         vi.doUnmock("aws-amplify/utils");
-        delete (window as unknown as { Cypress?: unknown }).Cypress;
+        vi.unstubAllEnvs();
         delete (window as unknown as { __cypressTriggerSessionExpiry?: unknown })
             .__cypressTriggerSessionExpiry;
+    });
+
+    it("does NOT install the trigger when VITE_E2E is unset", async () => {
+        vi.stubEnv("VITE_E2E", "");
+        vi.resetModules();
+        vi.doMock("aws-amplify/utils", () => ({
+            Hub: { listen: vi.fn(), dispatch: vi.fn() }
+        }));
+        // Make sure we're starting from a clean state.
+        delete (window as unknown as { __cypressTriggerSessionExpiry?: unknown })
+            .__cypressTriggerSessionExpiry;
+
+        await import("@/utils/auth");
+
+        expect(
+            (window as unknown as { __cypressTriggerSessionExpiry?: unknown })
+                .__cypressTriggerSessionExpiry
+        ).toBeUndefined();
+
+        vi.doUnmock("aws-amplify/utils");
+        vi.unstubAllEnvs();
     });
 });
 

@@ -124,6 +124,7 @@ npm install
 # so nothing here ever leaves the box. Match the values used in CI.
 cat > .env.development <<'EOF'
 VITE_LOCAL=false
+VITE_E2E=true
 CENTRAL_HUB_API_URL=http://localhost:8080
 AWS_COGNITO_USER_POOL_ID=eu-west-2_DUMMY1234
 AWS_COGNITO_APP_CLIENT_ID=dummyclientid1234567890ab

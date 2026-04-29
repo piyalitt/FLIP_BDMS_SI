@@ -82,6 +82,11 @@ jobs:
     # Production traffic still uses the real `/api` URL.
     env:
       VITE_LOCAL: "false"
+      # Build-time gate for the Cypress test seams in src/utils/auth.ts
+      # and src/main.ts. Vite inlines this and dead-code-eliminates the
+      # surrounding branches in any non-E2E build, so the test seams
+      # cannot ship in a production bundle.
+      VITE_E2E: "true"
       CENTRAL_HUB_API_URL: "http://localhost:8080"
       AWS_COGNITO_USER_POOL_ID: "eu-west-2_DUMMY1234"
       AWS_COGNITO_APP_CLIENT_ID: "dummyclientid1234567890ab"
@@ -117,6 +122,7 @@ jobs:
         run: |
           cat > .env.development <<'EOF'
           VITE_LOCAL=false
+          VITE_E2E=true
           CENTRAL_HUB_API_URL=http://localhost:8080
           AWS_COGNITO_USER_POOL_ID=eu-west-2_DUMMY1234
           AWS_COGNITO_APP_CLIENT_ID=dummyclientid1234567890ab
