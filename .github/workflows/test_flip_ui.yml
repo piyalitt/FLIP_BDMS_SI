@@ -69,13 +69,23 @@ jobs:
     # in <10 min historically; 30 leaves headroom for `runMode: 3` retries
     # without burning a runner-day on a hung browser.
     timeout-minutes: 30
-    # ~75/100 specs pass after the Amplify v6 / API-base-URL fixes in this
-    # branch. The remaining ~25 are individually-bit-rotted assertions
-    # (e.g. selectors that were renamed in the UI, fixtures that drifted)
-    # — UI-level triage was explicitly out of scope per #365. continue-on-
-    # error lets the suite report failures without blocking merges; remove
-    # this once the spec triage follow-up issue is closed.
-    continue-on-error: true
+    # Export Cognito + API config to every step. flip-ui/scripts/generate-
+    # window-js.sh (run via the `pretest:start` npm hook before vite boots)
+    # reads these from the shell env and emits `public/js/window.js`. Without
+    # them, it falls back to its production defaults — including `/api` on
+    # the base URL — and the spec intercepts (path-only, no `/api` prefix)
+    # silently miss every request.
+    #
+    # CENTRAL_HUB_API_URL deliberately omits the `/api` segment used in
+    # production: the specs use path-only intercepts (e.g. "/projects/*")
+    # which never cross slashes, so they wouldn't match `/api/projects/foo`.
+    # Production traffic still uses the real `/api` URL.
+    env:
+      VITE_LOCAL: "false"
+      CENTRAL_HUB_API_URL: "http://localhost:8080"
+      AWS_COGNITO_USER_POOL_ID: "eu-west-2_DUMMY1234"
+      AWS_COGNITO_APP_CLIENT_ID: "dummyclientid1234567890ab"
+      AWS_REGION: "eu-west-2"
     strategy:
       # Don't cancel sibling groups when one fails — surface every broken
       # group in a single CI run so triage is one pass instead of N.
@@ -97,24 +107,17 @@ jobs:
           cache-dependency-path: flip-ui/package-lock.json
 
       - name: Stub flip-ui/.env.development for Cypress
-        # Vite (loadEnv) and the cypress plugin (dotenv) both read this file
-        # at process start. Values are dummies — the suite mocks Cognito and
+        # Vite's `loadEnv` and the cypress plugin (dotenv) both read this
+        # file at process start. The values mirror the job-level `env:`
+        # block above — they're stubs because the suite mocks Cognito and
         # the API at the network layer, so nothing here ever hits AWS.
-        #
-        # VITE_AWS_BASE_URL deliberately omits the `/api` path segment used
-        # in production. The specs' relative-path intercepts (e.g. cy.intercept
-        # "GET", "/projects/*") match by URL path only, and `*` doesn't cross
-        # slashes — so a `/api/projects/foo` request would never match a
-        # `/projects/*` pattern and fall through to the catch-all in
-        # globalIntercepts.ts. Dropping the `/api` prefix in tests is the
-        # tidy fix; production traffic still uses the real `/api` URL.
         run: |
           cat > .env.development <<'EOF'
           VITE_LOCAL=false
-          VITE_AWS_BASE_URL=http://localhost:8080
-          VITE_AWS_USER_POOL_ID=eu-west-2_DUMMY1234
-          VITE_AWS_CLIENT_ID=dummyclientid1234567890ab
-          VITE_AWS_REGION=eu-west-2
+          CENTRAL_HUB_API_URL=http://localhost:8080
+          AWS_COGNITO_USER_POOL_ID=eu-west-2_DUMMY1234
+          AWS_COGNITO_APP_CLIENT_ID=dummyclientid1234567890ab
+          AWS_REGION=eu-west-2
           EOF
 
       - name: Cypress run

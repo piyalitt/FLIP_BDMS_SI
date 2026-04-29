@@ -70,11 +70,18 @@ variables by [`scripts/generate-window-js.sh`](scripts/generate-window-js.sh):
 
 No environment-specific Cognito IDs or API URLs live in the repo.
 
+The UI reads its config at runtime from `window.*` (generated into
+`dist/js/window.js` by `scripts/generate-window-js.sh` from the env
+at dev-start or deploy time). The same env vars drive the rest of the
+stack, so there is no VITE_-prefixed duplication to keep in sync.
+
 | Variable | Description |
 | --- | --- |
-| `VITE_AWS_USER_POOL_ID` | AWS Cognito User Pool ID for authentication |
-| `VITE_AWS_CLIENT_ID` | AWS Cognito App Client ID |
-| `VITE_AWS_BASE_URL` | Full base URL of the flip-api backend, including `/api` |
+| `AWS_COGNITO_USER_POOL_ID` | Cognito User Pool ID |
+| `AWS_COGNITO_APP_CLIENT_ID` | Cognito App Client ID |
+| `AWS_REGION` | AWS region hosting the pool (default `eu-west-2`) |
+| `CENTRAL_HUB_API_URL` | Full base URL of the flip-api backend, including `/api` |
+| `BLACKLISTED_MODEL_FILES` | Comma-separated file names to reject in model uploads |
 | `VITE_LOCAL` | Set to `true` for local mock mode (bypasses Cognito) |
 
 Authentication is handled through [AWS Cognito](https://docs.aws.amazon.com/cognito/). A valid Cognito User Pool and
@@ -112,10 +119,10 @@ npm install
 # so nothing here ever leaves the box. Match the values used in CI.
 cat > .env.development <<'EOF'
 VITE_LOCAL=false
-VITE_AWS_BASE_URL=http://localhost:8080
-VITE_AWS_USER_POOL_ID=eu-west-2_DUMMY1234
-VITE_AWS_CLIENT_ID=dummyclientid1234567890ab
-VITE_AWS_REGION=eu-west-2
+CENTRAL_HUB_API_URL=http://localhost:8080
+AWS_COGNITO_USER_POOL_ID=eu-west-2_DUMMY1234
+AWS_COGNITO_APP_CLIENT_ID=dummyclientid1234567890ab
+AWS_REGION=eu-west-2
 EOF
 npm run test:ci            # boots the dev server on :4173 and runs cypress
 ```

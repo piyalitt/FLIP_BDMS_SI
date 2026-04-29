@@ -25,6 +25,13 @@ import { Snackbar } from "./snackbar";
 /**
  * By default all routes are guarded and authentication is required.
  * This serves as an allowed list of routes which will bypass the auth check.
+ *
+ * MFA pages (/auth/mfa-setup, /auth/mfa-verify) are intentionally NOT
+ * unguarded: they must be reachable only mid-challenge or post-auth-with-
+ * MFA-required. Listing them here would let an unauthenticated visitor
+ * mount the page and trigger Amplify TOTP calls. Instead, the explicit
+ * signInStep / mfa-required redirects below route legitimate users to
+ * these pages and a same-path guard prevents recursive redirects.
  * @type {string[]}
  */
 const unguardedRoutes: string[] = [
@@ -60,7 +67,7 @@ export const authCheck = async (
             return next();
         }
 
-        if (process.env.VITE_LOCAL === "true") {
+        if (import.meta.env.VITE_LOCAL === "true") {
             return next();
         }
 
@@ -97,9 +104,33 @@ export const authCheck = async (
             return next('/auth/new-password');
         }
 
-        // Load user info if needed
-        if (!auth.user) {
+        // First-time MFA enrollment (TOTP setup with QR code), sign-in chain.
+        // Same-path guard: if the user is already on /auth/mfa-setup let
+        // them stay there — re-issuing `next('/auth/mfa-setup')` would
+        // raise NavigationDuplicated in vue-router.
+        if (auth.signInStep === 'CONTINUE_SIGN_IN_WITH_TOTP_SETUP') {
+            return to.path === '/auth/mfa-setup' ? next() : next('/auth/mfa-setup');
+        }
+
+        // Returning user — enter the code from their authenticator app.
+        if (auth.signInStep === 'CONFIRM_SIGN_IN_WITH_TOTP_CODE') {
+            return to.path === '/auth/mfa-verify' ? next() : next('/auth/mfa-verify');
+        }
+
+        // Load user info if needed (page reload after sign-in). This also
+        // populates `mfaEnabled` from the backend so the MFA-gate check
+        // below has a definitive answer to work with.
+        if (!auth.user || auth.mfaEnabled === null) {
             await auth.fetchInfo();
+        }
+
+        // Admin-reset users (or anyone Cognito signed in without MFA)
+        // can only reach the enrolment page until they finish setup —
+        // but only if this environment requires MFA at all. In dev
+        // (backend Settings.ENFORCE_MFA=False), `mfaRequired` is false
+        // and we skip the redirect even for unenrolled users.
+        if (auth.mfaRequired === true && auth.mfaEnabled === false && to.path !== '/auth/mfa-setup') {
+            return next('/auth/mfa-setup');
         }
 
         return next();
@@ -118,40 +149,60 @@ export const authCheck = async (
 export const isUserUnconfirmedCheck = async (
     authStore: StoreGeneric
 ): Promise<boolean> => {
-    // Keep the same logic as before, but using v6 state:
-    // true unless the user is exactly in "new password required".
-    return (
-        authStore.user === null ||
-        authStore.confirmedUser ||
-        authStore.signInStep !== "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED"
-    );
+    // True only when the caller is genuinely in the new-password
+    // challenge step this page handles. Everything else — fully signed
+    // in, mid-TOTP, signed out, or a challenge we don't own — should be
+    // redirected away by the caller (usually to viewProjects, where the
+    // router guard sorts them out).
+    return authStore.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED";
 };
 
 export const apiGateway = "CentralHubAPIGateway";
 
-const devMode = process.env.NODE_ENV === "development";
-
+// Read Cognito config at runtime from window.* (populated by
+// public/js/window.js in dev and dist/js/window.js in prod — both
+// loaded synchronously before main.ts). The generator reads from
+// AWS_COGNITO_USER_POOL_ID / AWS_COGNITO_APP_CLIENT_ID / AWS_REGION,
+// matching the rest of the stack; no VITE_AWS_* duplication.
 export const authConfig = {
     Auth: {
         Cognito: {
-            region: process.env.VITE_AWS_REGION || 'eu-west-2',
-            userPoolId: process.env.VITE_AWS_USER_POOL_ID,
-            userPoolClientId: process.env.VITE_AWS_CLIENT_ID,
-            clientSecret: process.env.VITE_AWS_CLIENT_SECRET,
-            authenticationFlowType: 'USER_PASSWORD_AUTH',
-            loginWith: {}
+            region: window.AWS_REGION || 'eu-west-2',
+            userPoolId: window.AWS_USER_POOL_ID,
+            userPoolClientId: window.AWS_CLIENT_ID
         }
     }
 };
 
 let tokenRefreshTimeout = 0;
 
+// Routes where a tokenRefresh_failure or background 401 must NOT force
+// the user to log in. Two classes of page:
+//   1. No session exists yet — login, new-password (pre-auth challenge),
+//      change-password (forgot-password flow), access-request. Amplify
+//      emits `tokenRefresh_failure` periodically on these because there
+//      are no tokens to refresh; forwarding that to gotoLogin would
+//      interrupt the user mid-form (e.g. filling in a reset code).
+//   2. Mid-challenge flows — mfa-setup, mfa-verify. A yank to login
+//      would lose challenge state or interrupt TOTP enrolment.
+export const NO_FORCED_SIGNOUT_PATHS = new Set<string>([
+    "/auth/login",
+    "/auth/new-password",
+    "/auth/change-password",
+    "/auth/access-request",
+    "/auth/mfa-setup",
+    "/auth/mfa-verify"
+]);
+
 const listener = (data: { payload: { event: string } }) => {
     const store = useAuthStore();
 
     switch (data.payload.event) {
         case "tokenRefresh_failure":
-            if (router.currentRoute.value.fullPath === "/auth/login") {
+            // Compare against path (no query/fragment) so a whitelisted
+            // route with a `?redirect=...` or `#frag` still skips the
+            // forced sign-out. `fullPath` would miss the membership test.
+            if (NO_FORCED_SIGNOUT_PATHS.has(router.currentRoute.value.path)) {
                 break;
             }
 
