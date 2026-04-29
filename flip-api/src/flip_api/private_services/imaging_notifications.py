@@ -84,8 +84,8 @@ def handle_imaging_task_completed(task: TrustTask, db: Session) -> None:
     trust = db.exec(select(Trust).where(Trust.id == task.trust_id)).first()
     trust_name = trust.name if trust else "Unknown Trust"
 
-    settings = get_settings()
-    sesv2 = boto3.client("sesv2", region_name=settings.AWS_REGION)
+    sesv2 = boto3.client("sesv2", region_name=get_settings().AWS_REGION)
+    sender_email = get_settings().AWS_SES_SENDER_EMAIL_ADDRESS
 
     # Send credential emails to newly created users
     for user in imaging_project.created_users:
@@ -101,7 +101,7 @@ def handle_imaging_task_completed(task: TrustTask, db: Session) -> None:
             )
 
             sesv2.send_email(
-                FromEmailAddress=settings.AWS_SES_SENDER_EMAIL_ADDRESS,
+                FromEmailAddress=sender_email,
                 Destination={"ToAddresses": [user.email]},
                 Content={
                     "Template": {
@@ -126,7 +126,7 @@ def handle_imaging_task_completed(task: TrustTask, db: Session) -> None:
             )
 
             sesv2.send_email(
-                FromEmailAddress=settings.AWS_SES_SENDER_EMAIL_ADDRESS,
+                FromEmailAddress=sender_email,
                 Destination={"ToAddresses": [added_user.email]},
                 Content={
                     "Template": {
