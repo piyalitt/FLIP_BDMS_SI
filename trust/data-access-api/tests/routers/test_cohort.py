@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -267,6 +268,22 @@ def test_get_accession_ids_missing_column(mock_get_records, mock_decrypt):
 
     assert response.status_code == 400
     assert "accession_id" in response.json()["detail"]
+
+
+@patch("data_access_api.routers.cohort.decrypt")
+@patch("data_access_api.routers.cohort.get_records")
+def test_get_accession_ids_propagates_http_exception(mock_get_records, mock_decrypt):
+    """``get_records`` raises HTTPException for things like undefined tables/columns;
+    the wrapping ``except`` clauses must not swallow that into a 500."""
+    mock_decrypt.return_value = "decrypted-id"
+    mock_get_records.side_effect = HTTPException(
+        status_code=400, detail="The table 'omop.bogus' does not exist."
+    )
+
+    response = client.post("/cohort/accession-ids", json=sample_dataframe_query)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "The table 'omop.bogus' does not exist."
 
 
 @patch("data_access_api.routers.cohort.decrypt")
