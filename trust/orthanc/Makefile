@@ -57,18 +57,11 @@ down:
 shell:
 	$(TRUST_1_VARS) $(docker_command) $(run_clean) $(service_name) /bin/bash
 
-# Sync data from S3 bucket (mainly used temporarily in production)
-# Needs AWS account credentials configured
-sync-data-from-s3:
-	aws s3 sync s3://$(AICENTRE_BUCKET_NAME)/orthanc/ ./volumes
-
-# ORTHANC_STORAGE_DIR_TRUST_* values are absolute or relative to trust/, but
-# this Makefile runs from trust/orthanc/ — prepend `../` for relative paths.
-EXTRACT_DIR_1 := $(if $(filter /%,$(ORTHANC_STORAGE_DIR_TRUST_1)),$(ORTHANC_STORAGE_DIR_TRUST_1),../$(ORTHANC_STORAGE_DIR_TRUST_1))
-EXTRACT_DIR_2 := $(if $(filter /%,$(ORTHANC_STORAGE_DIR_TRUST_2)),$(ORTHANC_STORAGE_DIR_TRUST_2),../$(ORTHANC_STORAGE_DIR_TRUST_2))
-
-extract-data:
-	mkdir -p $(EXTRACT_DIR_1) $(EXTRACT_DIR_2)
-	tar -xzf ./volumes/trust1_orthanc_data_20260106.tar.gz -C $(EXTRACT_DIR_1)
-	tar -xzf ./volumes/trust2_orthanc_data_20260106.tar.gz -C $(EXTRACT_DIR_2)
-	rm ./volumes/trust1_orthanc_data_20260106.tar.gz ./volumes/trust2_orthanc_data_20260106.tar.gz
+# Sync mock orthanc DICOM data (used in development / staging environments where real data is not available)
+# Needs AWS account credentials configured to run S3 commands
+update-orthanc-data:
+	CLEAN_AFTER_UPDATE=True \
+	AICENTRE_BUCKET_NAME=$(AICENTRE_BUCKET_NAME) \
+	ORTHANC_STORAGE_DIR_TRUST_1=$(ORTHANC_STORAGE_DIR_TRUST_1) \
+	ORTHANC_STORAGE_DIR_TRUST_2=$(ORTHANC_STORAGE_DIR_TRUST_2) \
+	./update_orthanc_data.sh
