@@ -43,7 +43,6 @@ from flip_api.domain.interfaces.project import (
 from flip_api.domain.schemas.actions import ProjectAuditAction
 from flip_api.domain.schemas.projects import (
     ProjectDetails,
-    UserAccessInfo,
 )
 from flip_api.domain.schemas.status import (
     ProjectStatus,
@@ -447,23 +446,6 @@ def get_project_models_service(
     logger.debug(f"{models_response=}")
 
     return IPagedResponse[IModelsInfoResponse](data=models_response, total_rows=total_rows), paging_details
-
-
-def get_users_with_access_service(project_id: UUID, session: Session) -> list[UserAccessInfo]:
-    """
-    Retrieves a list of users who have access to a specific project.
-
-    Args:
-        project_id (UUID): The ID of the project to retrieve user access information for.
-        session (Session): The SQLModel session to use for database operations.
-
-    Returns:
-        list[UserAccessInfo]: A list of UserAccessInfo objects containing user IDs of those who have access to the
-        project.
-    """
-    stmt = select(ProjectUserAccess.user_id).where(ProjectUserAccess.project_id == project_id)
-    results = session.exec(stmt).all()
-    return [UserAccessInfo(user_id=uid) for uid in results]
 
 
 def update_project_status(
