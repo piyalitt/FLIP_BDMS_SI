@@ -22,7 +22,7 @@ services:
   # Vite container (deploy/compose.development.yml).
 
   flip-api:
-    image: ghcr.io/londonaicentre/flip-api:claude-add-cognito-mfa-YgqHs
+    image: ghcr.io/londonaicentre/flip-api:${DOCKER_TAG}
     ports:
       - "${API_PORT}:8000"
     environment:
