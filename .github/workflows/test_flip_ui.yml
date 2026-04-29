@@ -57,3 +57,63 @@ jobs:
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  cypress-e2e:
+    # Runs the Cypress E2E suite against a stubbed API (network-level
+    # intercepts in test/cypress/support/globalIntercepts.ts). No real
+    # backend or Cognito user pool is needed — the fixture-driven flow
+    # is independent of cloud infra.
+    name: Cypress (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    strategy:
+      # Don't cancel sibling groups when one fails — surface every broken
+      # group in a single CI run so triage is one pass instead of N.
+      fail-fast: false
+      matrix:
+        group: [group-1, group-2, group-3, group-4, group-5, group-6]
+    defaults:
+      run:
+        working-directory: ./flip-ui
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set Node.js version
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: flip-ui/package-lock.json
+
+      - name: Stub flip-ui/.env.development for Cypress
+        # Vite (loadEnv) and the cypress plugin (dotenv) both read this file
+        # at process start. Values are dummies — the suite mocks Cognito and
+        # the API at the network layer, so nothing here ever hits AWS.
+        run: |
+          cat > .env.development <<'EOF'
+          VITE_LOCAL=false
+          VITE_AWS_BASE_URL=http://localhost:8080/api
+          VITE_AWS_USER_POOL_ID=eu-west-2_DUMMY1234
+          VITE_AWS_CLIENT_ID=dummyclientid1234567890ab
+          VITE_AWS_REGION=eu-west-2
+          EOF
+
+      - name: Cypress run
+        uses: cypress-io/github-action@v6
+        with:
+          working-directory: flip-ui
+          install-command: npm install
+          browser: chrome
+          start: npm run test:start
+          wait-on: "http-get://localhost:4173"
+          wait-on-timeout: 120
+          spec: test/cypress/integration/${{ matrix.group }}/**/*.spec.ts
+
+      - name: Upload Cypress screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots-${{ matrix.group }}
+          path: flip-ui/test/cypress/screenshots
+          if-no-files-found: ignore
+          retention-days: 7

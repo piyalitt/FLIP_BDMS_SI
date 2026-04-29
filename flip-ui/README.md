@@ -80,6 +80,76 @@ No environment-specific Cognito IDs or API URLs live in the repo.
 Authentication is handled through [AWS Cognito](https://docs.aws.amazon.com/cognito/). A valid Cognito User Pool and
 Client ID are required for a production deployment.
 
+## Testing
+
+### Unit tests (Vitest)
+
+```bash
+cd flip-ui
+npm install
+npm run test:unit          # one-off run with coverage
+npm run test:unit:watch    # watch mode while iterating
+```
+
+Unit tests live alongside source under `src/**/*.spec.ts` and run in jsdom with Pinia / Vue Router stubs.
+
+### End-to-end tests (Cypress)
+
+The Cypress suite under [`test/cypress/integration/`](test/cypress/integration) drives the UI in Chrome against a
+**stubbed API** — every backend call is intercepted at the network layer in
+[`test/cypress/support/globalIntercepts.ts`](test/cypress/support/globalIntercepts.ts) and Cognito auth is short-circuited
+in [`test/cypress/support/cognito.ts`](test/cypress/support/cognito.ts) by writing a fixture token straight into
+`localStorage`. The suite needs no real backend, no AWS account and no Cognito user pool.
+
+Specs are split into six groups (`group-1` … `group-6`) so CI can run them in parallel.
+
+#### Run the full suite locally
+
+```bash
+cd flip-ui
+npm install
+# One-shot env file. Values are dummies — the suite mocks Cognito + the API,
+# so nothing here ever leaves the box. Match the values used in CI.
+cat > .env.development <<'EOF'
+VITE_LOCAL=false
+VITE_AWS_BASE_URL=http://localhost:8080/api
+VITE_AWS_USER_POOL_ID=eu-west-2_DUMMY1234
+VITE_AWS_CLIENT_ID=dummyclientid1234567890ab
+VITE_AWS_REGION=eu-west-2
+EOF
+npm run test:ci            # boots the dev server on :4173 and runs cypress
+```
+
+`test:ci` uses `start-server-and-test` to start the Vite dev server (`npm run test:start`, plain HTTP on
+`http://localhost:4173`) and then runs `cypress run --browser chrome` against it. The non-privileged port `4173`
+avoids the need to run with `sudo` on Linux/macOS and matches the port used in CI.
+
+To open the Cypress GUI for interactive debugging:
+
+```bash
+npm run test:start &       # in one shell — leave running
+npx cypress open           # in another — pick a spec
+```
+
+#### Run a single group
+
+```bash
+npx cypress run --browser chrome --spec 'test/cypress/integration/group-3/**/*.spec.ts'
+```
+
+#### CI
+
+The Cypress suite runs on every PR and on push to `develop` / `main` via the `cypress-e2e` job in
+[`.github/workflows/test_flip_ui.yml`](../.github/workflows/test_flip_ui.yml). The job:
+
+- Uses `cypress-io/github-action@v6`, which caches the Cypress binary and `node_modules` between runs.
+- Fans out across the six spec groups via a `strategy.matrix.group` so wall-clock time stays short.
+- Boots the Vite dev server with the same `.env.development` stub shown above.
+- On failure, uploads `test/cypress/screenshots` as an artefact (`cypress-screenshots-<group>`, retained 7 days).
+
+Running the suite against the **real** backend stack is out of scope for the in-repo CI — that's the nightly E2E job
+tracked separately. Anything in this suite must be runnable purely from fixtures.
+
 ## Further Reading
 
 - [Full FLIP Documentation](https://londonaicentreflip.readthedocs.io/en/latest/)

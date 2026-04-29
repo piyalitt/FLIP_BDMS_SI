@@ -22,8 +22,8 @@
         "start-test": "vite --host 127.0.0.1 --port 443 --mode development",
         "test:ui": "cypress run --browser chrome",
         "pretest:start": "npm run generate-window-js",
-        "test:start": "vite --port 443 --mode development",
-        "test:ci": "start-server-and-test test:start http-get://localhost:443 test:ui"
+        "test:start": "vite --port 4173 --mode development",
+        "test:ci": "start-server-and-test test:start http-get://localhost:4173 test:ui"
     },
     "dependencies": {
         "echarts": "^5.2.2",

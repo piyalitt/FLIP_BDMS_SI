@@ -183,6 +183,7 @@ else
 endif
 tests:
 	cd flip-ui && $(MAKE) unit_test && \
+	npm run test:ci && \
 	cd ../flip-api && $(MAKE) test
 
 debug-all:
