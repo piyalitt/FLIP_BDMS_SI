@@ -367,17 +367,23 @@ const remove = (role: IRole) => {
     }
 };
 
-const saveUser = () => {
-    if (selectedUser.value) {
-        try {
-            updateUserRoles(selectedUser.value?.id, selectedUser.value?.roles.map((role) => role.id));
-            selectedUser.value.dirty = false;
-        } catch (e) {
-            Snackbar.error({
-                text: "The user could not be updated, please try again.",
-                title: "Update failed"
-            });
-        }
+const saveUser = async () => {
+    if (!selectedUser.value) return;
+    try {
+        await updateUserRoles(
+            selectedUser.value.id,
+            selectedUser.value.roles.map((role) => role.id)
+        );
+        selectedUser.value.dirty = false;
+        Snackbar.success({
+            text: "The user's permissions have been updated.",
+            title: "User updated"
+        });
+    } catch (e) {
+        Snackbar.error({
+            text: "The user could not be updated, please try again.",
+            title: "Update failed"
+        });
     }
 };
 
