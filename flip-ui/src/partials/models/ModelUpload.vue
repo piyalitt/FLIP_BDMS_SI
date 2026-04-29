@@ -186,14 +186,12 @@ const uploadFile = async (fileList: FileList) => {
         uploadingFiles.value.push(fileInfo);
     });
 
-    const devMode = process.env.NODE_ENV === "development";
-
-    const blacklistedEnvVar = devMode ? process.env.VITE_BLACKLISTED_MODEL_FILES : window.BLACKLISTED_MODEL_FILES;
+    const blacklistedEnvVar = window.BLACKLISTED_MODEL_FILES;
 
     let blacklistedModelFiles: string[] = [];
 
     if (blacklistedEnvVar) {
-        // Handling model files: before, this was using JSON parsing. Now it takes a simple string of files.
+        // Simple comma-separated list from BLACKLISTED_MODEL_FILES — see generate-window-js.sh.
         blacklistedModelFiles = blacklistedEnvVar.split(",").map(file => file.trim());
     }
 

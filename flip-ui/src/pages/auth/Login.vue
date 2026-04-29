@@ -97,9 +97,17 @@ const authStore = useAuthStore();
 const loginLoader = ref(false);
 
 onBeforeMount(async () => {
+    // Only redirect to /projects if the user has a real access token.
+    // `fetchAuthSession` can return a session object (e.g. with a stale
+    // challenge string) without tokens and without throwing, and the
+    // previous `routeChange.viewProjects()` on any non-throw was what
+    // made "Back to log in" from mid-challenge pages bounce straight
+    // back to the challenge page via the router guard.
     try {
-        await fetchAuthSession();
-        routeChange.viewProjects();  // user already logged in
+        const session = await fetchAuthSession();
+        if (session.tokens?.accessToken) {
+            routeChange.viewProjects();
+        }
     } catch {
         // not logged in → stay on login page
     }
@@ -125,7 +133,27 @@ const submit = async (v: unknown): Promise<void> => {
             password: values.password
         });
 
-        routeChange.viewProjects();
+        // Route based on the next step returned by Cognito. Challenge pages
+        // drive their own follow-ups; once the challenge chain is cleared,
+        // the MFA gate (via `needsMfaEnrolment`) decides whether to send
+        // the user to the app or into post-auth enrolment.
+        switch (authStore.signInStep) {
+            case "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED":
+                routeChange.newPassword();
+                break;
+            case "CONTINUE_SIGN_IN_WITH_TOTP_SETUP":
+                routeChange.mfaSetup();
+                break;
+            case "CONFIRM_SIGN_IN_WITH_TOTP_CODE":
+                routeChange.mfaVerify();
+                break;
+            default:
+                if (authStore.needsMfaEnrolment) {
+                    routeChange.mfaSetup();
+                } else {
+                    routeChange.viewProjects();
+                }
+        }
     } catch (e) {
         Snackbar.show({
             type: "error",

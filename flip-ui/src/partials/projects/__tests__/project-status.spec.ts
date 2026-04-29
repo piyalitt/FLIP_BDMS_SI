@@ -16,6 +16,7 @@ import { mount } from "@vue/test-utils";
 import { reactive, ref } from "vue";
 
 import { IImagingProjectStatus } from "@/services/project-service";
+import { useSiteDetailsStore } from "@/store/siteDetailsStore";
 
 import ProjectStatus from "../ProjectStatus.vue";
 import { ProjectStatusComponent } from "../selectors";
@@ -87,23 +88,29 @@ const mockTrustData: IImagingProjectStatus[] = [
     }
 ];
 
-function mountProjectStatus(canLoad = true) {
+// Separate signature so "pass undefined explicitly" actually reaches the
+// store mutation — using a default-parameter value would swallow an
+// explicit `undefined` and reinstate the 5.
+function mountProjectStatus(canLoad = true, ...maxOverride: [number | undefined]?) {
+    const maxReimportCount = maxOverride.length ? maxOverride[0] : 5;
+    // Seed the siteDetailsStore with the cap the component reads from,
+    // mirroring what /site/details populates at runtime. Tests default to
+    // 5 so the existing "2 / 5" / "5 / 5" assertions keep holding.
+    const pinia = createTestingPinia({
+        createSpy: vi.fn,
+        stubActions: false
+    });
+    const store = useSiteDetailsStore(pinia);
+    store.maxReimportCount = maxReimportCount;
     return mount(ProjectStatus, {
         props: { canLoad },
         global: {
-            plugins: [createTestingPinia({
-                createSpy: vi.fn,
-                stubActions: false
-            })],
+            plugins: [pinia],
             stubs,
             directives: { tippy: () => {} }
         }
     });
 }
-
-beforeAll(() => {
-    (window as any).MAX_REIMPORT_COUNT = 5;
-});
 
 beforeEach(() => {
     mockSwrvData.value = undefined;
@@ -336,6 +343,17 @@ describe("ProjectStatus", () => {
 
             // trust-2 has projectCreationCompleted=false, reimportCount=undefined
             expect(wrapper.find("[data-test=project-reimport-status-trust-2]").exists()).toBe(false);
+        });
+
+        it("hides the reimport badge until /site/details populates maxReimportCount", () => {
+            // Before the first site-details fetch lands, maxReimportCount is
+            // undefined in the store. Rendering the badge would require a
+            // display threshold we don't know yet, so the component must wait.
+            mockSwrvData.value = mockTrustData;
+            const wrapper = mountProjectStatus(true, undefined);
+
+            expect(wrapper.find("[data-test=project-reimport-status-trust-1]").exists()).toBe(false);
+            expect(wrapper.find("[data-test=project-reimport-status-trust-3]").exists()).toBe(false);
         });
     });
 

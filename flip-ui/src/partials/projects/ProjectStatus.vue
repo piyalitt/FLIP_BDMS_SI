@@ -82,7 +82,7 @@
                                                 </span>
                                             </div>
                                             <div
-                                                v-if="project.reimportCount !== undefined && project.reimportCount !== null && project.projectCreationCompleted"
+                                                v-if="project.reimportCount !== undefined && project.reimportCount !== null && project.projectCreationCompleted && maxReimportCount > 0"
                                                 v-tippy="{ content: project.reimportCount >= maxReimportCount ? ReimportCountLimitMessage : 'Reimport attempts', placement: 'top' }"
                                                 class="flex items-center gap-2 w-fit"
                                             >
@@ -235,6 +235,7 @@ import AiSearch from "@/components/AiSearch/AiSearch.vue";
 import AiSkeleton from "@/components/AiSkeleton/AiSkeleton.vue";
 import useErrorHandler from "@/composables/useErrorHandler";
 import { getImagingProjectsStatus, IImagingProjectStatus } from "@/services/project-service";
+import { useSiteDetailsStore } from "@/store/siteDetailsStore";
 
 interface IImagingProjectStatusProps {
     canLoad: boolean;
@@ -294,6 +295,12 @@ const overview = computed<IImagingProjectStatusLocal>(() => {
 
 const ReimportCountLimitMessage = "The max reimport count has been reached. Any failed studies will not be reimported. Please contact an XNAT administrator for assistance.";
 
-const devMode = process.env.NODE_ENV === "development";
-const maxReimportCount = devMode ? 5 : window.MAX_REIMPORT_COUNT;
+// Backend is the single source of truth — /site/details returns
+// MAX_REIMPORT_COUNT from the flip-api Settings, and the same number
+// gates the SQL reimport query (project_services.get_reimport_queries_service).
+// The store value is undefined until the first /site/details fetch
+// lands; fall back to 0 so the "at cap" branch doesn't prematurely show
+// a limit-reached warning before we actually know what the limit is.
+const siteDetailsStore = useSiteDetailsStore();
+const maxReimportCount = computed(() => siteDetailsStore.maxReimportCount ?? 0);
 </script>

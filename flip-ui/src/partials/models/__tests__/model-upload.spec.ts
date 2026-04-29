@@ -11,157 +11,507 @@
  * limitations under the License.
  */
 
+import { createTestingPinia } from "@pinia/testing";
+import { flushPromises, mount, VueWrapper } from "@vue/test-utils";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
+import { FileInfo, FileUploadStatus } from "@/interfaces/model/types";
+import { useAuthStore } from "@/store/auth";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { mountComponent } from "@test/helper";
-import { createPinia } from "pinia";
-
-import FileUpload from "@/partials/models/FileUpload.vue";
 import ModelUpload from "@/partials/models/ModelUpload.vue";
 
-vi.mock("@/utils/file", () => {
-    return { uploadFile: () => Promise.resolve(void 0) };
-});
+// The component uses route.params.modelId inside uploadFile. Reactive
+// object shared by both uses so tests can flip the id mid-run.
+const mockRoute = {
+    params: { modelId: "model-under-test", projectId: "project-1" } as Record<string, string>
+};
 
-vi.mock("@/services/api", () => {
+vi.mock("vue-router", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("vue-router")>();
     return {
-        _http: {
-            get: () => Promise.resolve(
-                "{\"body\": {status\": \"COMPLETED\",}"
-            ),
-            post: () => Promise.resolve({ id: "some-id" }
-            )
-        }
+        ...actual,
+        useRoute: () => mockRoute
     };
 });
 
-function mockFileCreator({
-    name = "file.txt",
-    size = 1024,
-    type
-}: {
-    name?: string;
-    size?: number;
-    type?: string;
-    lastModified?: Date;
-}): File {
-    const blob = new Blob(["a".repeat(size)], { type });
+// Service stubs — we don't want the tests to reach the real axios client.
+const mockCreatePreSignedUrl = vi.fn();
+const mockUploadFileService = vi.fn();
+vi.mock("@/utils/file", () => ({
+    createPreSignedUrl: (...args: unknown[]) => mockCreatePreSignedUrl(...args),
+    uploadFile: (...args: unknown[]) => mockUploadFileService(...args)
+}));
 
-    return new File(
-        [blob], name, { type }
+const mockProcessScannedFile = vi.fn();
+const mockDeleteModelFile = vi.fn();
+const mockDownloadModelFile = vi.fn();
+vi.mock("@/services/file-service", () => ({
+    processScannedFile: (...args: unknown[]) => mockProcessScannedFile(...args),
+    deleteModelFile: (...args: unknown[]) => mockDeleteModelFile(...args),
+    downloadModelFile: (...args: unknown[]) => mockDownloadModelFile(...args)
+}));
+
+// JobTypes is imported by ModelUpload only as a type annotation; the
+// value itself is never read at runtime but the module needs to resolve.
+vi.mock("@/services/model-service", () => ({
+    JobTypes: {}
+}));
+
+const mockSnackbarSuccess = vi.fn();
+const mockSnackbarError = vi.fn();
+vi.mock("@/utils/snackbar", () => ({
+    Snackbar: {
+        success: (...args: unknown[]) => mockSnackbarSuccess(...args),
+        error: (...args: unknown[]) => mockSnackbarError(...args)
+    }
+}));
+
+// uploadFile sleeps 3s between the upload and processScannedFile — and
+// schedules a 10s setTimeout to emit "uploaded". Use fake timers in the
+// upload-flow tests so we can advance past both without actually waiting.
+// Left out of non-upload tests so the watch/mount lifecycle runs normally.
+
+// Helper to build a mock File (jsdom implements File natively).
+function makeFile(name: string, size = 1024, type = "text/plain"): File {
+    return new File(["x".repeat(size)], name, { type });
+}
+
+// FileList doesn't have a public constructor; build a mock that satisfies
+// the iterable protocol + Array.from() usage the component relies on.
+function makeFileList(files: File[]): FileList {
+    const list = files as File[] & {
+        item?: (i: number) => File | null;
+        length?: number;
+    };
+    list.item = (i: number) => files[i] ?? null;
+    Object.defineProperty(list, "length", { value: files.length });
+    return list as unknown as FileList;
+}
+
+const baseProps = {
+    files: [] as FileInfo[],
+    loading: false,
+    canUpload: true,
+    modelId: "model-under-test",
+    requiredFiles: [],
+    jobType: "standard" as unknown as Record<string, unknown>
+};
+
+function mountModelUpload(
+    overrides: Partial<typeof baseProps> = {},
+    opts: { hasPermissions?: boolean } = {}
+): VueWrapper<unknown> {
+    const wrapper = mount(ModelUpload, {
+        props: { ...baseProps, ...overrides },
+        global: {
+            plugins: [
+                createTestingPinia({
+                    createSpy: vi.fn,
+                    stubActions: false
+                })
+            ],
+            // Stub child components and icons so mount doesn't try to
+            // resolve styling or render canvas elements.
+            stubs: {
+                FileUpload: {
+                    // Explicit name so findComponent({name:"FileUpload"})
+                    // resolves the stub — the default anonymous stub isn't
+                    // nameable by reference otherwise.
+                    name: "FileUpload",
+                    template: "<div data-test=\"file-upload\"><slot /></div>",
+                    emits: ["new-files", "newFiles"]
+                },
+                AiCard: { template: "<div data-test=\"ai-card\"><slot /></div>" },
+                AiSkeleton: { template: "<div data-test=\"ai-skeleton\" />" },
+                AiLoader: { template: "<div data-test=\"ai-loader\" />" },
+                AiButton: {
+                    template: "<button @click=\"$emit('click')\" :disabled=\"loading\"><slot /></button>",
+                    props: ["small", "loading"],
+                    emits: ["click"]
+                },
+                AiConfirmModal: {
+                    template:
+                        "<div data-test=\"confirm-modal\" :data-open=\"dialog\">" +
+                        "<button data-test=\"confirm-modal-continue\" @click=\"continueAction()\">Continue</button>" +
+                        "<button data-test=\"confirm-modal-close\" @click=\"$emit('close-modal')\">Close</button>" +
+                        "<slot />" +
+                        "</div>",
+                    props: ["dialog", "confirmationText", "continueButtonText", "continueAction", "submitting"],
+                    emits: ["close-modal"]
+                },
+                Transition: { template: "<div><slot /></div>" }
+            }
+        }
+    });
+    // Drive `isObserver` via hasPermissions (the component calls
+    // authStore.hasPermissions(["CanManageProjects"])). Mock that
+    // here so we can toggle observer vs researcher/admin between tests.
+    const authStore = useAuthStore();
+    (authStore.hasPermissions as unknown as ReturnType<typeof vi.fn>) = vi.fn(() =>
+        opts.hasPermissions ?? true
     );
+    return wrapper;
 }
 
-function fileListFromArray(files: File[]): FileList {
-    const fileListMock = files.reduce(
-        (accumulator: File[], curr, i: number) => {
-            accumulator[i] = curr;
-
-            return accumulator;
-        },
-        []
-    ) as any;
-
-
-    fileListMock.item = () => { };
-
-    return fileListMock as FileList;
-}
-
-describe.skip("components/ModelUpload", () => {
-
-    const wrapper = mountComponent(ModelUpload, { global: { plugins: [createPinia()] } });
-
-    it("renders the correct markups", () => {
-        expect(wrapper.element).toMatchSnapshot();
+describe("ModelUpload", () => {
+    beforeEach(() => {
+        vi.useRealTimers();
+        mockCreatePreSignedUrl.mockReset();
+        mockUploadFileService.mockReset();
+        mockProcessScannedFile.mockReset();
+        mockDeleteModelFile.mockReset();
+        mockDownloadModelFile.mockReset();
+        mockSnackbarSuccess.mockReset();
+        mockSnackbarError.mockReset();
+        mockRoute.params = { modelId: "model-under-test", projectId: "project-1" };
+        // Default: no blacklist. Individual tests re-arm as needed.
+        (window as unknown as { BLACKLISTED_MODEL_FILES?: string }).BLACKLISTED_MODEL_FILES = "";
     });
 
-    it.skip("Adds file to table with valid properties", async () => {
-        const sizeInKB = 2.5;
-        const name = "New awesome model.py";
-        const type = "text/script";
-        const fileList: FileList = fileListFromArray([
-            mockFileCreator({
-                name,
-                size: sizeInKB * 1024,
-                type
-            })
-        ]);
+    describe("rendering", () => {
+        test("renders the Model Files card header", () => {
+            const wrapper = mountModelUpload();
+            expect(wrapper.text()).toContain("Model Files");
+        });
 
-        wrapper.findComponent(FileUpload).vm.$emit("newFiles", fileList);
+        test("renders the FileUpload child when canUpload is true and not loading", () => {
+            const wrapper = mountModelUpload({ canUpload: true, loading: false });
+            expect(wrapper.find("[data-test='file-upload']").exists()).toBe(true);
+        });
 
-        // const uploadingStatusLabel =
-        //     wrapper.find(ModelUploadModal.uploadingStatusLabel);
-        // const scanningStatusLabel =
-        //     wrapper.find(ModelUploadModal.scanningStatusLabel);
-        // const completedStatusLabel =
-        //     wrapper.find(ModelUploadModal.completedStatusLabel);
+        test("hides the FileUpload child when canUpload is false", () => {
+            // Observers (no CanManageProjects permission) see the listing
+            // but not the upload affordance.
+            const wrapper = mountModelUpload({ canUpload: false });
+            expect(wrapper.find("[data-test='file-upload']").exists()).toBe(false);
+        });
 
-        const files = (wrapper.vm.$data as any).files;
-        expect(files.length).toBe(1);
-        const file = files[0];
-        // expect(file.status).toBe(FileUploadStatus.UPLOADING);
-        // expect(uploadingStatusLabel.isVisible).toBeTruthy();
-        expect(file.size).toBe(sizeInKB.toFixed(2) + " KB");
-        expect(file.name).toBe(name);
-        expect(file.type).toBe(type.split("/")[1].toUpperCase() + " File");
-
-        // expect(file.status).toBe(FileUploadStatus.SCANNING);
-        // expect(uploadingStatusLabel.exists()).toBeFalsy();
-        // expect(scanningStatusLabel.isVisible).toBeTruthy();
+        test("shows skeleton placeholders while loading", () => {
+            const wrapper = mountModelUpload({ loading: true });
+            expect(wrapper.findAll("[data-test='ai-skeleton']").length).toBeGreaterThan(0);
+        });
     });
 
-    it.skip("Adds multiple file to table with valid properties", async () => {
-        const firstSizeInKB = 2.5;
-        const firstName = "New awesome model.py";
-        const firstType = "text/script";
-        const secondSizeInKB = 2.504543;
-        const secondName = "New awesome model.py";
-        const secondType = "text/script";
-        const fileList: FileList = fileListFromArray([
-            mockFileCreator({
-                name: firstName,
-                size: firstSizeInKB * 1024,
-                type: firstType
-            }),
-            mockFileCreator({
-                name: secondName,
-                size: secondSizeInKB * 1024,
-                type: secondType
-            })
-        ]);
+    describe("props.files handling", () => {
+        test("mirrors props.files into the visible list on mount", async () => {
+            const files: FileInfo[] = [
+                { id: "1", name: "model.py", size: 1024, status: FileUploadStatus.COMPLETED },
+                { id: "2", name: "config.yaml", size: 512, status: FileUploadStatus.COMPLETED }
+            ];
+            const wrapper = mountModelUpload({ files, loading: false });
+            // handleFiles populates internalFiles from onMounted; wait for
+            // the resulting render before asserting on the DOM text.
+            await flushPromises();
 
-        wrapper.findComponent(FileUpload).vm.$emit("newFiles", fileList);
+            expect(wrapper.text()).toContain("model.py");
+            expect(wrapper.text()).toContain("config.yaml");
+        });
 
-        // const uploadingStatusLabel =
-        //     wrapper.find(ModelUploadModal.uploadingStatusLabel);
-        // const scanningStatusLabel =
-        //     wrapper.find(ModelUploadModal.scanningStatusLabel);
-        // const completedStatusLabel =
-        //     wrapper.find(ModelUploadModal.completedStatusLabel);
+        test("updates the list when props.files change after mount", async () => {
+            const wrapper = mountModelUpload({ files: [], loading: false });
+            expect(wrapper.text()).not.toContain("model.py");
 
-        const files = (wrapper.vm.$data as any).files;
-        const firstFile = files[0];
-        expect(firstFile.size).toBe(firstSizeInKB.toFixed(2) + " KB");
-        expect(firstFile.name).toBe(firstName);
-        expect(firstFile.type).toBe(firstType.split("/")[1].toUpperCase() + " File");
-        // expect(firstFile.status).toBe(FileUploadStatus.UPLOADING);
-        // expect(uploadingStatusLabel.isVisible).toBeTruthy();
+            await wrapper.setProps({
+                files: [
+                    { id: "1", name: "model.py", size: 1024, status: FileUploadStatus.COMPLETED }
+                ],
+                loading: false
+            });
 
-        expect(files.length).toBe(2);
-        // expect(firstFile.status).toBe(FileUploadStatus.SCANNING);
-        // expect(uploadingStatusLabel.exists()).toBeFalsy();
-        // expect(scanningStatusLabel.isVisible).toBeTruthy();
+            expect(wrapper.text()).toContain("model.py");
+        });
 
-        const secondFile = files[1];
-        expect(secondFile.size).toBe(secondSizeInKB.toFixed(2) + " KB");
-        expect(secondFile.name).toBe(secondName);
-        expect(secondFile.type).toBe(secondType.split("/")[1].toUpperCase() + " File");
-        // expect(secondFile.status).toBe(FileUploadStatus.UPLOADING);
-        // expect(uploadingStatusLabel.isVisible).toBeTruthy();
-        // expect(scanningStatusLabel.isVisible).toBeTruthy();
+        test("clears uploadingFiles entries when matching files arrive from the server", async () => {
+            // After a successful upload, filesAreUploading flips true and
+            // the list shows the UPLOADING pill. When the parent refetches
+            // and passes the same file back as a real FileInfo from /files,
+            // handleFiles must remove it from uploadingFiles so we don't
+            // show two rows for the same filename (one SCANNING, one COMPLETED).
+            mockCreatePreSignedUrl.mockResolvedValue("https://s3.example/signed-url");
+            mockUploadFileService.mockResolvedValue(undefined);
+            mockProcessScannedFile.mockResolvedValue(undefined);
 
-        expect(files.length).toBe(2);
+            vi.useFakeTimers();
+            const wrapper = mountModelUpload();
+            wrapper.findComponent({ name: "FileUpload" }).vm.$emit(
+                "new-files",
+                makeFileList([makeFile("model.py")])
+            );
+            // Advance past the 3s scan-wait — by this point filesAreUploading
+            // should be true and uploadingFiles contains model.py (SCANNING).
+            await vi.advanceTimersByTimeAsync(3_500);
+            await flushPromises();
+
+            // Parent now passes the completed file back via props.files —
+            // this is the real-world "server confirmed the file" update.
+            vi.useRealTimers();
+            await wrapper.setProps({
+                files: [
+                    { id: "99", name: "model.py", size: 1024, status: FileUploadStatus.COMPLETED }
+                ]
+            });
+            await flushPromises();
+
+            // One row, not two: the uploadingFiles entry for model.py
+            // must have been filtered out by handleFiles's sync branch.
+            const rows = wrapper.findAll("li");
+            expect(rows.length).toBe(1);
+        });
+    });
+
+    describe("uploadFile — blacklist", () => {
+        test("rejects files whose name is in window.BLACKLISTED_MODEL_FILES", async () => {
+            // BLACKLISTED_MODEL_FILES is a comma-separated list populated by
+            // scripts/generate-window-js.sh at deploy/dev-start time. Files
+            // matching a reserved name must NOT hit the presigned-URL path.
+            (window as unknown as { BLACKLISTED_MODEL_FILES: string }).BLACKLISTED_MODEL_FILES =
+                "flip.py, server_app.py";
+            const wrapper = mountModelUpload();
+            const file = makeFile("flip.py");
+
+            wrapper.findComponent({ name: "FileUpload" }).vm.$emit("new-files", makeFileList([file]));
+            await flushPromises();
+
+            expect(mockSnackbarError).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    title: "Error",
+                    text: expect.stringContaining("not supported")
+                }),
+                12_000
+            );
+            // Crucially: upload-path helpers must not have been called for
+            // the blacklisted file.
+            expect(mockCreatePreSignedUrl).not.toHaveBeenCalled();
+            expect(mockUploadFileService).not.toHaveBeenCalled();
+        });
+
+        test("trims whitespace around blacklist entries", async () => {
+            // The generator emits values verbatim, so a stray space after
+            // a comma must not mask a blacklist hit. Assert the trim.
+            (window as unknown as { BLACKLISTED_MODEL_FILES: string }).BLACKLISTED_MODEL_FILES =
+                "first.py ,  second.py  ,third.py";
+            const wrapper = mountModelUpload();
+
+            wrapper.findComponent({ name: "FileUpload" }).vm.$emit(
+                "new-files",
+                makeFileList([makeFile("second.py")])
+            );
+            await flushPromises();
+
+            expect(mockSnackbarError).toHaveBeenCalled();
+            expect(mockCreatePreSignedUrl).not.toHaveBeenCalled();
+        });
+
+        test("empty BLACKLISTED_MODEL_FILES env var allows all names through", async () => {
+            (window as unknown as { BLACKLISTED_MODEL_FILES: string }).BLACKLISTED_MODEL_FILES = "";
+            mockCreatePreSignedUrl.mockResolvedValue("https://s3.example/upload");
+            mockUploadFileService.mockResolvedValue(undefined);
+            mockProcessScannedFile.mockResolvedValue(undefined);
+
+            vi.useFakeTimers();
+            const wrapper = mountModelUpload();
+            wrapper.findComponent({ name: "FileUpload" }).vm.$emit(
+                "new-files",
+                makeFileList([makeFile("custom_model.py")])
+            );
+
+            // Advance past the 3s scan-wait inside uploadFile.
+            await vi.advanceTimersByTimeAsync(3_500);
+            await flushPromises();
+
+            expect(mockCreatePreSignedUrl).toHaveBeenCalled();
+            expect(mockSnackbarError).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("uploadFile — happy path", () => {
+        test("obtains a presigned URL, uploads, marks SCANNING, then processes the file", async () => {
+            mockCreatePreSignedUrl.mockResolvedValue("https://s3.example/signed-url");
+            mockUploadFileService.mockResolvedValue(undefined);
+            mockProcessScannedFile.mockResolvedValue(undefined);
+
+            vi.useFakeTimers();
+            const wrapper = mountModelUpload();
+            wrapper.findComponent({ name: "FileUpload" }).vm.$emit(
+                "new-files",
+                makeFileList([makeFile("model.py")])
+            );
+
+            // Drain microtasks so createPreSignedUrl + uploadFileService resolve.
+            await vi.advanceTimersByTimeAsync(0);
+            await flushPromises();
+
+            expect(mockCreatePreSignedUrl).toHaveBeenCalledWith(
+                expect.objectContaining({ name: "model.py" }),
+                "/files/preSignedUrl/model",
+                "model-under-test"
+            );
+            expect(mockUploadFileService).toHaveBeenCalledWith(
+                expect.objectContaining({ name: "model.py" }),
+                "https://s3.example/signed-url"
+            );
+            expect(mockSnackbarSuccess).toHaveBeenCalledWith(
+                expect.objectContaining({ title: "File Uploaded!" })
+            );
+
+            // Advance past the 3s scan-wait so processScannedFile runs.
+            await vi.advanceTimersByTimeAsync(3_500);
+            await flushPromises();
+
+            expect(mockProcessScannedFile).toHaveBeenCalledWith(
+                "/files/process-scanned-file/model-under-test/model.py"
+            );
+        });
+
+        test("emits 'uploaded' 10s after the upload batch completes", async () => {
+            mockCreatePreSignedUrl.mockResolvedValue("https://s3.example/signed-url");
+            mockUploadFileService.mockResolvedValue(undefined);
+            mockProcessScannedFile.mockResolvedValue(undefined);
+
+            vi.useFakeTimers();
+            const wrapper = mountModelUpload();
+            wrapper.findComponent({ name: "FileUpload" }).vm.$emit(
+                "new-files",
+                makeFileList([makeFile("model.py")])
+            );
+
+            await vi.advanceTimersByTimeAsync(3_500);
+            await flushPromises();
+            // Not yet — the emit is behind a 10s setTimeout.
+            expect(wrapper.emitted("uploaded")).toBeFalsy();
+
+            await vi.advanceTimersByTimeAsync(10_500);
+            await flushPromises();
+            expect(wrapper.emitted("uploaded")).toEqual([[true]]);
+        });
+    });
+
+    describe("uploadFile — error paths", () => {
+        test("marks the file ERROR and snackbars when createPreSignedUrl returns null", async () => {
+            // The component treats a null/empty presigned URL as an error —
+            // the upload cannot proceed without somewhere to PUT the bytes.
+            mockCreatePreSignedUrl.mockResolvedValue(null);
+
+            vi.useFakeTimers();
+            const wrapper = mountModelUpload();
+            wrapper.findComponent({ name: "FileUpload" }).vm.$emit(
+                "new-files",
+                makeFileList([makeFile("model.py")])
+            );
+
+            await vi.advanceTimersByTimeAsync(0);
+            await flushPromises();
+
+            expect(mockUploadFileService).not.toHaveBeenCalled();
+            expect(mockSnackbarError).toHaveBeenCalledWith(
+                expect.objectContaining({ title: "Error uploading file" })
+            );
+        });
+
+        test("marks the file ERROR when the S3 PUT throws", async () => {
+            mockCreatePreSignedUrl.mockResolvedValue("https://s3.example/signed-url");
+            mockUploadFileService.mockRejectedValue(new Error("network blip"));
+
+            vi.useFakeTimers();
+            const wrapper = mountModelUpload();
+            wrapper.findComponent({ name: "FileUpload" }).vm.$emit(
+                "new-files",
+                makeFileList([makeFile("model.py")])
+            );
+
+            await vi.advanceTimersByTimeAsync(0);
+            await flushPromises();
+
+            expect(mockSnackbarError).toHaveBeenCalledWith(
+                expect.objectContaining({ title: "Error uploading file" })
+            );
+            // processScannedFile must NOT run when the upload itself failed.
+            expect(mockProcessScannedFile).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("delete flow", () => {
+        test("deleteFile calls the backend with the chosen filename and emits deletedFile", async () => {
+            mockDeleteModelFile.mockResolvedValue(undefined);
+            const files: FileInfo[] = [
+                { id: "1", name: "model.py", size: 1024, status: FileUploadStatus.COMPLETED }
+            ];
+            const wrapper = mountModelUpload({ files });
+            await flushPromises();
+
+            // Two buttons render in the row when canUpload && status=COMPLETED:
+            // [0] download (inside the Transition stub), [1] delete (inside
+            // the Transition stub). Click the delete button — its handler
+            // calls confirmDeleteFile(name), which sets fileToDelete and
+            // opens the modal.
+            const rowButtons = wrapper.findAll("li button");
+            expect(rowButtons.length).toBe(2);
+            await rowButtons[1].trigger("click");
+            await flushPromises();
+
+            // The modal stub's `continueAction` prop is the component's
+            // deleteFile handler; the continue button stub calls it.
+            await wrapper.find("[data-test='confirm-modal-continue']").trigger("click");
+            await flushPromises();
+
+            expect(mockDeleteModelFile).toHaveBeenCalledWith(
+                "/files/model/model-under-test/model.py"
+            );
+            expect(wrapper.emitted("deletedFile")).toBeTruthy();
+        });
+    });
+
+    describe("download flow", () => {
+        test("downloadFile fetches the blob and triggers an <a> click", async () => {
+            const blob = new Blob(["fake content"], { type: "text/plain" });
+            mockDownloadModelFile.mockResolvedValue(blob);
+
+            // jsdom's URL.createObjectURL throws on Blob by default; spy
+            // so the component's download-link plumbing runs to completion
+            // and we can assert on the URL lifecycle.
+            const createObjectURLSpy = vi
+                .spyOn(URL, "createObjectURL")
+                .mockReturnValue("blob:fake");
+            const revokeObjectURLSpy = vi.spyOn(URL, "revokeObjectURL").mockReturnValue(undefined);
+
+            const files: FileInfo[] = [
+                { id: "1", name: "model.py", size: 1024, status: FileUploadStatus.COMPLETED }
+            ];
+            const wrapper = mountModelUpload({ files }, { hasPermissions: true });
+            await flushPromises();
+
+            // hasPermissions=true → isObserver=false → download button
+            // visible. Two row buttons: [0] download (first Transition),
+            // [1] delete (second Transition).
+            const rowButtons = wrapper.findAll("li button");
+            expect(rowButtons.length).toBe(2);
+            await rowButtons[0].trigger("click");
+            await flushPromises();
+
+            expect(mockDownloadModelFile).toHaveBeenCalledWith(
+                "/files/model/model-under-test/model.py"
+            );
+            expect(createObjectURLSpy).toHaveBeenCalledWith(blob);
+            expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:fake");
+
+            createObjectURLSpy.mockRestore();
+            revokeObjectURLSpy.mockRestore();
+        });
+
+        test("observer (no CanManageProjects) does not see the download button", async () => {
+            const files: FileInfo[] = [
+                { id: "1", name: "model.py", size: 1024, status: FileUploadStatus.COMPLETED }
+            ];
+            // Observers can view the file list but can't download. canUpload
+            // is false for observers so delete is also hidden.
+            const wrapper = mountModelUpload(
+                { files, canUpload: false },
+                { hasPermissions: false }
+            );
+            await flushPromises();
+
+            // No row buttons should render at all for an observer.
+            expect(wrapper.findAll("li button").length).toBe(0);
+        });
     });
 });

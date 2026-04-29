@@ -15,6 +15,7 @@
 
 
 import { IRole } from "@/services/role-service";
+import { Snackbar } from "@/utils/snackbar";
 
 import { _http, IPaginatedResponse } from "./api";
 
@@ -51,12 +52,27 @@ export interface IAccessRequest {
 }
 
 export async function getUserPermissions(id: string): Promise<IUserPermissions> {
-
     try {
         const response = await _http.get<IUserPermissions>(`/users/${id}/permissions`);
 
         return response.data;
-    } catch {
+    } catch (e) {
+        // Authorization is fail-closed (`hasPermissions` returns false on
+        // an empty list), but a silent return would leave the user with
+        // a half-broken UI and no diagnostic. 401 is already handled by
+        // the response interceptor (sign-out + "Not Authorised"
+        // snackbar), so a second snackbar here would just duplicate.
+        // Surface only on 5xx / network / parse errors — exactly the
+        // cases the user needs to know about.
+        const status = (e as { response?: { status?: number } }).response?.status;
+        if (status !== 401) {
+            console.error("Failed to fetch user permissions:", e);
+            Snackbar.error({
+                title: "Couldn't load your permissions",
+                text: "Some features may be unavailable. Please reload the page."
+            });
+        }
+
         return { permissions: [] };
     }
 }
@@ -94,6 +110,16 @@ export async function validateUser(email: string): Promise<IProjectUser> {
 
 export async function revokeToken(refreshToken: string): Promise<void> {
     await _http.put(`/users/revoke/${refreshToken}`);
+}
+
+export async function resetUserMfa(userId: string): Promise<void> {
+    await _http.post(`/users/${userId}/mfa/reset`);
+}
+
+export async function getMfaStatus(): Promise<{ enabled: boolean; required: boolean }> {
+    const response = await _http.get<{ enabled: boolean; required: boolean }>("/users/me/mfa/status");
+
+    return response.data;
 }
 
 export async function submitAccessRequest(requestBody: IAccessRequest): Promise<void> {

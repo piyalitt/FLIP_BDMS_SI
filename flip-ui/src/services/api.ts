@@ -15,7 +15,14 @@ import { fetchAuthSession } from "aws-amplify/auth";
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
 
 import { useAuthStore } from "@/store/auth";
+import { NO_FORCED_SIGNOUT_PATHS } from "@/utils/auth";
 import { Snackbar } from "@/utils/snackbar";
+
+// Debounce the "Not Authorised" snackbar so a burst of parallel 401s
+// (common when multiple SWRV hooks fail at the same token expiry) shows
+// exactly one message, not one per request.
+let lastNotAuthorisedAt = 0;
+const NOT_AUTHORISED_COOLDOWN_MS = 5_000;
 
 export interface IResponse<T> extends AxiosResponse<T> { }
 
@@ -38,12 +45,13 @@ class Http {
 
     private initHttp() {
         const authStore = useAuthStore();
-        const devMode = process.env.NODE_ENV === "development";
 
-        console.log("Initializing HTTP client in", devMode ? "development" : "production", "mode");
+        if (import.meta.env.DEV) {
+            console.log("Initializing HTTP client in development mode");
+        }
 
         const http = axios.create({
-            baseURL: devMode ? process.env.VITE_AWS_BASE_URL : window.AWS_BASE_URL,
+            baseURL: window.AWS_BASE_URL,
             timeout: 30_000,
             headers: {}
         });
@@ -51,8 +59,28 @@ class Http {
         http.interceptors.request.use(
             async config => {
                 if (config.headers && config.headers.Authorization === undefined) {
-                    const session = await fetchAuthSession();
-                    const token = session.tokens?.idToken?.toString();
+                    // Amplify v6 caches tokens asynchronously after signIn;
+                    // a call to fetchAuthSession() immediately after an
+                    // `isSignedIn=true` resolve can observe an empty
+                    // session. If tokens aren't there yet, force a refresh
+                    // so freshly-signed-in users don't hit a 401 on the
+                    // very next request (e.g. getMfaStatus from hydrate).
+                    let session = await fetchAuthSession();
+                    let token = session.tokens?.idToken?.toString();
+                    if (!token) {
+                        try {
+                            session = await fetchAuthSession({ forceRefresh: true });
+                            token = session.tokens?.idToken?.toString();
+                        } catch (e) {
+                            // The request will go out unauthenticated and
+                            // the 401 handler will force a sign-out, but
+                            // we log the underlying Amplify error so
+                            // DevTools surfaces *why* (throttle, expired
+                            // refresh token, storage blocked) instead of
+                            // collapsing every cause to "signed out".
+                            console.warn("Token forceRefresh failed:", e);
+                        }
+                    }
 
                     if (token) {
                         config.headers.Authorization = "Bearer " + token;
@@ -70,12 +98,25 @@ class Http {
             (response) => response,
             function (error) {
                 if (error.response?.status === 401) {
+                    // Skip the forced sign-out entirely on mid-flow auth
+                    // pages; the user hasn't completed their challenge
+                    // chain and we'd throw away their progress.
+                    const currentPath = window.location.pathname;
+                    if (NO_FORCED_SIGNOUT_PATHS.has(currentPath)) {
+                        return Promise.reject(error);
+                    }
+
                     authStore.signOut();
-                    Snackbar.show({
-                        type: "info",
-                        title: "Not Authorised",
-                        text: "You have been signed out. Please log back in."
-                    });
+
+                    const now = Date.now();
+                    if (now - lastNotAuthorisedAt > NOT_AUTHORISED_COOLDOWN_MS) {
+                        lastNotAuthorisedAt = now;
+                        Snackbar.show({
+                            type: "info",
+                            title: "Not Authorised",
+                            text: "You have been signed out. Please log back in."
+                        });
+                    }
 
                     return Promise.reject(error);
                 }

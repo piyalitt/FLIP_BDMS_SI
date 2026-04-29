@@ -18,7 +18,7 @@
             ],
             "env": {
                 "NODE_ENV": "development",
-                "VITE_AWS_BASE_URL": ""
+                "CENTRAL_HUB_API_URL": ""
             },
             "webRoot": "${workspaceFolder}/",
             "sourceMaps": true,

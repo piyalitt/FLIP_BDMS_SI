@@ -100,6 +100,15 @@ export const routeChange = {
             params: { email }
         });
     },
+    newPassword: (): void => {
+        router.push({ path: "/auth/new-password" });
+    },
+    mfaSetup: (): void => {
+        router.push({ path: "/auth/mfa-setup" });
+    },
+    mfaVerify: (): void => {
+        router.push({ path: "/auth/mfa-verify" });
+    },
     accessRequest: (): void => {
         router.push({
             name: "AccessRequest",
