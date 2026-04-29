@@ -203,3 +203,91 @@ def test_get_dataframe_generic_error(mock_get_records, mock_decrypt):
 
     assert response.status_code == 500
     assert response.json()["detail"] == "Unexpected failure"
+
+
+# ---------------------------------------------------------------------------
+# /cohort/accession-ids
+# ---------------------------------------------------------------------------
+
+
+@patch("data_access_api.routers.cohort.decrypt")
+@patch("data_access_api.routers.cohort.get_records")
+def test_get_accession_ids_success(mock_get_records, mock_decrypt):
+    mock_decrypt.return_value = "decrypted-id"
+    mock_get_records.return_value = pd.DataFrame({"accession_id": ["ACC1", "ACC2", "ACC3"]})
+
+    response = client.post("/cohort/accession-ids", json=sample_dataframe_query)
+
+    assert response.status_code == 200
+    assert response.json() == {"accession_ids": ["ACC1", "ACC2", "ACC3"]}
+    mock_decrypt.assert_called_once_with("encrypted-id")
+    # The caller's query must be wrapped server-side so only accession_id is projected.
+    called_query = mock_get_records.call_args[0][0]
+    assert called_query.startswith("SELECT accession_id FROM (")
+    assert sample_dataframe_query["query"] in called_query
+
+
+@patch("data_access_api.routers.cohort.decrypt")
+@patch("data_access_api.routers.cohort.get_records")
+def test_get_accession_ids_strips_trailing_semicolon(mock_get_records, mock_decrypt):
+    mock_decrypt.return_value = "decrypted-id"
+    mock_get_records.return_value = pd.DataFrame({"accession_id": ["ACC1"]})
+
+    response = client.post(
+        "/cohort/accession-ids",
+        json={"encrypted_project_id": "encrypted-id", "query": "SELECT * FROM cohort;  "},
+    )
+
+    assert response.status_code == 200
+    called_query = mock_get_records.call_args[0][0]
+    # No bare semicolon should leak into the wrapped subquery.
+    assert "SELECT * FROM cohort)" in called_query
+    assert ";" not in called_query
+
+
+@patch("data_access_api.routers.cohort.decrypt")
+@patch("data_access_api.routers.cohort.validate_query")
+def test_get_accession_ids_invalid_query(mock_validate_query, mock_decrypt):
+    mock_decrypt.return_value = "decrypted-id"
+    mock_validate_query.side_effect = ValueError("Invalid query syntax")
+
+    response = client.post("/cohort/accession-ids", json=sample_dataframe_query)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid query syntax"
+
+
+@patch("data_access_api.routers.cohort.decrypt")
+@patch("data_access_api.routers.cohort.get_records")
+def test_get_accession_ids_missing_column(mock_get_records, mock_decrypt):
+    mock_decrypt.return_value = "decrypted-id"
+    mock_get_records.return_value = pd.DataFrame({"some_other_column": [1, 2]})
+
+    response = client.post("/cohort/accession-ids", json=sample_dataframe_query)
+
+    assert response.status_code == 400
+    assert "accession_id" in response.json()["detail"]
+
+
+@patch("data_access_api.routers.cohort.decrypt")
+@patch("data_access_api.routers.cohort.get_records")
+def test_get_accession_ids_sqlalchemy_error(mock_get_records, mock_decrypt):
+    mock_decrypt.return_value = "decrypted-id"
+    mock_get_records.side_effect = SQLAlchemyError("SQLAlchemy error")
+
+    response = client.post("/cohort/accession-ids", json=sample_dataframe_query)
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "SQLAlchemy error"
+
+
+@patch("data_access_api.routers.cohort.decrypt")
+@patch("data_access_api.routers.cohort.get_records")
+def test_get_accession_ids_generic_error(mock_get_records, mock_decrypt):
+    mock_decrypt.return_value = "decrypted-id"
+    mock_get_records.side_effect = RuntimeError("Unexpected failure")
+
+    response = client.post("/cohort/accession-ids", json=sample_dataframe_query)
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Unexpected failure"
