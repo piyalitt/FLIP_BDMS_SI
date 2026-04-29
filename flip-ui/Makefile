@@ -45,3 +45,15 @@ e2e_test:
 		exit 1; \
 	}
 	npm run test:ci
+
+# Same as e2e_test but runs Cypress in the official cypress/included image
+# instead of on the host. Useful on Linux without Xvfb / Chrome installed.
+# The dev server still runs on the host (so it can hot-reload your local
+# checkout) and the container reaches it via --network host.
+e2e_test_docker:
+	@test -f .env.development || { \
+		echo "ERROR: flip-ui/.env.development is missing." >&2; \
+		echo "Cypress needs it for Vite + dotenv. See flip-ui/README.md → Testing → End-to-end tests for the dummy values to use locally." >&2; \
+		exit 1; \
+	}
+	npm run test:ci:docker

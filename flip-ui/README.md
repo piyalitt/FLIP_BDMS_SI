@@ -134,8 +134,32 @@ npx cypress open           # in another — pick a spec
 #### Run a single group
 
 ```bash
+# with the dev server running (npm run test:start &), then in another shell:
 npx cypress run --browser chrome --spec 'test/cypress/integration/group-3/**/*.spec.ts'
 ```
+
+#### Run via Docker (no host Chrome / Xvfb required)
+
+On Linux without `xvfb` installed, or anywhere you'd rather not install
+Chrome locally, run Cypress out of the official `cypress/included` image. The
+dev server stays on the host (so hot-reload still picks up your edits); the
+container reaches it via `--network host`.
+
+```bash
+cd flip-ui
+make e2e_test_docker        # full suite, end-to-end (boots Vite, runs cypress in docker)
+
+# Or, if you already have npm run test:start running in another shell:
+docker run --rm --network host \
+    -v "$PWD":/e2e -w /e2e --entrypoint cypress \
+    cypress/included:14.5.2 \
+    run --browser electron \
+    --spec 'test/cypress/integration/group-3/**/*.spec.ts'
+```
+
+The image (`cypress/included:14.5.2`) is ~3 GB on first pull and cached
+afterwards. Pin the tag to whatever `cypress` version is in `package.json` so
+the binary in the image matches the project config.
 
 #### CI
 
