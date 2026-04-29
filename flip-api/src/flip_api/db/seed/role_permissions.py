@@ -13,7 +13,7 @@
 from uuid import UUID
 
 import psycopg2
-from sqlmodel import Session, delete, select
+from sqlmodel import Session, col, delete, select
 
 from flip_api.db.database import engine
 from flip_api.db.models.user_models import Permission, PermissionRef, Role, RolePermission
@@ -54,9 +54,20 @@ def seed_role_permissions(session: Session) -> None:
     researcher_role = session.exec(select(Role.id).where(Role.name == "Researcher")).first()
 
     if researcher_role:
+        # Remove the legacy Researcher → CAN_MANAGE_PROJECTS grant from any pre-existing
+        # deployment. That permission is reserved for Admin (it bypasses per-project
+        # access checks); Researcher only needs CAN_CREATE_PROJECTS. See issue #358.
+        session.execute(
+            delete(RolePermission).where(
+                col(RolePermission.role_id) == researcher_role,
+                col(RolePermission.permission_id) == UUID(PermissionRef.CAN_MANAGE_PROJECTS.value),
+            )
+        )
+        session.commit()
+
         # Define default permissions for the Researcher role
         default_permissions: list[str] = [
-            PermissionRef.CAN_MANAGE_PROJECTS.value,
+            PermissionRef.CAN_CREATE_PROJECTS.value,
         ]
         for permission_id in default_permissions:
             if permission_id:
