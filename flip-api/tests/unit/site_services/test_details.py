@@ -75,9 +75,7 @@ def test_get_details_success(client, mock_db):
 
 
 def test_get_details_not_found(client, mock_db):
-    mock_result = MagicMock()
-    mock_result.fetchone.return_value = None
-    mock_db.execute.return_value = mock_result
+    mock_db.exec.return_value.first.return_value = None
 
     response = client.get("/api/site/details")
 

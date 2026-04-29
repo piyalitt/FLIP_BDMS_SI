@@ -324,13 +324,13 @@ def get_approved_trusts_for_project(project_id: UUID, session: Session) -> list[
         .where(col(ProjectTrustIntersect.project_id) == project_id)
         .where(ProjectTrustIntersect.approved)
     )
-    results = session.execute(stmt).all()
+    results = session.exec(stmt).all()
     if not results:
         # Original TS code throws an error if no response.
         # Consider if returning empty list is more Pythonic for "not found" scenarios.
         logger.warn(f"No approved trusts found for project {project_id}, or project has no approved trusts.")
         # raise ValueError(f"No approved trusts found for project {project_id}") # If error is desired
-    return [Trust(id=r.id, name=r.name) for r in results]
+    return [Trust(id=trust_id, name=trust_name) for trust_id, trust_name in results]
 
 
 def get_trusts_approval_status_for_project(project_id: UUID, session: Session) -> list[IApprovedTrust]:
@@ -363,7 +363,7 @@ def get_trusts_approval_status_for_project(project_id: UUID, session: Session) -
         .join(ProjectTrustIntersect, col(Trust.id) == ProjectTrustIntersect.trust_id)
         .where(col(ProjectTrustIntersect.project_id) == project_id)
     )
-    results = session.execute(stmt).all()
+    results = session.exec(stmt).all()
 
     if not results:
         logger.warn(f"No trusts found linked to project {project_id} in ProjectTrustIntersect.")
@@ -371,7 +371,8 @@ def get_trusts_approval_status_for_project(project_id: UUID, session: Session) -
         # raise ValueError(f"No trusts found linked to project {project_id}")
 
     return [
-        IApprovedTrust(id=r.id, name=r.name, approved=r.approved if r.approved is not None else False) for r in results
+        IApprovedTrust(id=trust_id, name=trust_name, approved=approved if approved is not None else False)
+        for trust_id, trust_name, approved in results
     ]
 
 
@@ -423,7 +424,7 @@ def get_project_models_service(
         query_stmt = query_stmt.where(search_filter)
         count_stmt = count_stmt.where(search_filter)
 
-    total_rows = session.execute(count_stmt).scalar_one_or_none() or 0
+    total_rows = session.exec(count_stmt).first() or 0
 
     # Order and paginate
     query_stmt = query_stmt.order_by(desc(col(Model.creation_timestamp)))
@@ -461,7 +462,7 @@ def get_users_with_access_service(project_id: UUID, session: Session) -> list[Us
         project.
     """
     stmt = select(ProjectUserAccess.user_id).where(ProjectUserAccess.project_id == project_id)
-    results = session.execute(stmt).all()
+    results = session.exec(stmt).all()
     return [UserAccessInfo(user_id=uid) for uid in results]
 
 

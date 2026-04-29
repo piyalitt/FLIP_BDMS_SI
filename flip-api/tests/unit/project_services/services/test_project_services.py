@@ -440,11 +440,11 @@ class TestGetApprovedTrustsForProject:
     def test_get_approved_trusts_for_project_success(self, mock_db_session: MagicMock):
         project_id = uuid4()
         mock_results = [
-            MagicMock(id=uuid4(), name="Trust 1"),
-            MagicMock(id=uuid4(), name="Trust 2"),
+            (uuid4(), "Trust 1"),
+            (uuid4(), "Trust 2"),
         ]
 
-        mock_db_session.execute.return_value.all.return_value = mock_results
+        mock_db_session.exec.return_value.all.return_value = mock_results
 
         result = get_approved_trusts_for_project(project_id, mock_db_session)
 
@@ -454,7 +454,7 @@ class TestGetApprovedTrustsForProject:
     def test_get_approved_trusts_for_project_empty(self, mock_db_session: MagicMock):
         project_id = uuid4()
 
-        mock_db_session.execute.return_value.all.return_value = []
+        mock_db_session.exec.return_value.all.return_value = []
 
         result = get_approved_trusts_for_project(project_id, mock_db_session)
 
@@ -465,8 +465,8 @@ class TestGetProjectModelsService:
     def test_get_project_models_service_with_search(self, mock_db_session: MagicMock):
         project_id = uuid4()
 
-        mock_db_session.execute.return_value.all.return_value = []
-        mock_db_session.execute.return_value.scalar_one_or_none.return_value = 0
+        mock_db_session.exec.return_value.all.return_value = []
+        mock_db_session.exec.return_value.first.return_value = 0
 
         models, total = get_project_models_service(project_id, mock_db_session)
 
