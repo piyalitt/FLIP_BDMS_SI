@@ -39,11 +39,11 @@ describe("Upload Model Files", () => {
         cy.visit(`project/${projectId}/model/${modelId}`);
     });
 
-    it.only("displays an error message when an unsupported file name is uploaded", () => {
+    it("displays an error message when an unsupported file name is uploaded", () => {
         cy.getBySel("upload-file-btn").scrollIntoView();
         cy.getBySel("upload-file-btn").selectFile("test/cypress/fixtures/files/flip.py", { action: "drag-drop" });
 
-        cy.contains("This file name is not supported!").should("be.visible");
+        cy.contains("This file name is not supported as it's reserved by FLIP.").should("be.visible");
     });
 
     it("displays uploaded status when model file is uploaded successfully", () => {

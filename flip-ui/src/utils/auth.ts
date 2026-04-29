@@ -77,7 +77,23 @@ export const authCheck = async (
         // check. Amplify v6's `fetchAuthSession()` would otherwise hang on
         // forged tokens because `fetchUserAttributes()` expects a multi-step
         // SDK round-trip the fixture can't reproduce.
+        //
+        // Auth challenges (new-password, MFA setup/verify) still run their
+        // real Login.vue → authStore.signIn() codepath against a stubbed
+        // Cognito response, so this guard handles them the same way the
+        // production flow below does — by redirecting to the page that
+        // owns the challenge — without going through fetchAuthSession.
         if (window.Cypress) {
+            if (auth.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
+                return to.path === '/auth/new-password' ? next() : next('/auth/new-password');
+            }
+            if (auth.signInStep === 'CONTINUE_SIGN_IN_WITH_TOTP_SETUP') {
+                return to.path === '/auth/mfa-setup' ? next() : next('/auth/mfa-setup');
+            }
+            if (auth.signInStep === 'CONFIRM_SIGN_IN_WITH_TOTP_CODE') {
+                return to.path === '/auth/mfa-verify' ? next() : next('/auth/mfa-verify');
+            }
+
             const stored = window.localStorage.getItem("cypress.auth.user");
             if (stored && !auth.user) {
                 auth.user = JSON.parse(stored);
@@ -225,3 +241,15 @@ const listener = (data: { payload: { event: string } }) => {
 };
 
 Hub.listen("auth", listener);
+
+// Cypress test hook: lets specs trigger the same Hub-driven session-expiry
+// codepath production hits when Amplify's refresh fails. Doing it as a
+// window-mounted dispatcher (vs poking the SDK from the spec) keeps the
+// test surface narrow — specs only see the user-visible behaviour, not
+// the internal Hub event names.
+if (typeof window !== "undefined" && window.Cypress) {
+    (window as unknown as { __cypressTriggerSessionExpiry?: () => void })
+        .__cypressTriggerSessionExpiry = () => {
+            Hub.dispatch("auth", { event: "tokenRefresh_failure" });
+        };
+}

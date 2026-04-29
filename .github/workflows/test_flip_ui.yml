@@ -86,6 +86,9 @@ jobs:
       AWS_COGNITO_USER_POOL_ID: "eu-west-2_DUMMY1234"
       AWS_COGNITO_APP_CLIENT_ID: "dummyclientid1234567890ab"
       AWS_REGION: "eu-west-2"
+      # Drives the blacklist check in src/partials/models/ModelUpload.vue
+      # exercised by upload_model.spec.ts.
+      BLACKLISTED_MODEL_FILES: "flip.py,server_app.py"
     strategy:
       # Don't cancel sibling groups when one fails — surface every broken
       # group in a single CI run so triage is one pass instead of N.
@@ -118,6 +121,7 @@ jobs:
           AWS_COGNITO_USER_POOL_ID=eu-west-2_DUMMY1234
           AWS_COGNITO_APP_CLIENT_ID=dummyclientid1234567890ab
           AWS_REGION=eu-west-2
+          BLACKLISTED_MODEL_FILES=flip.py,server_app.py
           EOF
 
       - name: Cypress run

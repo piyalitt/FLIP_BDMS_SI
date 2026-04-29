@@ -17,7 +17,7 @@
 import { object, string } from "yup";
 
 export const passwordValidation = string()
-    .required()
+    .required("Your password must be at least 8 characters")
     .matches(/[!&^#$*.[\]"{}()?=\-@%/\\,><':;|_~`+]/, "Your password must contain a special character")
     .matches(/(?=.*[A-Z])/, "Your password must contain an uppercase character")
     .matches(/(?=.*[a-z])/, "Your password must contain a lowercase character")

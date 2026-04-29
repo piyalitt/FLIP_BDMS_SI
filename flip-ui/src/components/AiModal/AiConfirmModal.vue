@@ -152,8 +152,13 @@ const props = withDefaults(
 const schema = object().shape({
     confirmation: string()
         .test("confirmation-match", "", function () {
+            // `this.parent.confirmation` is undefined on the first
+            // validation pass (before the user has typed anything), so
+            // calling `.toUpperCase()` on it would throw and surface as
+            // a Cypress "unhandled promise rejection" failure.
+            const typed = (this.parent.confirmation ?? "").toString();
             return props.typingConfirmation === "" ||
-                this.parent.confirmation.toUpperCase() === props.typingConfirmation.toUpperCase();
+                typed.toUpperCase() === props.typingConfirmation.toUpperCase();
         })
 });
 

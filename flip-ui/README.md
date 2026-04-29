@@ -123,6 +123,7 @@ CENTRAL_HUB_API_URL=http://localhost:8080
 AWS_COGNITO_USER_POOL_ID=eu-west-2_DUMMY1234
 AWS_COGNITO_APP_CLIENT_ID=dummyclientid1234567890ab
 AWS_REGION=eu-west-2
+BLACKLISTED_MODEL_FILES=flip.py,server_app.py
 EOF
 npm run test:ci            # boots the dev server on :4173 and runs cypress
 ```

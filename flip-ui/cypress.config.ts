@@ -27,7 +27,12 @@ export default defineConfig({
     screenshotsFolder: "test/cypress/screenshots",
     videosFolder: "test/cypress/videos",
     downloadsFolder: "test/cypress/downloads",
-    requestTimeout: 2000,
+    // 8s is enough for cy.wait("@alias") to absorb the Vue + SWRV mount
+    // chain even under load (Vite HMR connection, Pinia hydration, layout
+    // SWRV resolving the project before the inner component fires its
+    // own fetch). The historical 2s value was tight and timed out under
+    // CI's slower-than-local cold start.
+    requestTimeout: 8000,
     defaultCommandTimeout: 5000,
     retries: {
         runMode: 3,

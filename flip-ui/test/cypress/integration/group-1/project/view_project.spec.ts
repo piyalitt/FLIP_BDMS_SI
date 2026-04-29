@@ -164,7 +164,7 @@ describe("Project Page: Researcher & Owner [UNAPPROVED]", () => {
             cy.visit(`/project/${validProjectWithQuery.id}`);
         });
 
-        it.only("can stage with only one trust associated with a project", () => {
+        it("can stage with only one trust associated with a project", () => {
 
             cy.getBySel("stage-project-btn").click();
             cy.contains("You must select a minimum of one trust when staging.");
