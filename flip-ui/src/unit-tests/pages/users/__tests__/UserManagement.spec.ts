@@ -15,9 +15,28 @@
 
 import { createTestingPinia } from "@pinia/testing";
 import { flushPromises, mount, VueWrapper } from "@vue/test-utils";
+import { ref } from "vue";
 import { beforeEach, describe, expect, it, test, vi } from "vitest";
 
 import UserManagement from "@/pages/admin/users.vue";
+
+// Bypass swrv's process-wide DATA_CACHE: each useSWRV call re-invokes
+// the fetcher fresh. Without this, mutations to objects returned by
+// mockGetUsers (the "add role" test mutates user.roles by reference)
+// leak into subsequent tests via swrv's cached resolved data.
+vi.mock("swrv", () => {
+    const useSWRV = (keyFn: () => string, fetcher?: (key: string) => unknown) => {
+        const data = ref<unknown>(undefined);
+        const error = ref<unknown>(null);
+        if (fetcher) {
+            Promise.resolve(fetcher(keyFn()))
+                .then((d) => { data.value = d; })
+                .catch((e) => { error.value = e; });
+        }
+        return { data, error, mutate: vi.fn(), isValidating: ref(false) };
+    };
+    return { default: useSWRV };
+});
 
 // The admin users page now exposes a "Reset MFA" action that fans out to
 // the user-service helper. Mock the helper so we can assert on calls and
@@ -256,23 +275,51 @@ describe("User Management", () => {
     });
 
     describe("saveUser", () => {
+        // setSelectedUser in users.vue stores user.roles by reference, so
+        // clicking add-viewer mutates the underlying mock. Hand each test
+        // its own user so role mutations don't leak across tests.
+        function freshUser() {
+            return {
+                id: "user-1",
+                email: "user@example.com",
+                roles: [{ id: "role-1", rolename: "admin", roledescription: "Administrator" }],
+                isDisabled: false
+            };
+        }
+
+        // The "Available roles" panel renders from a separate useSWRV
+        // /roles call; needs its own flush after the user click before
+        // the add-viewer button exists.
         async function mountAndAddViewerRole(): Promise<VueWrapper> {
+            mockGetUsers.mockResolvedValue({
+                data: [freshUser()],
+                page: 1,
+                totalPages: 1
+            });
             const wrapper = mountUserManagement();
+            await flushPromises();
             await flushPromises();
             await wrapper.find("[data-test='user']").trigger("click");
             await flushPromises();
+            await flushPromises();
             await wrapper.find("[data-test='add-viewer-btn']").trigger("click");
             return wrapper;
+        }
+
+        // The AiButton stub doesn't reflect the `disabled` prop onto the
+        // underlying DOM element, so read the prop off the component
+        // directly to verify the dirty-flag → disabled binding.
+        function saveButtonDisabled(wrapper: VueWrapper): boolean {
+            return wrapper.findComponent("[data-test='save-user-btn']").props("disabled") as boolean;
         }
 
         test("calls updateUserRoles, clears dirty, and shows a success snackbar on success", async () => {
             mockUpdateUserRoles.mockResolvedValueOnce([]);
 
             const wrapper = await mountAndAddViewerRole();
-            const saveBtn = wrapper.find("[data-test='save-user-btn']");
-            expect(saveBtn.attributes("disabled")).toBeUndefined();
+            expect(saveButtonDisabled(wrapper)).toBe(false);
 
-            await saveBtn.trigger("click");
+            await wrapper.find("[data-test='save-user-btn']").trigger("click");
             await flushPromises();
 
             expect(mockUpdateUserRoles).toHaveBeenCalledWith("user-1", ["role-1", "role-2"]);
@@ -281,7 +328,7 @@ describe("User Management", () => {
                 title: "User updated"
             });
             expect(mockSnackbarError).not.toHaveBeenCalled();
-            expect(wrapper.find("[data-test='save-user-btn']").attributes("disabled")).toBeDefined();
+            expect(saveButtonDisabled(wrapper)).toBe(true);
         });
 
         test("shows an error snackbar and keeps dirty state when updateUserRoles rejects", async () => {
@@ -297,7 +344,7 @@ describe("User Management", () => {
                 title: "Update failed"
             });
             expect(mockSnackbarSuccess).not.toHaveBeenCalled();
-            expect(wrapper.find("[data-test='save-user-btn']").attributes("disabled")).toBeUndefined();
+            expect(saveButtonDisabled(wrapper)).toBe(false);
         });
     });
 });
