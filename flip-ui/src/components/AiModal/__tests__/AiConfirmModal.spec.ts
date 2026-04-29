@@ -14,7 +14,7 @@
 
 
 
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 
 import AiConfirmModal from "../AiConfirmModal.vue";
 
@@ -23,5 +23,64 @@ describe("Ai ConfirmModal", () => {
         const comp = mount(AiConfirmModal);
 
         expect(comp.element).toMatchSnapshot();
+    });
+
+    describe("typing-confirmation validator (no-throw guarantee)", () => {
+        // The form's yup schema reads `this.parent.confirmation` and
+        // uppercase-compares it to the prop. Before the user has typed
+        // anything, `this.parent.confirmation` is undefined; the previous
+        // version called `.toUpperCase()` on it directly, raising a Vue /
+        // vee-validate unhandled rejection that surfaced in Cypress as a
+        // TypeError. These tests pin the guarded behaviour so it doesn't
+        // regress — the headless DOM here can't fully simulate HeadlessUI's
+        // teleport so we rely on mount + validation-pass to reach the
+        // schema's test() callback without crashing.
+
+        function mountWithTyping(typingConfirmation: string) {
+            return mount(AiConfirmModal, {
+                attachTo: document.body,
+                props: {
+                    dialog: true,
+                    continueAction: () => {},
+                    typingConfirmation
+                }
+            });
+        }
+
+        test("does not throw when typingConfirmation is set and the input is still empty", async () => {
+            const wrapper = mountWithTyping("DELETE PROJECT");
+            await flushPromises();
+
+            // Asserting the wrapper exists also guarantees the synchronous
+            // setup() didn't throw — the previous code crashed on first
+            // validation pass before this check would have run.
+            expect(wrapper.exists()).toBe(true);
+
+            wrapper.unmount();
+        });
+
+        test("does not throw when typingConfirmation is empty (no validator branch)", async () => {
+            const wrapper = mountWithTyping("");
+            await flushPromises();
+
+            expect(wrapper.exists()).toBe(true);
+
+            wrapper.unmount();
+        });
+
+        test("does not throw on subsequent prop changes that re-trigger validation", async () => {
+            const wrapper = mountWithTyping("");
+            await flushPromises();
+
+            await wrapper.setProps({ typingConfirmation: "ALPHA" });
+            await flushPromises();
+
+            await wrapper.setProps({ typingConfirmation: "BETA" });
+            await flushPromises();
+
+            expect(wrapper.exists()).toBe(true);
+
+            wrapper.unmount();
+        });
     });
 });

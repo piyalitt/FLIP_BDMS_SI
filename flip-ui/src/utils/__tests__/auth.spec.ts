@@ -39,7 +39,8 @@ vi.mock("aws-amplify/utils", () => ({
             (_channel: string, listener: (data: { payload: { event: string } }) => void) => {
                 capturedListener.fn = listener;
             }
-        )
+        ),
+        dispatch: vi.fn()
     }
 }));
 
@@ -284,6 +285,151 @@ describe("authCheck", () => {
             text: "Please log in again to confirm your identity."
         });
         localStorageClear.mockRestore();
+    });
+});
+
+describe("authCheck — Cypress hook (window.Cypress)", () => {
+    // The src code branches at the top of authCheck on `window.Cypress`
+    // so unit tests can drive the same code paths Cypress E2E exercises
+    // without needing to spin up Amplify. Each test sets the flag,
+    // populates / omits `cypress.auth.user` in localStorage, and asserts
+    // the redirect behaviour mirrors the production flow below it.
+
+    beforeEach(() => {
+        setActivePinia(createPinia());
+        vi.mocked(fetchAuthSession).mockReset();
+        window.localStorage.clear();
+        (window as unknown as { Cypress?: unknown }).Cypress = {};
+    });
+
+    afterEach(() => {
+        delete (window as unknown as { Cypress?: unknown }).Cypress;
+        window.localStorage.clear();
+    });
+
+    it("redirects to /auth/login when no cypress.auth.user is set", async () => {
+        const { next, calls } = makeNext();
+
+        await authCheck(route("/projects") as never, route("/") as never, next as never);
+
+        expect(calls).toEqual(["/auth/login"]);
+        expect(fetchAuthSession).not.toHaveBeenCalled();
+    });
+
+    it("populates the auth store from cypress.auth.user and continues", async () => {
+        const user = {
+            username: "u",
+            userId: "id",
+            attributes: { sub: "s", email: "u@e.com" },
+            permissions: ["CanManageProjects"]
+        };
+        window.localStorage.setItem("cypress.auth.user", JSON.stringify(user));
+        const { next, calls } = makeNext();
+        const auth = useAuthStore();
+
+        await authCheck(route("/projects") as never, route("/") as never, next as never);
+
+        expect(auth.user).toEqual(user);
+        expect(auth.signInStep).toBe("DONE");
+        expect(calls).toEqual([undefined]);
+        expect(fetchAuthSession).not.toHaveBeenCalled();
+    });
+
+    it("routes new-password challenge users to /auth/new-password", async () => {
+        const auth = useAuthStore();
+        auth.signInStep = "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED";
+        const { next, calls } = makeNext();
+
+        await authCheck(route("/projects") as never, route("/") as never, next as never);
+
+        expect(calls).toEqual(["/auth/new-password"]);
+    });
+
+    it("lets new-password challenge users stay on /auth/new-password without recursing", async () => {
+        const auth = useAuthStore();
+        auth.signInStep = "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED";
+        const { next, calls } = makeNext();
+
+        await authCheck(route("/auth/new-password") as never, route("/") as never, next as never);
+
+        expect(calls).toEqual([undefined]);
+    });
+
+    it("routes TOTP-setup challenge to /auth/mfa-setup", async () => {
+        const auth = useAuthStore();
+        auth.signInStep = "CONTINUE_SIGN_IN_WITH_TOTP_SETUP";
+        const { next, calls } = makeNext();
+
+        await authCheck(route("/projects") as never, route("/") as never, next as never);
+
+        expect(calls).toEqual(["/auth/mfa-setup"]);
+    });
+
+    it("routes TOTP-code challenge to /auth/mfa-verify", async () => {
+        const auth = useAuthStore();
+        auth.signInStep = "CONFIRM_SIGN_IN_WITH_TOTP_CODE";
+        const { next, calls } = makeNext();
+
+        await authCheck(route("/projects") as never, route("/") as never, next as never);
+
+        expect(calls).toEqual(["/auth/mfa-verify"]);
+    });
+
+    it("does not overwrite a preloaded auth.user", async () => {
+        const auth = useAuthStore();
+        auth.user = {
+            username: "preloaded",
+            userId: "p",
+            attributes: { sub: "p", email: "p@e.com" },
+            permissions: []
+        };
+        window.localStorage.setItem(
+            "cypress.auth.user",
+            JSON.stringify({ username: "fromStorage", userId: "x", attributes: {}, permissions: [] })
+        );
+        const { next, calls } = makeNext();
+
+        await authCheck(route("/projects") as never, route("/") as never, next as never);
+
+        expect(auth.user.username).toBe("preloaded");
+        expect(calls).toEqual([undefined]);
+    });
+});
+
+describe("__cypressTriggerSessionExpiry", () => {
+    // The auth.ts module installs this onto `window` at import time when
+    // `window.Cypress` is set, so the session-expired Cypress spec can
+    // dispatch the Hub event without simulating a Cognito refresh
+    // round-trip. We reset modules and re-import under our own
+    // window.Cypress to exercise the module-level installer.
+
+    it("is a function that dispatches the tokenRefresh_failure Hub event", async () => {
+        (window as unknown as { Cypress?: unknown }).Cypress = {};
+        vi.resetModules();
+
+        // Re-mock aws-amplify/utils for this resetModules scope so the
+        // re-imported auth.ts captures *our* Hub.dispatch reference.
+        const dispatch = vi.fn();
+        vi.doMock("aws-amplify/utils", () => ({
+            Hub: { listen: vi.fn(), dispatch }
+        }));
+
+        await import("@/utils/auth");
+
+        const trigger = (window as unknown as {
+            __cypressTriggerSessionExpiry?: () => void;
+        }).__cypressTriggerSessionExpiry;
+
+        expect(typeof trigger).toBe("function");
+
+        trigger?.();
+
+        expect(dispatch).toHaveBeenCalledWith("auth", { event: "tokenRefresh_failure" });
+
+        vi.doUnmock("aws-amplify/utils");
+        delete (window as unknown as { Cypress?: unknown }).Cypress;
+        delete (window as unknown as { __cypressTriggerSessionExpiry?: unknown })
+            .__cypressTriggerSessionExpiry;
     });
 });
 
