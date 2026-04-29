@@ -48,7 +48,7 @@
                 <AiLoader />
             </div>
             <ul v-if="data?.data?.length" role="list" class="border-t border-b border-gray-200 divide-y divide-gray-200 dark:border-gray-700 dark:divide-gray-700">
-                <li v-for="model in (data?.data ?? [])" :key="model.id">
+                <li v-for="model in data.data" :key="model.id">
                     <router-link
                         v-slot="{ navigate }"
                         custom
