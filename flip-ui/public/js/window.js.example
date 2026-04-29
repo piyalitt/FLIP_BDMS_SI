@@ -30,4 +30,3 @@ window.AWS_CLIENT_ID           = "<app-client-id>";
 window.AWS_REGION              = "eu-west-2";
 window.BLACKLISTED_MODEL_FILES = "";
 window.RELEASE_VERSION         = "";
-window.MAX_REIMPORT_COUNT      = 10;

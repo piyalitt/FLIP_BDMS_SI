@@ -14,22 +14,244 @@
 
 
 import { createTestingPinia } from "@pinia/testing";
-import { mount } from "@vue/test-utils";
-import { vi } from "vitest";
+import { flushPromises, mount, VueWrapper } from "@vue/test-utils";
+import { beforeEach, describe, expect, it, test, vi } from "vitest";
 
 import UserManagement from "@/pages/admin/users.vue";
 
-describe("User Management", () => {
-    it("renders the component successfully", () => {
-        const component = mount(UserManagement, {
-            global: {
-                plugins: [createTestingPinia({
+// The admin users page now exposes a "Reset MFA" action that fans out to
+// the user-service helper. Mock the helper so we can assert on calls and
+// drive success/error branches.
+const mockResetUserMfa = vi.fn();
+const mockGetUsers = vi.fn();
+const mockGetRoles = vi.fn();
+const mockUpdateUserDisabledState = vi.fn();
+const mockUpdateUserRoles = vi.fn();
+
+vi.mock("@/services/user-service", () => ({
+    resetUserMfa: (...args: unknown[]) => mockResetUserMfa(...args),
+    getUsers: (...args: unknown[]) => mockGetUsers(...args),
+    updateUserDisabledState: (...args: unknown[]) => mockUpdateUserDisabledState(...args),
+    updateUserRoles: (...args: unknown[]) => mockUpdateUserRoles(...args)
+}));
+
+vi.mock("@/services/role-service", () => ({
+    getRoles: (...args: unknown[]) => mockGetRoles(...args)
+}));
+
+const mockRouteNotAllowed = vi.fn();
+const mockViewProjects = vi.fn();
+
+vi.mock("@/router", () => ({
+    default: { push: vi.fn() },
+    routeChange: {
+        notAllowed: (...args: unknown[]) => mockRouteNotAllowed(...args),
+        viewProjects: (...args: unknown[]) => mockViewProjects(...args)
+    }
+}));
+
+const mockSnackbarShow = vi.fn();
+const mockSnackbarError = vi.fn();
+const mockSnackbarSuccess = vi.fn();
+
+vi.mock("@/utils/snackbar", () => ({
+    Snackbar: {
+        show: (...args: unknown[]) => mockSnackbarShow(...args),
+        error: (...args: unknown[]) => mockSnackbarError(...args),
+        success: (...args: unknown[]) => mockSnackbarSuccess(...args)
+    }
+}));
+
+// Authorised by default — tests that need the 403 branch override with
+// mockResolvedValueOnce(false).
+const mockCanAccessRoute = vi.fn().mockResolvedValue(true);
+vi.mock("@/utils/route-validator", () => ({
+    canAccessRoute: (...args: unknown[]) => mockCanAccessRoute(...args)
+}));
+
+const SAMPLE_USER = {
+    id: "user-1",
+    email: "user@example.com",
+    roles: [{ id: "role-1", rolename: "admin", roledescription: "Administrator" }],
+    isDisabled: false
+};
+
+function mountUserManagement(): VueWrapper {
+    return mount(UserManagement, {
+        global: {
+            plugins: [
+                createTestingPinia({
                     createSpy: vi.fn,
                     stubActions: false
-                })]
+                })
+            ],
+            stubs: {
+                // Transitions / popovers get in the way of synchronous
+                // DOM assertions — flatten them so the action buttons
+                // inside the panel are rendered immediately.
+                AiCard: { template: "<div><slot /></div>" },
+                AiSkeleton: true,
+                AiPagination: true,
+                AiLabel: true,
+                AiConfirmModal: {
+                    template:
+                        "<div :data-test=\"$attrs['data-test-id']\" v-if=\"dialog\"><button :data-test=\"$attrs['continue-button-data-test']\" @click=\"continueAction && continueAction()\">{{ continueButtonText }}</button></div>",
+                    props: ["dialog", "confirmationText", "continueButtonText", "closeButtonText", "continueAction"]
+                },
+                RegisterUserModal: true,
+                Popover: { template: "<div><slot /></div>" },
+                PopoverButton: { template: "<div><slot /></div>" },
+                PopoverGroup: { template: "<div><slot /></div>" },
+                PopoverPanel: { template: "<div><slot /></div>" },
+                VTable: {
+                    template:
+                        "<table><slot name=\"head\" /><slot name=\"body\" :rows=\"data ?? []\" /></table>",
+                    props: ["data"]
+                },
+                AiButton: {
+                    // Inherit attrs (including data-test) so we can find
+                    // the specific action buttons by data-test selector.
+                    template: "<button :data-test=\"$attrs['data-test']\" @click=\"$emit('click', $event)\"><slot /></button>",
+                    props: ["primary", "light", "text", "textSecondary", "block", "disabled", "loading"],
+                    emits: ["click"]
+                }
             }
+        }
+    });
+}
+
+describe("User Management", () => {
+    beforeEach(() => {
+        mockResetUserMfa.mockReset();
+        mockGetUsers.mockReset();
+        mockGetRoles.mockReset();
+        mockUpdateUserDisabledState.mockReset();
+        mockUpdateUserRoles.mockReset();
+        mockRouteNotAllowed.mockReset();
+        mockViewProjects.mockReset();
+        mockSnackbarShow.mockReset();
+        mockSnackbarError.mockReset();
+        mockSnackbarSuccess.mockReset();
+        mockCanAccessRoute.mockReset();
+        mockCanAccessRoute.mockResolvedValue(true);
+
+        mockGetUsers.mockResolvedValue({
+            data: [SAMPLE_USER],
+            page: 1,
+            totalPages: 1
         });
+        mockGetRoles.mockResolvedValue({
+            roles: [
+                { id: "role-1", rolename: "admin", roledescription: "Administrator" },
+                { id: "role-2", rolename: "viewer", roledescription: "View-only" }
+            ]
+        });
+    });
+
+    it("renders the component successfully", () => {
+        const component = mountUserManagement();
 
         expect(component.exists()).toBe(true);
+    });
+
+    it("shows the Register User button", () => {
+        const component = mountUserManagement();
+
+        expect(component.find("[data-test='register-user-btn']").exists()).toBe(true);
+    });
+
+    describe("Route guard", () => {
+        test("redirects to /projects when the user lacks CanManageUsers", async () => {
+            mockCanAccessRoute.mockResolvedValueOnce(false);
+
+            mountUserManagement();
+            await flushPromises();
+
+            expect(mockViewProjects).toHaveBeenCalledTimes(1);
+        });
+
+        test("stays on the page when the user has CanManageUsers", async () => {
+            mountUserManagement();
+            await flushPromises();
+
+            expect(mockViewProjects).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("Reset MFA action", () => {
+        async function mountAndSelectUser(): Promise<VueWrapper> {
+            const wrapper = mountUserManagement();
+            await flushPromises();
+            // Select the sample user so the action panel renders.
+            await wrapper.find("[data-test='user']").trigger("click");
+            await flushPromises();
+            return wrapper;
+        }
+
+        test("the 'Reset MFA' button is rendered in the actions panel", async () => {
+            const wrapper = await mountAndSelectUser();
+
+            expect(wrapper.find("[data-test='reset-mfa-btn']").exists()).toBe(true);
+        });
+
+        test("clicking 'Reset MFA' opens the confirmation dialog (does NOT call the API yet)", async () => {
+            const wrapper = await mountAndSelectUser();
+
+            await wrapper.find("[data-test='reset-mfa-btn']").trigger("click");
+            await flushPromises();
+
+            // The API should only be called after the user confirms.
+            expect(mockResetUserMfa).not.toHaveBeenCalled();
+        });
+
+        test("confirming the dialog calls resetUserMfa and shows a success snackbar", async () => {
+            mockResetUserMfa.mockResolvedValueOnce(undefined);
+            const wrapper = await mountAndSelectUser();
+
+            // Open the dialog, then click "continue" inside the confirm modal.
+            await wrapper.find("[data-test='reset-mfa-btn']").trigger("click");
+            await flushPromises();
+            // All our stubbed AiConfirmModals render with the shared
+            // continueButtonText — we use the Reset MFA text to find the right one.
+            const confirmBtns = wrapper.findAll("button").filter(b => b.text() === "Reset MFA");
+            // First one is the action-panel trigger (already clicked);
+            // second is inside the confirm modal that just opened.
+            const confirmTrigger = confirmBtns[confirmBtns.length - 1];
+            await confirmTrigger.trigger("click");
+            await flushPromises();
+
+            expect(mockResetUserMfa).toHaveBeenCalledTimes(1);
+            expect(mockResetUserMfa).toHaveBeenCalledWith(SAMPLE_USER.id);
+            expect(mockSnackbarSuccess).toHaveBeenCalledTimes(1);
+            expect(mockSnackbarSuccess.mock.calls[0][0]).toMatchObject({ title: "MFA reset" });
+            expect(mockSnackbarError).not.toHaveBeenCalled();
+        });
+
+        test("resetUserMfa failure surfaces an error snackbar (no success toast)", async () => {
+            mockResetUserMfa.mockRejectedValueOnce(new Error("Backend unavailable"));
+            const wrapper = await mountAndSelectUser();
+
+            await wrapper.find("[data-test='reset-mfa-btn']").trigger("click");
+            await flushPromises();
+            const confirmBtns = wrapper.findAll("button").filter(b => b.text() === "Reset MFA");
+            await confirmBtns[confirmBtns.length - 1].trigger("click");
+            await flushPromises();
+
+            expect(mockResetUserMfa).toHaveBeenCalledTimes(1);
+            expect(mockSnackbarError).toHaveBeenCalledTimes(1);
+            expect(mockSnackbarError.mock.calls[0][0]).toMatchObject({ title: "MFA reset failed" });
+            expect(mockSnackbarSuccess).not.toHaveBeenCalled();
+        });
+
+        test("resetMfa is a no-op when no user is selected", async () => {
+            // Don't click any user — selectedUser stays undefined.
+            const wrapper = mountUserManagement();
+            await flushPromises();
+
+            // With no selectedUser, the reset-mfa-btn is gated by the
+            // v-if on selectedUser and should not render.
+            expect(wrapper.find("[data-test='reset-mfa-btn']").exists()).toBe(false);
+            expect(mockResetUserMfa).not.toHaveBeenCalled();
+        });
     });
 });

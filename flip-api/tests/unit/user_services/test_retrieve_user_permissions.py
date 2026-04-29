@@ -35,7 +35,7 @@ def test_token_id() -> uuid.UUID:
 @pytest.fixture
 def sample_permissions() -> list[str]:
     """Fixture for sample permission names."""
-    return [PermissionRef.CAN_APPROVE_PROJECTS, PermissionRef.CAN_MANAGE_USERS]
+    return [PermissionRef.CAN_APPROVE_PROJECTS.name, PermissionRef.CAN_MANAGE_USERS.name]
 
 
 @pytest.fixture
@@ -135,7 +135,7 @@ def test_retrieve_user_permissions_success(
     response = retrieve_user_permissions(user_id=user_id, db=mock_session, token_id=requesting_user_id)
 
     assert isinstance(response, UserPermissionsResponse)
-    assert response.permissions == [to_pascal_case(perm.value) for perm in sample_permissions]
+    assert response.permissions == [to_pascal_case(perm) for perm in sample_permissions]
     mock_has_role.assert_called_once_with(user_id, mock_session)
     assert mock_get_permissions.call_count == 1
     mock_get_permissions.assert_any_call(user_id, mock_session)

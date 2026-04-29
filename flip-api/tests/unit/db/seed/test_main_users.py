@@ -13,11 +13,18 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import HTTPException, status
 from sqlmodel import Session
 
 from flip_api.db.models.user_models import RoleRef
-from flip_api.db.seed.main_users import seed_main_users
-from flip_api.utils.constants import ADMIN_EMAIL, RESEARCHER_EMAIL
+from flip_api.db.seed.main_users import ensure_user_and_role, seed_main_users
+from flip_api.utils.constants import (
+    ADMIN_EMAIL_1,
+    ADMIN_EMAIL_2,
+    ADMIN_EMAIL_3,
+    OBSERVER_EMAIL,
+    RESEARCHER_EMAIL,
+)
 
 
 @pytest.fixture
@@ -25,17 +32,26 @@ def mock_session():
     return MagicMock(spec=Session)
 
 
+@pytest.fixture
+def mock_settings():
+    settings = MagicMock()
+    settings.AWS_COGNITO_USER_POOL_ID = "test-pool"
+    return settings
+
+
 @patch("flip_api.db.seed.main_users.ensure_user_and_role")
 @patch("flip_api.db.seed.main_users.logger")
 def test_seed_main_users_calls_ensure_user_and_role(mock_logger, mock_ensure_user_and_role, mock_session):
-    """Test that seed_main_users calls ensure_user_and_role for admin and researcher."""
+    """Test that seed_main_users calls ensure_user_and_role for each admin, researcher, and observer."""
     seed_main_users(mock_session)
 
-    # ensure_user_and_role called twice
-    assert mock_ensure_user_and_role.call_count == 2
+    assert mock_ensure_user_and_role.call_count == 5
 
-    mock_ensure_user_and_role.assert_any_call(ADMIN_EMAIL, RoleRef.ADMIN, mock_session)
+    mock_ensure_user_and_role.assert_any_call(ADMIN_EMAIL_1, RoleRef.ADMIN, mock_session)
+    mock_ensure_user_and_role.assert_any_call(ADMIN_EMAIL_2, RoleRef.ADMIN, mock_session)
+    mock_ensure_user_and_role.assert_any_call(ADMIN_EMAIL_3, RoleRef.ADMIN, mock_session)
     mock_ensure_user_and_role.assert_any_call(RESEARCHER_EMAIL, RoleRef.RESEARCHER, mock_session)
+    mock_ensure_user_and_role.assert_any_call(OBSERVER_EMAIL, RoleRef.OBSERVER, mock_session)
 
     # Logging verified
     mock_logger.debug.assert_called_with("Seeding main users...")
@@ -52,24 +68,62 @@ def test_seed_main_users_propagates_errors(mock_logger, mock_ensure_user_and_rol
         seed_main_users(mock_session)
 
     # Should only have tried first user before raising
-    mock_ensure_user_and_role.assert_called_once_with(ADMIN_EMAIL, RoleRef.ADMIN, mock_session)
+    mock_ensure_user_and_role.assert_called_once_with(ADMIN_EMAIL_1, RoleRef.ADMIN, mock_session)
 
 
 @patch("flip_api.db.seed.main_users.ensure_user_and_role")
 @patch("flip_api.db.seed.main_users.logger")
-def test_seed_main_users_runs_both_even_if_first_succeeds(mock_logger, mock_ensure_user_and_role, mock_session):
-    """Test that both users are seeded when ensure_user_and_role succeeds."""
+def test_seed_main_users_runs_all_when_each_succeeds(mock_logger, mock_ensure_user_and_role, mock_session):
+    """Test that all users are seeded when ensure_user_and_role succeeds."""
     mock_ensure_user_and_role.return_value = None
 
     seed_main_users(mock_session)
 
-    # Confirm both calls were made in correct order
     expected_calls = [
-        (ADMIN_EMAIL, RoleRef.ADMIN, mock_session),
+        (ADMIN_EMAIL_1, RoleRef.ADMIN, mock_session),
+        (ADMIN_EMAIL_2, RoleRef.ADMIN, mock_session),
+        (ADMIN_EMAIL_3, RoleRef.ADMIN, mock_session),
         (RESEARCHER_EMAIL, RoleRef.RESEARCHER, mock_session),
+        (OBSERVER_EMAIL, RoleRef.OBSERVER, mock_session),
     ]
     actual_calls = [c.args for c in mock_ensure_user_and_role.call_args_list]
     assert actual_calls == expected_calls
 
     # Final log
     mock_logger.info.assert_called_with("✅ Finished seeding main users.")
+
+
+@patch("flip_api.db.seed.main_users.get_settings")
+@patch("flip_api.db.seed.main_users.get_user_by_email_or_id")
+@patch("flip_api.db.seed.main_users.logger")
+def test_ensure_user_and_role_skips_missing_cognito_user(
+    mock_logger, mock_get_user_by_email_or_id, mock_get_settings, mock_session, mock_settings
+):
+    mock_get_settings.return_value = mock_settings
+    mock_get_user_by_email_or_id.side_effect = HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Not found",
+    )
+
+    ensure_user_and_role("missing@example.com", RoleRef.RESEARCHER, mock_session)
+
+    mock_get_user_by_email_or_id.assert_called_once_with(user_pool_id="test-pool", email="missing@example.com")
+    mock_session.exec.assert_not_called()
+    mock_logger.warning.assert_called_once()
+
+
+@patch("flip_api.db.seed.main_users.get_settings")
+@patch("flip_api.db.seed.main_users.get_user_by_email_or_id")
+def test_ensure_user_and_role_reraises_non_404_cognito_errors(
+    mock_get_user_by_email_or_id, mock_get_settings, mock_session, mock_settings
+):
+    mock_get_settings.return_value = mock_settings
+    mock_get_user_by_email_or_id.side_effect = HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Cognito failure",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        ensure_user_and_role("missing@example.com", RoleRef.RESEARCHER, mock_session)
+
+    assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR

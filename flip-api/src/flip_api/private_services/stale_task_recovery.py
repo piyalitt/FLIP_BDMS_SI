@@ -44,9 +44,8 @@ def recover_stale_tasks(db: Session) -> int:
     Returns:
         int: Number of tasks recovered (re-queued or failed).
     """
-    settings = get_settings()
-    timeout_minutes = settings.TASK_STALE_TIMEOUT_MINUTES
-    max_retries = settings.TASK_MAX_RETRIES
+    timeout_minutes = get_settings().TASK_STALE_TIMEOUT_MINUTES
+    max_retries = get_settings().TASK_MAX_RETRIES
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
 
     statement = (
