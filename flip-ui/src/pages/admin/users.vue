@@ -115,6 +115,14 @@
                                             Reset Password
                                         </AiButton>
                                         <AiButton
+                                            data-test="reset-mfa-btn"
+                                            text-secondary
+                                            block
+                                            @click="dialogResetMfa = true;"
+                                        >
+                                            Reset MFA
+                                        </AiButton>
+                                        <AiButton
                                             v-if="!selectedUser.isDisabled"
                                             block
                                             data-test="disable-user-btn"
@@ -258,6 +266,14 @@
         :continue-action="resetPassword"
         @close-modal="dialogResetPassword = false;"
     />
+    <AiConfirmModal
+        :dialog="dialogResetMfa"
+        confirmation-text="Reset this user's MFA device? They will need to enrol a new authenticator on their next sign-in."
+        close-button-text="Cancel"
+        continue-button-text="Reset MFA"
+        :continue-action="resetMfa"
+        @close-modal="dialogResetMfa = false;"
+    />
 </template>
 
 <script setup lang="ts">
@@ -282,6 +298,7 @@ import {
     getUsers,
     IUser,
     IUserDisabledStateDto,
+    resetUserMfa,
     updateUserDisabledState,
     updateUserRoles
 } from "@/services/user-service";
@@ -304,6 +321,7 @@ const showRegisterUserModal = ref(false);
 const dialogDisable = ref(false);
 const dialogEnable = ref(false);
 const dialogResetPassword = ref(false);
+const dialogResetMfa = ref(false);
 
 onBeforeMount(async () => {
     if(!(await canAccessRoute(authStore, ["CanManageUsers"]))){
@@ -429,6 +447,25 @@ const resetPassword = () => {
             text: "The user's password has been reset.",
             title: "Password reset"
         });
+    }
+};
+
+const resetMfa = async () => {
+    if (!selectedUser.value) return;
+    dialogResetMfa.value = false;
+
+    try {
+        await resetUserMfa(selectedUser.value.id);
+        Snackbar.success({
+            text: "The user's authenticator has been cleared. They will enrol a new one on next sign-in.",
+            title: "MFA reset"
+        });
+    } catch (e) {
+        Snackbar.error({
+            text: "There was an error resetting MFA, please try again.",
+            title: "MFA reset failed"
+        });
+        errorStore.setError();
     }
 };
 

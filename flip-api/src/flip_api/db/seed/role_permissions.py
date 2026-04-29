@@ -12,67 +12,70 @@
 
 from uuid import UUID
 
-import psycopg2
-from sqlmodel import Session, delete, select
+from sqlmodel import Session, select
 
 from flip_api.db.database import engine
 from flip_api.db.models.user_models import Permission, PermissionRef, Role, RolePermission
 from flip_api.utils.logger import logger
 
 
-def seed_role_permissions(session: Session) -> None:
-    """Seed role permissions intersections.
+def _grant_permissions(session: Session, role_id: UUID, permission_ids: list[UUID]) -> None:
+    """Grant a role a set of permissions, skipping pairs already present.
+
+    Matches the check-then-insert idempotency pattern used by ``seed_roles``
+    and ``seed_permissions``: avoids relying on IntegrityError recovery and
+    stays DB-driver agnostic.
 
     Args:
-        session (Session): The SQLModel session used for reads and inserts.
+        session (Session): Database session.
+        role_id (UUID): Role receiving the permissions.
+        permission_ids (list[UUID]): Permissions to grant.
+
+    Returns:
+        None
     """
-    # Delete existing role permissions
-    delete(RolePermission)
+    for permission_id in permission_ids:
+        existing = session.exec(
+            select(RolePermission)
+            .where(RolePermission.role_id == role_id)
+            .where(RolePermission.permission_id == permission_id)
+        ).first()
+        if existing:
+            continue
+        session.add(RolePermission(role_id=role_id, permission_id=permission_id))
     session.commit()
 
-    admin_role = session.exec(select(Role.id).where(Role.name == "Admin")).first()
 
-    if admin_role:
-        # Get all permissions
-        permissions = session.exec(select(Permission)).all()
+def seed_role_permissions(session: Session) -> None:
+    """Seed role/permission intersections.
 
-        # Create role-permission intersections for admin
-        for permission in permissions:
-            try:
-                role_perm = RolePermission(role_id=admin_role, permission_id=permission.id)
-                session.add(role_perm)
-                session.commit()
-            except psycopg2.IntegrityError:
-                session.rollback()
-                logger.debug(
-                    f"RolePermission for role_id {admin_role} and permission_id {permission.id} already exists."
-                )
+    Idempotent: running against a populated DB inserts only the missing
+    pairs. Does not remove permissions that have been taken out of the
+    seed (that would need an explicit migration, not a seed).
+
+    - Admin: every permission defined in ``PermissionRef``.
+    - Researcher: ``CAN_MANAGE_PROJECTS``.
+    - Observer: none — read-only access is enforced at the route layer by
+      the absence of ``CAN_MANAGE_PROJECTS``.
+
+    Args:
+        session (Session): Database session.
+
+    Returns:
+        None
+    """
+    admin_role_id = session.exec(select(Role.id).where(Role.name == "Admin")).first()
+    if admin_role_id:
+        all_permission_ids = [p.id for p in session.exec(select(Permission)).all()]
+        _grant_permissions(session, admin_role_id, all_permission_ids)
     else:
         logger.debug("Admin role not found. Cannot seed role permissions.")
 
-    # Create default permissions for the Researcher role
-    researcher_role = session.exec(select(Role.id).where(Role.name == "Researcher")).first()
-
-    if researcher_role:
-        # Define default permissions for the Researcher role
-        default_permissions: list[str] = [
-            PermissionRef.CAN_MANAGE_PROJECTS.value,
-        ]
-        for permission_id in default_permissions:
-            if permission_id:
-                try:
-                    role_perm = RolePermission(role_id=researcher_role, permission_id=UUID(permission_id))
-                    session.add(role_perm)
-                    session.commit()
-                except psycopg2.IntegrityError:
-                    session.rollback()
-                    logger.debug(
-                        f"RolePermission for role_id {researcher_role} and permission {permission_id} already exists."
-                    )
-            else:
-                logger.debug(f"Permission {permission_id} not found. Cannot assign to Researcher role.")
-
-    # Note: Observer role intentionally has no permissions (read-only access to assigned projects)
+    researcher_role_id = session.exec(select(Role.id).where(Role.name == "Researcher")).first()
+    if researcher_role_id:
+        _grant_permissions(session, researcher_role_id, [PermissionRef.CAN_MANAGE_PROJECTS.value])
+    else:
+        logger.debug("Researcher role not found. Cannot seed role permissions.")
 
     logger.info("Role permissions seeded successfully.")
 

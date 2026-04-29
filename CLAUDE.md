@@ -195,6 +195,7 @@ After changes, evaluate if docs need updating:
 - `INTERNAL_SERVICE_KEY_HASH` — hub-side SHA-256 hash of the internal service key
 - `CENTRAL_HUB_API_URL` — public base URL of flip-api (with `/api`); read by flip-ui and trust-api. In prod this is the CloudFront URL.
 - `FLIP_API_INTERNAL_URL` — Central-Hub-internal base URL of flip-api (with `/api`); read **only** by fl-server. Must resolve over the Docker network (e.g. `http://flip-api:8000/api`), never the CloudFront URL — CloudFront strips `X-Internal-Service-Key` at the edge.
+- `ENFORCE_MFA` — `true` (the `Settings` default; do **not** set in `.env*` files for stag/prod) gates every authenticated route on TOTP enrolment via the app-layer MFA check in `verify_token`. The dev override lives in `deploy/compose.development.yml` (`ENFORCE_MFA=false`) so local development doesn't force enrolment on a burner authenticator app; production-mode compose files inherit the Settings default. Intentionally not in `.env.development.example` or AWS Secrets Manager — the dev override is the only place this flag should appear, and stag/prod leave it untouched. The UI mirrors this flag from `/users/me/mfa/status` and skips the enrolment redirect when it's false.
 
 ## Deployment Architecture
 
@@ -206,6 +207,19 @@ After changes, evaluate if docs need updating:
 ## CI/CD
 
 GitHub Actions: `test_flip_api.yml`, `test_flip_ui.yml`, `test_trust_*.yml`, `docker_build_*.yml`, `validate_terraform.yml`, `secret-scanning.yml`, `docs.yml`, `pr_acceptance_criteria.yml`. Run locally: `make ci` (uses `act`).
+
+### Docker image builds: manual trigger required for branches
+
+**The `docker_build_*.yml` workflows only auto-publish to GHCR on merges to `develop` and `main`.** Branch pushes do NOT build images. If you pin a branch-named tag in a compose file (e.g. `ghcr.io/londonaicentre/flip-api:my-feature-branch`) for prod testing, you must manually trigger the relevant build workflow first via `workflow_dispatch`:
+
+```bash
+gh workflow run docker_build_flip_api.yml --ref <branch-name>
+gh workflow run docker_build_flip_ui.yml --ref <branch-name>          # only if UI image is consumed; deploy-ui builds locally
+gh workflow run docker_build_trust_trust_api.yml --ref <branch-name>
+# ...one per service whose image you've pinned
+```
+
+Wait for green completion (`gh run list --workflow=docker_build_flip_api.yml --branch <branch>`) before redeploying. The `flip-ui` is rebuilt locally by `make deploy-ui` and does not consume GHCR; the rest do.
 
 ## Pre-commit Hooks
 

@@ -102,13 +102,9 @@ def persisted_user(mock_db_session, user_id, roles_data, user_factory, role_fact
 
 def test_successful_role_update(mock_db, user_id, token_id, roles_data):
     """Test successful role update."""
-    # Setup: Mock two exec calls returning .all()
-    mock_exec = MagicMock()
-    mock_exec.side_effect = [
-        MagicMock(all=MagicMock(return_value=roles_data.roles)),  # First exec: role_ids_from_db
-        MagicMock(all=MagicMock(return_value=[MagicMock(id=user_id)])),  # Second exec: existing_users
-    ]
-    mock_db.exec = mock_exec
+    # Setup: target user exists, role_ids_from_db returns the requested roles
+    mock_db.get.return_value = MagicMock(id=user_id)
+    mock_db.exec.return_value.all.return_value = roles_data.roles
 
     # Mock delete
     mock_db.execute.return_value = MagicMock(rowcount=1)
@@ -123,10 +119,26 @@ def test_successful_role_update(mock_db, user_id, token_id, roles_data):
         # Assert
         assert result == roles_data
         mock_has_permissions.assert_called_once_with(token_id, [PermissionRef.CAN_MANAGE_USERS], mock_db)
-        assert mock_db.exec.call_count == 2
+        mock_db.exec.assert_called_once()
         mock_db.execute.assert_called_once()
         mock_db.add_all.assert_called_once()
         mock_db.add.assert_called_once()  # for the audit record
+
+
+def test_user_not_found_returns_404(mock_db, user_id, token_id, roles_data):
+    """Setting roles for a non-existent user should return 404, not 500."""
+    mock_db.get.return_value = None
+
+    with patch("flip_api.user_services.set_user_roles.has_permissions") as mock_has_permissions:
+        mock_has_permissions.return_value = True
+
+        with pytest.raises(HTTPException) as exc_info:
+            set_user_roles(user_id, roles_data, mock_db, token_id)
+
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+        assert str(user_id) in exc_info.value.detail
+        mock_db.add_all.assert_not_called()
+        mock_db.execute.assert_not_called()
 
 
 def test_permission_denied(mock_db, user_id, token_id, roles_data):
@@ -148,6 +160,7 @@ def test_permission_denied(mock_db, user_id, token_id, roles_data):
 def test_invalid_roles(mock_db, user_id, token_id, roles_data):
     """Test when some roles don't exist in the database."""
     # Setup
+    mock_db.get.return_value = MagicMock(id=user_id)
     mock_db.exec.return_value.all.return_value = []  # No roles in db
 
     with patch("flip_api.user_services.set_user_roles.has_permissions") as mock_has_permissions:
