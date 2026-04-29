@@ -18,13 +18,13 @@
                 <h2 class="text-lg font-semibold font-heading grow leading-loose">
                     Latest Models
                 </h2>
-                <div v-if="!isObserver && projectStore.project?.status === 'APPROVED' && data?.data.length">
+                <div v-if="!isObserver && projectStore.project?.status === 'APPROVED' && data?.data?.length">
                     <AiButton light data-test="add-model-btn" @click="addModel">
                         Create Model
                     </AiButton>
                 </div>
             </div>
-            <div v-if="projectStore.project?.status === 'APPROVED' && !!data && !data?.data.length">
+            <div v-if="projectStore.project?.status === 'APPROVED' && !!data && !data?.data?.length">
                 <div
                     class="flex flex-col items-center justify-center w-full h-full gap-4 p-4 mt-4 border-2 border-gray-300 dark:border-gray-700 border-dashed rounded-lg"
                 >
@@ -47,8 +47,8 @@
             <div v-if="!data" class="py-12">
                 <AiLoader />
             </div>
-            <ul v-if="data?.data.length" role="list" class="border-t border-b border-gray-200 divide-y divide-gray-200 dark:border-gray-700 dark:divide-gray-700">
-                <li v-for="model in data?.data" :key="model.id">
+            <ul v-if="data?.data?.length" role="list" class="border-t border-b border-gray-200 divide-y divide-gray-200 dark:border-gray-700 dark:divide-gray-700">
+                <li v-for="model in (data?.data ?? [])" :key="model.id">
                     <router-link
                         v-slot="{ navigate }"
                         custom
@@ -102,7 +102,7 @@
             </div>
         </template>
         <div
-            v-if="projectStore.project?.status === 'APPROVED' && data?.data.length"
+            v-if="projectStore.project?.status === 'APPROVED' && data?.data?.length"
             class="inline-flex justify-end w-full p-4 space-x-2"
         >
             <AiButton light data-test="view-all-models-btn" :link="`/project/${route.params['projectId']}/models`">
