@@ -13,6 +13,7 @@
 from fastapi import HTTPException, status
 from sqlmodel import Session, select
 
+from flip_api.config import get_settings
 from flip_api.db.models.main_models import SiteBanner, SiteConfig
 from flip_api.domain.interfaces.site import ISiteBanner, ISiteDetails
 from flip_api.utils.logger import logger
@@ -50,6 +51,7 @@ def get_site_details(db: Session) -> ISiteDetails:
                 enabled=validated_banner.enabled,
             ),
             deploymentMode=config.value,
+            maxReimportCount=get_settings().MAX_REIMPORT_COUNT,
         )
     else:
         return ISiteDetails(
@@ -59,6 +61,7 @@ def get_site_details(db: Session) -> ISiteDetails:
                 enabled=False,
             ),
             deploymentMode=config.value,
+            maxReimportCount=get_settings().MAX_REIMPORT_COUNT,
         )
 
 

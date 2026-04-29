@@ -43,22 +43,22 @@ def has_permissions(user_id: UUID, required_permissions: list[PermissionRef], db
         db (Session): The database session to query user roles and permissions.
 
     Returns:
-        True if the user has all required permissions, False otherwise
+        bool: True if the user has all required permissions, False otherwise
     """
     try:
         # Get user roles
         user_roles = db.exec(select(Role).join(UserRole).where(UserRole.user_id == user_id)).all()
 
         # Get all permissions for these roles
-        user_permissions = []
+        user_permission_ids: list[UUID] = []
         for role in user_roles:
             role_permissions = db.exec(
                 select(RolePermission.permission_id).where(RolePermission.role_id == role.id)
             ).all()
-            user_permissions.extend([str(p) for p in role_permissions])
+            user_permission_ids.extend(role_permissions)
 
         # Check if user has all required permissions
-        return all(permission.value in user_permissions for permission in required_permissions)
+        return all(permission.value in user_permission_ids for permission in required_permissions)
 
     except Exception as e:
         logger.error(f"Error checking permissions: {str(e)}")
