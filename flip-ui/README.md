@@ -112,7 +112,7 @@ npm install
 # so nothing here ever leaves the box. Match the values used in CI.
 cat > .env.development <<'EOF'
 VITE_LOCAL=false
-VITE_AWS_BASE_URL=http://localhost:8080/api
+VITE_AWS_BASE_URL=http://localhost:8080
 VITE_AWS_USER_POOL_ID=eu-west-2_DUMMY1234
 VITE_AWS_CLIENT_ID=dummyclientid1234567890ab
 VITE_AWS_REGION=eu-west-2

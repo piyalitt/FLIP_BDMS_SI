@@ -34,7 +34,10 @@ app.use(pinia);
 
 Amplify.configure(authConfig);
 
-if (process.env.VITE_LOCAL === "true") {
+// Skip the MirageJS dev mock server when running under Cypress — Cypress has
+// its own `cy.intercept` network layer in test/cypress/support/globalIntercepts.ts
+// and a second mock layer would just race with it.
+if (process.env.VITE_LOCAL === "true" && !window.Cypress) {
     console.info("Running locally, will use mocked API.");
     makeServer();
 }

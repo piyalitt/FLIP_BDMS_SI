@@ -93,10 +93,18 @@ jobs:
         # Vite (loadEnv) and the cypress plugin (dotenv) both read this file
         # at process start. Values are dummies — the suite mocks Cognito and
         # the API at the network layer, so nothing here ever hits AWS.
+        #
+        # VITE_AWS_BASE_URL deliberately omits the `/api` path segment used
+        # in production. The specs' relative-path intercepts (e.g. cy.intercept
+        # "GET", "/projects/*") match by URL path only, and `*` doesn't cross
+        # slashes — so a `/api/projects/foo` request would never match a
+        # `/projects/*` pattern and fall through to the catch-all in
+        # globalIntercepts.ts. Dropping the `/api` prefix in tests is the
+        # tidy fix; production traffic still uses the real `/api` URL.
         run: |
           cat > .env.development <<'EOF'
           VITE_LOCAL=false
-          VITE_AWS_BASE_URL=http://localhost:8080/api
+          VITE_AWS_BASE_URL=http://localhost:8080
           VITE_AWS_USER_POOL_ID=eu-west-2_DUMMY1234
           VITE_AWS_CLIENT_ID=dummyclientid1234567890ab
           VITE_AWS_REGION=eu-west-2

@@ -64,6 +64,24 @@ export const authCheck = async (
             return next();
         }
 
+        // Cypress E2E tests can't simulate Cognito's SRP handshake against a
+        // static fixture, so they populate `cypress.auth.user` in localStorage
+        // (see test/cypress/support/cognito.ts) and skip the live session
+        // check. Amplify v6's `fetchAuthSession()` would otherwise hang on
+        // forged tokens because `fetchUserAttributes()` expects a multi-step
+        // SDK round-trip the fixture can't reproduce.
+        if (window.Cypress) {
+            const stored = window.localStorage.getItem("cypress.auth.user");
+            if (stored && !auth.user) {
+                auth.user = JSON.parse(stored);
+                auth.signInStep = "DONE";
+            }
+            if (!auth.user) {
+                return next("/auth/login");
+            }
+            return next();
+        }
+
         // Check if user has a valid session
         try {
             await fetchAuthSession();
