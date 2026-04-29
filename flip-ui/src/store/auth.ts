@@ -239,11 +239,24 @@ export const useAuthStore = defineStore("auth", {
             // comment) is configured for USER_PASSWORD_AUTH. SRP on the
             // same client can 400 at InitiateAuth if the browser's SRP_A
             // handshake disagrees with the pool's curve config.
-            const out = await signIn({
+            const credentials = {
                 username: details.username,
                 password: details.password,
-                options: { authFlowType: "USER_PASSWORD_AUTH" }
-            });
+                options: { authFlowType: "USER_PASSWORD_AUTH" as const }
+            };
+            // Amplify v6 throws UserAlreadyAuthenticatedException if storage
+            // already holds tokens — e.g. credentials typed at /login while
+            // another tab still has a live session. Sign the stale session
+            // out and retry once so the user isn't stuck behind a generic
+            // "problem logging you in" snackbar.
+            let out;
+            try {
+                out = await signIn(credentials);
+            } catch (e) {
+                if ((e as Error).name !== "UserAlreadyAuthenticatedException") throw e;
+                await signOut();
+                out = await signIn(credentials);
+            }
 
             const step = out.nextStep?.signInStep as SignInStep | undefined;
             if (step) {

@@ -497,6 +497,61 @@ describe("authStore", () => {
             expect(store.user?.username).toBe("u");
         });
 
+        it("signs the stale session out and retries on UserAlreadyAuthenticatedException", async () => {
+            // Amplify v6 throws this when local storage already holds Cognito
+            // tokens — e.g. the user typed credentials in /login while another
+            // tab still has a live session. Recover by signing the stale
+            // session out and retrying once, otherwise the user is stuck on
+            // the login page until they clear storage by hand.
+            const stale = Object.assign(new Error("There is already a signed in user."), {
+                name: "UserAlreadyAuthenticatedException"
+            });
+            vi.mocked(signIn)
+                .mockReset()
+                .mockRejectedValueOnce(stale)
+                .mockResolvedValueOnce({
+                    isSignedIn: true,
+                    nextStep: { signInStep: "DONE" }
+                } as never);
+            vi.mocked(signOut).mockResolvedValue(undefined as never);
+            vi.mocked(getCurrentUser).mockResolvedValue({
+                username: "u",
+                userId: "id"
+            } as never);
+            vi.mocked(getMfaStatus).mockResolvedValue({ enabled: true, required: true });
+            vi.mocked(fetchUserAttributes).mockResolvedValue({
+                sub: "s",
+                email: "e@f.com"
+            } as never);
+            vi.mocked(getUserPermissions).mockResolvedValue({ permissions: [] });
+
+            await store.signIn({ username: "u", password: "p" });
+
+            expect(signIn).toHaveBeenCalledTimes(2);
+            expect(signOut).toHaveBeenCalledTimes(1);
+            // signOut must run between the two signIn attempts; otherwise the
+            // retry hits the same exception in a loop.
+            const signOutOrder = vi.mocked(signOut).mock.invocationCallOrder[0];
+            const signInOrders = vi.mocked(signIn).mock.invocationCallOrder;
+            expect(signOutOrder).toBeGreaterThan(signInOrders[0]);
+            expect(signOutOrder).toBeLessThan(signInOrders[1]);
+            expect(store.user?.username).toBe("u");
+        });
+
+        it("does not retry on errors other than UserAlreadyAuthenticatedException", async () => {
+            const wrongPassword = Object.assign(new Error("Incorrect username or password."), {
+                name: "NotAuthorizedException"
+            });
+            vi.mocked(signIn).mockReset().mockRejectedValue(wrongPassword);
+
+            await expect(
+                store.signIn({ username: "u", password: "p" })
+            ).rejects.toThrow("Incorrect username or password.");
+
+            expect(signIn).toHaveBeenCalledTimes(1);
+            expect(signOut).not.toHaveBeenCalled();
+        });
+
         it("rethrows post-signIn hydrate failures so Login.vue surfaces them", async () => {
             // Cognito accepted the creds (isSignedIn=true) but the follow-up
             // backend call failed. The store must log the underlying error and
