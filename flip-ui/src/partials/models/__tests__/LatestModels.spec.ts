@@ -52,19 +52,32 @@ function setData(v: unknown) {
     (mockData.ref as { value: unknown }).value = v;
 }
 
-function mountLatestModels() {
+interface MountOptions {
+    isObserver?: boolean;
+    projectStatus?: string;
+}
+
+function mountLatestModels({
+    isObserver = false,
+    projectStatus = "APPROVED"
+}: MountOptions = {}) {
     return mount(LatestModels, {
         global: {
             plugins: [
                 createTestingPinia({
                     createSpy: vi.fn,
+                    // stubActions: false runs the real action implementations
+                    // against the initialState — needed so authStore.hasPermissions
+                    // reflects the seeded `user.permissions` array instead of a
+                    // spy that returns undefined and makes isObserver always true.
+                    stubActions: false,
                     initialState: {
                         auth: {
                             user: {
                                 username: "u",
                                 userId: "id",
                                 attributes: { sub: "s", email: "u@e.com" },
-                                permissions: ["CanManageProjects"]
+                                permissions: isObserver ? [] : ["CanManageProjects"]
                             },
                             signInStep: "DONE",
                             mfaEnabled: true,
@@ -74,7 +87,7 @@ function mountLatestModels() {
                             project: {
                                 id: "project-1",
                                 name: "Test",
-                                status: "APPROVED"
+                                status: projectStatus
                             }
                         }
                     }
@@ -82,7 +95,14 @@ function mountLatestModels() {
             ],
             stubs: {
                 AiCard: { template: "<div><slot /></div>" },
-                AiButton: { template: "<button><slot /></button>" },
+                AiButton: {
+                    // Forward DOM clicks as Vue `click` emits so the parent's
+                    // `@click="addModel"` listener fires when the test
+                    // triggers `.trigger("click")` on this stub.
+                    template: "<button :data-test=$attrs['data-test'] @click=\"$emit('click', $event)\"><slot /></button>",
+                    inheritAttrs: false,
+                    emits: ["click"]
+                },
                 AiAlert: { template: "<div><slot /></div>" },
                 AiLoader: { template: "<div data-test='ai-loader' />" },
                 "router-link": {
@@ -145,6 +165,52 @@ describe("LatestModels — defensive data access", () => {
         expect(wrapper.text()).toContain("Beta");
         // The View-All button only renders when data.data.length > 0.
         expect(wrapper.text()).toContain("View All Models");
+    });
+
+    test("shows the header Create-Model button when not an observer and data has rows", async () => {
+        // Drives the `!isObserver && projectStore.project?.status === 'APPROVED'
+        // && data?.data?.length` v-if branch in the template — both halves
+        // of the optional chain must short-circuit safely.
+        setData({ data: [{ id: "m1", name: "Alpha", description: "" }] });
+        const wrapper = mountLatestModels({ isObserver: false });
+        await flushPromises();
+
+        expect(wrapper.find("[data-test=add-model-btn]").exists()).toBe(true);
+
+        // Clicking exercises addModel() in the script setup.
+        await wrapper.find("[data-test=add-model-btn]").trigger("click");
+        await flushPromises();
+        expect(wrapper.exists()).toBe(true);
+    });
+
+    test("hides the header Create-Model button for observers", async () => {
+        setData({ data: [{ id: "m1", name: "Alpha", description: "" }] });
+        const wrapper = mountLatestModels({ isObserver: true });
+        await flushPromises();
+
+        expect(wrapper.find("[data-test=add-model-btn]").exists()).toBe(false);
+    });
+
+    test("hides the empty-state Create-Model button for observers", async () => {
+        // When the project is approved and data.data is [], non-observers
+        // see a Create-Model CTA inside the empty-state card. Observers
+        // see only the alert text.
+        setData({ data: [] });
+        const wrapper = mountLatestModels({ isObserver: true });
+        await flushPromises();
+
+        expect(wrapper.find("[data-test=create-model-btn]").exists()).toBe(false);
+    });
+
+    test("non-observer empty-state renders the create-model CTA", async () => {
+        setData({ data: [] });
+        const wrapper = mountLatestModels({ isObserver: false });
+        await flushPromises();
+
+        expect(wrapper.find("[data-test=create-model-btn]").exists()).toBe(true);
+
+        await wrapper.find("[data-test=create-model-btn]").trigger("click");
+        expect(wrapper.exists()).toBe(true);
     });
 
     test("does not throw when project status is non-APPROVED and data.data is undefined", async () => {

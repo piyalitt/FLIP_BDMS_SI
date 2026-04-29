@@ -123,6 +123,8 @@ import AiButton from "@/components/AiButton/AiButton.vue";
 import AiDialogOverlay from "@/components/AiDialogOverlay/AiDialogOverlay.vue";
 import AiInput from "@/components/AiInput/AiInput.vue";
 
+import { confirmsTypedValue } from "./confirmsTypedValue";
+
 interface IAiConfirmModalProps {
     dialog: boolean;
     submitting?: boolean;
@@ -152,13 +154,7 @@ const props = withDefaults(
 const schema = object().shape({
     confirmation: string()
         .test("confirmation-match", "", function () {
-            // `this.parent.confirmation` is undefined on the first
-            // validation pass (before the user has typed anything), so
-            // calling `.toUpperCase()` on it would throw and surface as
-            // a Cypress "unhandled promise rejection" failure.
-            const typed = (this.parent.confirmation ?? "").toString();
-            return props.typingConfirmation === "" ||
-                typed.toUpperCase() === props.typingConfirmation.toUpperCase();
+            return confirmsTypedValue(this.parent.confirmation, props.typingConfirmation);
         })
 });
 
@@ -167,5 +163,11 @@ const emit = defineEmits(["closeModal"]);
 const close = () => {
     emit("closeModal", false);
 };
+
+// HeadlessUI's Dialog teleports the form out of the SFC's render tree,
+// which makes the schema's confirmation-match validator hard to drive
+// from a vue-test-utils mount in jsdom. Exposing the schema lets unit
+// tests invoke it directly (see AiConfirmModal.spec.ts).
+defineExpose({ schema });
 
 </script>

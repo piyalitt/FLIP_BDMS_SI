@@ -109,6 +109,11 @@ in [`test/cypress/support/cognito.ts`](test/cypress/support/cognito.ts) by writi
 `localStorage`. The suite needs no real backend, no AWS account and no Cognito user pool.
 
 Specs are split into six groups (`group-1` … `group-6`) so CI can run them in parallel.
+The split is **by file**, not by feature — it's purely a sharding device for the matrix
+job, balanced so the slowest single shard (rather than the sum of all specs) sets the
+wall-clock time. There's no semantic difference between adding a new spec to one group
+versus another; pick the group with the fewest existing specs (or the shortest total
+runtime).
 
 #### Run the full suite locally
 

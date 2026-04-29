@@ -25,6 +25,81 @@ describe("Ai ConfirmModal", () => {
         expect(comp.element).toMatchSnapshot();
     });
 
+    describe("schema (exposed via defineExpose)", () => {
+        // The component exposes its yup schema for testing because
+        // HeadlessUI's Dialog teleports content out of the SFC tree, so
+        // vee-validate's validation can't be driven through wrapper.find()
+        // in jsdom. Exercising the schema directly covers the same
+        // confirmation-match codepath the form would.
+
+        test("rejects empty input when typingConfirmation is set", async () => {
+            const wrapper = mount(AiConfirmModal, {
+                attachTo: document.body,
+                props: {
+                    dialog: true,
+                    continueAction: () => {},
+                    typingConfirmation: "DELETE"
+                }
+            });
+            await flushPromises();
+
+            const schema = (wrapper.vm as unknown as { schema: { validate: (v: unknown) => Promise<unknown> } }).schema;
+            await expect(schema.validate({ confirmation: "" })).rejects.toThrow();
+            wrapper.unmount();
+        });
+
+        test("rejects undefined input (first validation pass)", async () => {
+            const wrapper = mount(AiConfirmModal, {
+                attachTo: document.body,
+                props: {
+                    dialog: true,
+                    continueAction: () => {},
+                    typingConfirmation: "DELETE"
+                }
+            });
+            await flushPromises();
+
+            const schema = (wrapper.vm as unknown as { schema: { validate: (v: unknown) => Promise<unknown> } }).schema;
+            // The earlier crash happened here — undefined.toUpperCase().
+            // Now coalesced to "" inside confirmsTypedValue.
+            await expect(schema.validate({ confirmation: undefined })).rejects.toThrow();
+            wrapper.unmount();
+        });
+
+        test("accepts a case-insensitive match", async () => {
+            const wrapper = mount(AiConfirmModal, {
+                attachTo: document.body,
+                props: {
+                    dialog: true,
+                    continueAction: () => {},
+                    typingConfirmation: "DELETE"
+                }
+            });
+            await flushPromises();
+
+            const schema = (wrapper.vm as unknown as { schema: { validate: (v: unknown) => Promise<unknown> } }).schema;
+            await expect(schema.validate({ confirmation: "delete" })).resolves.toEqual({ confirmation: "delete" });
+            wrapper.unmount();
+        });
+
+        test("accepts any input when typingConfirmation is empty (no confirmation required)", async () => {
+            const wrapper = mount(AiConfirmModal, {
+                attachTo: document.body,
+                props: {
+                    dialog: true,
+                    continueAction: () => {},
+                    typingConfirmation: ""
+                }
+            });
+            await flushPromises();
+
+            const schema = (wrapper.vm as unknown as { schema: { validate: (v: unknown) => Promise<unknown> } }).schema;
+            await expect(schema.validate({ confirmation: undefined })).resolves.toEqual({});
+            await expect(schema.validate({ confirmation: "anything" })).resolves.toEqual({ confirmation: "anything" });
+            wrapper.unmount();
+        });
+    });
+
     describe("typing-confirmation validator (no-throw guarantee)", () => {
         // The form's yup schema reads `this.parent.confirmation` and
         // uppercase-compares it to the prop. Before the user has typed
@@ -83,4 +158,5 @@ describe("Ai ConfirmModal", () => {
             wrapper.unmount();
         });
     });
+
 });
