@@ -18,8 +18,6 @@
         "prepare": "husky install",
         "test:unit:update": "vitest run -u --silent --coverage",
         "test:unit:watch": "vitest watch --silent",
-        "prestart-test": "npm run generate-window-js",
-        "start-test": "vite --host 127.0.0.1 --port 443 --mode development",
         "test:ui": "cypress run --browser chrome",
         "pretest:start": "npm run generate-window-js",
         "test:start": "vite --port 4173 --mode development",

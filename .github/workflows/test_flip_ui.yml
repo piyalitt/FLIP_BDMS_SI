@@ -65,6 +65,10 @@ jobs:
     # is independent of cloud infra.
     name: Cypress (${{ matrix.group }})
     runs-on: ubuntu-latest
+    # Cap each shard well below the 360-min default. The full suite has run
+    # in <10 min historically; 30 leaves headroom for `runMode: 3` retries
+    # without burning a runner-day on a hung browser.
+    timeout-minutes: 30
     strategy:
       # Don't cancel sibling groups when one fails — surface every broken
       # group in a single CI run so triage is one pass instead of N.
@@ -100,12 +104,16 @@ jobs:
 
       - name: Cypress run
         uses: cypress-io/github-action@v6
+        # install-command defaults to `npm ci` when package-lock.json exists,
+        # which is what we want here — reproducible installs in CI.
         with:
           working-directory: flip-ui
-          install-command: npm install
           browser: chrome
           start: npm run test:start
-          wait-on: "http-get://localhost:4173"
+          # Plain http:// (not http-get://) — cypress-io/github-action v6 passes
+          # this directly to its runner, which rejects the start-server-and-test
+          # `http-get://` prefix and tries to exec it as a binary.
+          wait-on: "http://localhost:4173"
           wait-on-timeout: 120
           spec: test/cypress/integration/${{ matrix.group }}/**/*.spec.ts
 

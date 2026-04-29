@@ -34,3 +34,14 @@ shell:
 	$(docker_command) run --rm --remove-orphans --name flip-ui-shell flip-ui sh
 npm-install:
 	$(docker_command) run --rm --remove-orphans --name flip-ui-npm-install flip-ui npm install
+
+# Cypress runs on the host (matching CI), not inside the dev container — Chrome
+# needs to be available locally. Requires Node >=20.19 and `npm install` to have
+# been run on the host.
+e2e_test:
+	@test -f .env.development || { \
+		echo "ERROR: flip-ui/.env.development is missing." >&2; \
+		echo "Cypress needs it for Vite + dotenv. See flip-ui/README.md → Testing → End-to-end tests for the dummy values to use locally." >&2; \
+		exit 1; \
+	}
+	npm run test:ci

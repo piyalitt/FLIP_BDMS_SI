@@ -182,9 +182,9 @@ else
 	@echo "ℹ️  No flip-ui container runs when PROD=$(PROD) (S3 + CloudFront)."
 endif
 tests:
-	cd flip-ui && $(MAKE) unit_test && \
-	npm run test:ci && \
-	cd ../flip-api && $(MAKE) test
+	$(MAKE) -C flip-ui unit_test
+	$(MAKE) -C flip-ui e2e_test
+	$(MAKE) -C flip-api test
 
 debug-all:
 	@echo "🚨 Starting debug mode by overriding the DEBUG environment variable..."
