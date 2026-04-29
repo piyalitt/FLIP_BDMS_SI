@@ -158,6 +158,22 @@ const submit = async (v: unknown): Promise<void> => {
         return;
     }
 
+    // The pool runs on OPTIONAL with MFA enforced at the app layer, so
+    // Cognito may chain the new-password challenge straight into TOTP
+    // setup (signInStep === CONTINUE_SIGN_IN_WITH_TOTP_SETUP) — honour
+    // that nextStep so we keep the enrolment state instead of showing a
+    // "log in again" success screen. `needsMfaEnrolment` covers the
+    // companion case: the user is signed in but Cognito reports no
+    // active TOTP (e.g. immediately after an admin reset).
+    if (
+        authStore.signInStep === "CONTINUE_SIGN_IN_WITH_TOTP_SETUP" ||
+        authStore.needsMfaEnrolment
+    ) {
+        buttonLoader.value = false;
+        routeChange.mfaSetup();
+        return;
+    }
+
     passwordChanged.value = true;
     buttonLoader.value = false;
 };

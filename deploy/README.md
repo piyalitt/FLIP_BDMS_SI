@@ -161,6 +161,72 @@ aws cognito-idp admin-create-user \
 - [ ] Links in email templates resolve to correct environment subdomain (e.g., `https://flip-staging.example.com`)
 - [ ] SMS fallback messages deliver (if SMS is enabled in Cognito)
 
+#### Cognito MFA Administration
+
+FLIP enforces TOTP (Time-based One-Time Password) MFA for every Cognito user. The enforcement lives in the **application layer**, not in the Cognito pool configuration — the pool's `mfa_configuration` is deliberately set to `OPTIONAL`. This section explains why, how administrators reset MFA for other users, and how an administrator who has lost their own authenticator can recover via the AWS CLI.
+
+##### Why app-layer MFA (not pool `mfa_configuration = "ON"`)
+
+Cognito exposes no admin API to delete a user's verified TOTP secret. With the pool set to `ON`, calling `AdminSetUserMFAPreference` with `Enabled=False` leaves the old secret registered in Cognito — at the next sign-in, Cognito still issues a `SOFTWARE_TOKEN_MFA` challenge and asks the user for a code their (lost) authenticator can no longer generate. The account becomes permanently locked out short of deleting and recreating the user.
+
+With `mfa_configuration = "OPTIONAL"`, disabling the preference actually takes effect: Cognito signs the user in without a challenge. The application layer then catches the user — `flip-api` `verify_token` checks whether `SOFTWARE_TOKEN_MFA` is present in the user's `UserMFASettingList` and returns 403 if not, and the `flip-ui` router guard routes the user to the post-auth enrolment page where they mint a fresh TOTP secret. First-time users follow the same path: they sign in with their temporary password, the app sees `mfaEnabled=false`, and they are walked through enrolment before any protected route is reachable.
+
+SMS MFA is intentionally disabled — it would introduce an SNS dependency and reintroduce SIM-swap risk. The rationale is documented inline at `deploy/providers/AWS/modules/cognito/main.tf` (around the `mfa_configuration` line) and the enforcement point lives in `flip-api/src/flip_api/auth/dependencies.py` (`verify_token`).
+
+##### `ENFORCE_MFA` flag
+
+The MFA gate is controlled by `flip-api`'s `ENFORCE_MFA` setting. The Settings default is `true` — when active, `verify_token` returns 403 for any signed-in user without an active TOTP and the UI's router guard redirects them through enrolment.
+
+The dev override lives in `deploy/compose.development.yml` (`ENFORCE_MFA=false`) so local development doesn't force enrolment on a burner authenticator. **The flag is intentionally not exposed in `.env.development.example` or AWS Secrets Manager** — the dev compose override is the only place it should appear, and stag/prod leave it untouched so the gate stays on. Adding `ENFORCE_MFA` to a stag/prod environment file would silently disable MFA for the entire deployment.
+
+The flag is mirrored to the UI via `/users/me/mfa/status` (`required: bool`) so the router guard knows when to skip the enrolment redirect.
+
+##### Resetting MFA for another user
+
+For users other than yourself, use the FLIP Admin UI. See the *Reset User MFA* subsection in [`docs/source/sys-admin/admin-project-and-user-management.rst`](../docs/source/sys-admin/admin-project-and-user-management.rst) for the step-by-step flow. The UI calls `POST /users/{user_id}/mfa/reset` on `flip-api`, which runs the same two Cognito operations documented below but under the FLIP permission model (requires `CAN_MANAGE_USERS`) and leaves an application-level audit trail.
+
+##### Recovering an administrator account that has lost its authenticator
+
+This runbook is for the case where **you** have lost access to your TOTP device and the UI flow above is therefore unavailable (you cannot sign in to reach the Admin Area). Another operator with AWS credentials runs these commands on your behalf. Direct AWS CLI access is required:
+
+**Prerequisites:**
+
+- AWS credentials for the account that hosts the Cognito user pool (the same SSO profile used for `make full-deploy`)
+- IAM permissions for `cognito-idp:AdminSetUserMFAPreference` and `cognito-idp:AdminUserGlobalSignOut`
+
+**Steps:**
+
+1. Fetch the Cognito user pool ID from Terraform (or read it from the AWS Console):
+
+   ```bash
+   # From the stack the admin belongs to — prod/stag root or dev root
+   cd deploy/providers/AWS         # or deploy/providers/AWS/dev
+   tofu output -raw cognito_user_pool_id
+   ```
+
+2. Clear the locked-out administrator's TOTP preference:
+
+   ```bash
+   aws cognito-idp admin-set-user-mfa-preference \
+     --user-pool-id "$USER_POOL_ID" \
+     --username admin@example.com \
+     --software-token-mfa-settings Enabled=false,PreferredMfa=false
+   ```
+
+3. Revoke the administrator's existing refresh tokens so no pre-reset session can keep operating:
+
+   ```bash
+   aws cognito-idp admin-user-global-sign-out \
+     --user-pool-id "$USER_POOL_ID" \
+     --username admin@example.com
+   ```
+
+4. The administrator now signs in with their existing password. Because `SOFTWARE_TOKEN_MFA` is no longer in their `UserMFASettingList`, the `flip-api` MFA gate and the `flip-ui` router guard funnel them through the post-auth enrolment page where they register a new authenticator. Their password does not need to be reset.
+
+> **Note:** These two CLI commands have exactly the same server-side effect as clicking **Reset MFA** in the Admin UI — the UI endpoint (`reset_user_mfa` in `flip-api/src/flip_api/utils/cognito_helpers.py`) calls `admin_set_user_mfa_preference` followed by `admin_user_global_sign_out`. The CLI path exists only because it does not require a signed-in FLIP session.
+>
+> **Warning:** This path is an AWS-level escape hatch and is **not** audit-logged inside FLIP. Use it only for administrator self-recovery. For any user who is not currently locked out of FLIP itself, prefer the Admin UI flow so the reset is captured in the application logs.
+
 ## Service Authentication
 
 FLIP uses two separate authentication mechanisms for service-to-hub communication:
