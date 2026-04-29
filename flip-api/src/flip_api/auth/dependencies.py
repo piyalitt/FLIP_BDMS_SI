@@ -19,6 +19,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
 
 from flip_api.config import get_settings
+from flip_api.utils.cognito_helpers import is_mfa_enabled
 from flip_api.utils.logger import logger
 
 security = HTTPBearer()
@@ -69,37 +70,21 @@ def _decode_cognito_jwt(token: str) -> dict[str, Any]:
     return payload
 
 
-def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> UUID:
+def _decode_verified_claims(token: str) -> dict[str, Any]:
     """
-    Uses PyJWT and PyJWKClient to verify credential token with AWS Cognito.
+    Validate a Cognito JWT and return its verified claims.
 
     Args:
-        credentials (HTTPAuthorizationCredentials): The HTTP authorization credentials in the result of using
-        `HTTPBearer` or `HTTPDigest` in a dependency.
+        token (str): The raw bearer token.
 
     Returns:
-        UUID: The user ID (sub claim) from the verified token.
+        dict[str, Any]: The decoded JWT payload.
 
     Raises:
-        HTTPException: If token is invalid, expired, or verification fails.
+        HTTPException: If token is invalid, expired, or wrong type.
     """
-    token = credentials.credentials
-
     try:
-        payload = _decode_cognito_jwt(token)
-
-        user_id_str = payload.get("sub")
-        try:
-            user_id = UUID(str(user_id_str))
-        except (TypeError, ValueError):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid user identifier format",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        logger.info(f"Token verified successfully for user: {user_id}")
-        return user_id
+        return _decode_cognito_jwt(token)
 
     except jwt.ExpiredSignatureError:
         raise HTTPException(
@@ -122,3 +107,107 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error during authentication",
         )
+
+
+def _extract_user_id(payload: dict[str, Any]) -> UUID:
+    """Return the ``sub`` claim as a UUID, raising 401 on failure."""
+    user_id_str = payload.get("sub")
+    if not user_id_str:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token missing user identifier",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        return UUID(user_id_str)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user identifier format",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def _extract_username(payload: dict[str, Any]) -> str:
+    """
+    Return the Cognito Username claim (email in our pool).
+
+    Access tokens carry it as ``username``; ID tokens as ``cognito:username``.
+
+    Raises:
+        HTTPException: If neither claim is present (401).
+    """
+    username = payload.get("username") or payload.get("cognito:username")
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token missing username claim",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return str(username)
+
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> UUID:
+    """
+    Verify a Cognito JWT and enforce that the caller has TOTP MFA enabled.
+
+    The MFA requirement is checked at the application boundary (rather than
+    at the Cognito pool) so admin resets take effect immediately — see the
+    comment on ``aws_cognito_user_pool.flip_user_pool`` in the cognito
+    module for the full rationale. MFA-bootstrap endpoints use
+    :func:`verify_token_no_mfa` instead.
+
+    Args:
+        credentials (HTTPAuthorizationCredentials): Bearer credentials from
+            the incoming request.
+
+    Returns:
+        UUID: The user ID (``sub`` claim) from the verified token.
+
+    Raises:
+        HTTPException: 401 if the token is invalid, expired, or missing
+            claims; 403 if the caller has not enrolled TOTP.
+    """
+    payload = _decode_verified_claims(credentials.credentials)
+    user_id = _extract_user_id(payload)
+    username = _extract_username(payload)
+
+    # ENFORCE_MFA=False is dev-only opt-out set in compose.development.yml;
+    # stag/prod inherit the Settings default (True) and keep the gate.
+    if not get_settings().ENFORCE_MFA:
+        logger.debug(f"ENFORCE_MFA disabled — skipping MFA gate for user: {user_id}")
+        return user_id
+
+    if not is_mfa_enabled(username, get_settings().AWS_COGNITO_USER_POOL_ID):
+        logger.warning(f"User {user_id} hit MFA-gated route without active TOTP")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="MFA enrolment required",
+        )
+
+    logger.info(f"Token verified successfully for user: {user_id}")
+    return user_id
+
+
+def verify_token_no_mfa(credentials: HTTPAuthorizationCredentials = Depends(security)) -> UUID:
+    """
+    Verify a Cognito JWT without requiring TOTP MFA.
+
+    Reserved for the MFA bootstrap endpoints (status check, enrolment
+    helpers) that a freshly-reset or newly-invited user needs to reach
+    before they have an active authenticator. Every other route must use
+    :func:`verify_token`.
+
+    Args:
+        credentials (HTTPAuthorizationCredentials): Bearer credentials from
+            the incoming request.
+
+    Returns:
+        UUID: The user ID (``sub`` claim) from the verified token.
+
+    Raises:
+        HTTPException: 401 if the token is invalid, expired, or missing
+            claims.
+    """
+    payload = _decode_verified_claims(credentials.credentials)
+    return _extract_user_id(payload)

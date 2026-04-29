@@ -82,7 +82,7 @@ export const makeServer = ({ environment = "development" } = {}): Server<AppRegi
         },
 
         routes() {
-            const baseUrl = process.env.VITE_AWS_BASE_URL;
+            const baseUrl = process.env.CENTRAL_HUB_API_URL;
 
             // #region Project Routes
 

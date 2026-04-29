@@ -20,7 +20,15 @@ from fastapi.exceptions import HTTPException
 from starlette.status import HTTP_400_BAD_REQUEST, HTTP_500_INTERNAL_SERVER_ERROR
 
 from flip_api.domain.schemas.users import CognitoUser
-from flip_api.utils.cognito_helpers import create_cognito_user, filter_enabled_users, get_cognito_users, get_pool_id
+from flip_api.utils.cognito_helpers import (
+    create_cognito_user,
+    filter_enabled_users,
+    get_cognito_users,
+    get_pool_id,
+    get_user_by_email_or_id,
+    is_mfa_enabled,
+    reset_user_mfa,
+)
 
 user1, user2, user3, user4, user5, user6 = [uuid4() for i in range(6)]
 USER_POOL_ID = "test-user-pool-id"
@@ -36,6 +44,21 @@ class CognitoUserFactory(factory.Factory):
     id = factory.Faker("uuid4")
     email = factory.Faker("email")
     is_disabled = factory.Faker("boolean")
+
+
+@pytest.fixture(autouse=True)
+def _reset_cognito_client_cache():
+    """
+    `_cognito_client` is lru_cached so a boto3 client is built once per
+    process. Tests patch `boto3.client` and assume each test starts fresh;
+    clear the cache between tests so a mock from one test doesn't leak
+    into the next.
+    """
+    from flip_api.utils.cognito_helpers import _cognito_client
+
+    _cognito_client.cache_clear()
+    yield
+    _cognito_client.cache_clear()
 
 
 @pytest.fixture
@@ -257,11 +280,15 @@ class TestCreateCognitoUser:
             create_cognito_user(email, user_pool_id)
 
         assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
-        assert f"Failed to create user: {str(client_error)}" in exc_info.value.detail
+        # Detail is intentionally generic — boto3 ClientError messages can
+        # contain request IDs and ARNs that don't belong in a 500 response
+        # body. The full error stays in server-side logs only.
+        assert exc_info.value.detail == "Failed to create user"
+        assert str(client_error) not in exc_info.value.detail
 
         # Verify logging
         mock_logger.debug.assert_called_with("Attempting to register the user...")
-        mock_logger.error.assert_called_with(f"Error creating user: {str(client_error)}")
+        mock_logger.exception.assert_called_with("Error creating user")
 
     def test_user_created_but_no_user_id(self, mock_boto3_client, mock_settings, mock_logger):
         """Test handling when user is created but user ID cannot be extracted."""
@@ -954,10 +981,12 @@ class TestGetCognitoUsers:
             get_cognito_users()
 
         assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
-        assert f"Failed to get Cognito users: {str(client_error)}" in exc_info.value.detail
+        # Generic detail — boto3 error string would leak request IDs / ARNs.
+        assert exc_info.value.detail == "Failed to get Cognito users"
+        assert str(client_error) not in exc_info.value.detail
 
         # Verify logging
-        mock_logger.error.assert_called_with(f"Error getting Cognito users: {str(client_error)}")
+        mock_logger.exception.assert_called_with("Error getting Cognito users")
 
     def test_various_client_errors(self, mock_boto3_client, mock_get_settings, mock_logger):
         """Test handling of various ClientError types."""
@@ -980,7 +1009,7 @@ class TestGetCognitoUsers:
                 get_cognito_users()
 
             assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
-            assert f"Failed to get Cognito users: {str(client_error)}" in exc_info.value.detail
+            assert exc_info.value.detail == "Failed to get Cognito users"
 
     def test_complex_user_attributes(self, mock_boto3_client, mock_get_settings, mock_logger):
         """Test parsing user with complex attributes."""
@@ -1150,3 +1179,438 @@ class TestGetCognitoUsers:
         expected_params = {"UserPoolId": "test-pool-id"}
         mock_client_instance.list_users.assert_called_once_with(**expected_params)
         assert len(result) == 2
+
+
+class TestResetUserMfa:
+    """Tests for the reset_user_mfa function."""
+
+    @pytest.fixture
+    def mock_boto3_client(self):
+        """Mock boto3 client for Cognito operations."""
+        with patch("flip_api.utils.cognito_helpers.boto3.client") as mock_client:
+            yield mock_client
+
+    @pytest.fixture
+    def mock_settings(self):
+        """Mock settings for AWS region."""
+        with patch("flip_api.utils.cognito_helpers.get_settings") as mock_get_settings:
+            mock_get_settings.return_value.AWS_REGION = "eu-west-2"
+            yield mock_get_settings
+
+    def test_successful_mfa_reset(self, mock_boto3_client, mock_settings, mock_logger):
+        """Reset clears the TOTP preference AND globally signs the user out."""
+        username = "user@example.com"
+        user_pool_id = "test-pool-id"
+
+        mock_client_instance = mock_boto3_client.return_value
+
+        reset_user_mfa(username, user_pool_id)
+
+        mock_boto3_client.assert_called_once_with("cognito-idp", region_name="eu-west-2")
+        mock_client_instance.admin_set_user_mfa_preference.assert_called_once_with(
+            UserPoolId=user_pool_id,
+            Username=username,
+            SoftwareTokenMfaSettings={"Enabled": False, "PreferredMfa": False},
+        )
+        mock_client_instance.admin_user_global_sign_out.assert_called_once_with(
+            UserPoolId=user_pool_id,
+            Username=username,
+        )
+        mock_logger.info.assert_called_once_with(
+            f"Successfully reset MFA and revoked sessions for user: {username}"
+        )
+
+    def test_client_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
+        """A boto3 ClientError on either sub-call surfaces as HTTP 500."""
+        username = "user@example.com"
+        user_pool_id = "test-pool-id"
+
+        mock_client_instance = mock_boto3_client.return_value
+        client_error = ClientError(
+            error_response={"Error": {"Code": "InternalServiceError", "Message": "boom"}},
+            operation_name="AdminSetUserMFAPreference",
+        )
+        mock_client_instance.admin_set_user_mfa_preference.side_effect = client_error
+
+        with pytest.raises(HTTPException) as exc_info:
+            reset_user_mfa(username, user_pool_id)
+
+        assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
+        assert exc_info.value.detail == "Failed to reset user MFA"
+        # Never echo the underlying boto3 error text to the client.
+        assert "InternalServiceError" not in exc_info.value.detail
+        assert "boom" not in exc_info.value.detail
+        mock_logger.exception.assert_called_with("Error resetting user MFA")
+        # The sign-out sub-call is skipped once the first step raises.
+        mock_client_instance.admin_user_global_sign_out.assert_not_called()
+
+    def test_sign_out_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
+        """If preference clears but global sign-out fails the admin still sees a 500."""
+        username = "user@example.com"
+        user_pool_id = "test-pool-id"
+
+        mock_client_instance = mock_boto3_client.return_value
+        client_error = ClientError(
+            error_response={"Error": {"Code": "InternalServiceError", "Message": "kaboom"}},
+            operation_name="AdminUserGlobalSignOut",
+        )
+        mock_client_instance.admin_user_global_sign_out.side_effect = client_error
+
+        with pytest.raises(HTTPException) as exc_info:
+            reset_user_mfa(username, user_pool_id)
+
+        assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
+        assert exc_info.value.detail == "Failed to reset user MFA"
+        assert "kaboom" not in exc_info.value.detail
+
+
+class TestIsMfaEnabled:
+    """Tests for the is_mfa_enabled helper."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_mfa_cache(self):
+        # The helper keeps a module-level TTL cache; wipe it before every
+        # test so prior calls don't bleed into the next assertion.
+        from flip_api.utils.cognito_helpers import _mfa_state_cache
+
+        _mfa_state_cache.clear()
+        yield
+        _mfa_state_cache.clear()
+
+    @pytest.fixture
+    def mock_boto3_client(self):
+        with patch("flip_api.utils.cognito_helpers.boto3.client") as mock_client:
+            yield mock_client
+
+    @pytest.fixture
+    def mock_settings(self):
+        with patch("flip_api.utils.cognito_helpers.get_settings") as mock_get_settings:
+            mock_get_settings.return_value.AWS_REGION = "eu-west-2"
+            yield mock_get_settings
+
+    def test_totp_enabled_returns_true(self, mock_boto3_client, mock_settings):
+        mock_client_instance = mock_boto3_client.return_value
+        mock_client_instance.admin_get_user.return_value = {
+            "Username": "user@example.com",
+            "UserMFASettingList": ["SOFTWARE_TOKEN_MFA"],
+        }
+
+        assert is_mfa_enabled("user@example.com", "pool-id") is True
+        mock_client_instance.admin_get_user.assert_called_once_with(
+            UserPoolId="pool-id", Username="user@example.com"
+        )
+
+    def test_empty_mfa_list_returns_false(self, mock_boto3_client, mock_settings):
+        mock_client_instance = mock_boto3_client.return_value
+        mock_client_instance.admin_get_user.return_value = {
+            "Username": "user@example.com",
+            "UserMFASettingList": [],
+        }
+
+        assert is_mfa_enabled("user@example.com", "pool-id") is False
+
+    def test_missing_mfa_list_returns_false(self, mock_boto3_client, mock_settings):
+        """A brand-new user may have no UserMFASettingList key at all."""
+        mock_client_instance = mock_boto3_client.return_value
+        mock_client_instance.admin_get_user.return_value = {"Username": "user@example.com"}
+
+        assert is_mfa_enabled("user@example.com", "pool-id") is False
+
+    def test_client_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
+        mock_client_instance = mock_boto3_client.return_value
+        mock_client_instance.admin_get_user.side_effect = ClientError(
+            error_response={"Error": {"Code": "InternalServiceError", "Message": "boom"}},
+            operation_name="AdminGetUser",
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            is_mfa_enabled("user@example.com", "pool-id")
+
+        assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
+        assert exc_info.value.detail == "Failed to fetch MFA state"
+        assert "boom" not in exc_info.value.detail
+        mock_logger.exception.assert_called_once()
+
+    def test_result_is_cached_within_ttl(self, mock_boto3_client, mock_settings):
+        """Repeat lookups inside the TTL window must not re-hit Cognito."""
+        mock_client_instance = mock_boto3_client.return_value
+        mock_client_instance.admin_get_user.return_value = {
+            "Username": "user@example.com",
+            "UserMFASettingList": ["SOFTWARE_TOKEN_MFA"],
+        }
+
+        assert is_mfa_enabled("user@example.com", "pool-id") is True
+        assert is_mfa_enabled("user@example.com", "pool-id") is True
+        assert is_mfa_enabled("user@example.com", "pool-id") is True
+
+        assert mock_client_instance.admin_get_user.call_count == 1
+
+    def test_cache_is_invalidated_by_reset_user_mfa(self, mock_boto3_client, mock_settings):
+        """admin_set_user_mfa_preference must invalidate the cached entry so the
+        next verify_token call sees the fresh Cognito state."""
+        mock_client_instance = mock_boto3_client.return_value
+        mock_client_instance.admin_get_user.return_value = {
+            "Username": "user@example.com",
+            "UserMFASettingList": ["SOFTWARE_TOKEN_MFA"],
+        }
+
+        # Warm the cache.
+        assert is_mfa_enabled("user@example.com", "pool-id") is True
+
+        # Admin reset: the helper flips the preference and should drop the
+        # cached entry as part of the same call.
+        from flip_api.utils.cognito_helpers import reset_user_mfa
+
+        reset_user_mfa("user@example.com", "pool-id")
+
+        # Next lookup returns no MFA and must re-hit Cognito.
+        mock_client_instance.admin_get_user.return_value = {
+            "Username": "user@example.com",
+            "UserMFASettingList": [],
+        }
+
+        assert is_mfa_enabled("user@example.com", "pool-id") is False
+        assert mock_client_instance.admin_get_user.call_count == 2
+
+
+class TestGetUsername:
+    """Cover the get_username helper. Exercised on the hot path by
+    verify_token (to turn a Cognito sub UUID back into an email for the
+    is_mfa_enabled lookup) so the 404 / multi-user edges matter."""
+
+    def test_returns_email_for_known_sub(self):
+        """Happy path: a single matching CognitoUser yields its email."""
+        user_sub = str(user1)
+        with patch("flip_api.utils.cognito_helpers.get_cognito_users") as mock_list:
+            mock_list.return_value = [CognitoUserFactory(id=user1, email="u@example.com")]
+
+            from flip_api.utils.cognito_helpers import get_username
+
+            result = get_username(user_sub, USER_POOL_ID)
+
+            assert result == "u@example.com"
+            mock_list.assert_called_once()
+            # The filter expression is what gates the Cognito query; regress
+            # it so a future refactor can't silently drop the sub filter and
+            # start returning arbitrary users.
+            params = mock_list.call_args.args[0]
+            assert params["Filter"] == f'sub="{user_sub}"'
+            assert params["UserPoolId"] == USER_POOL_ID
+
+    def test_raises_404_when_no_match(self):
+        """An unknown sub means the Cognito user was deleted between token
+        issue and this lookup — caller (verify_token) converts this into a
+        clean 401 for the user."""
+        with patch("flip_api.utils.cognito_helpers.get_cognito_users") as mock_list:
+            mock_list.return_value = []
+
+            from flip_api.utils.cognito_helpers import get_username
+
+            with pytest.raises(HTTPException) as exc_info:
+                get_username(str(user1), USER_POOL_ID)
+
+            assert exc_info.value.status_code == 404
+            assert str(user1) in exc_info.value.detail
+
+    def test_returns_first_match_and_warns_on_duplicates(self, mock_logger):
+        """Cognito's `sub` is supposed to be unique, but we defend against a
+        malformed pool by returning the first match and warning rather than
+        crashing — the caller's fail-open behaviour beats a 500."""
+        with patch("flip_api.utils.cognito_helpers.get_cognito_users") as mock_list:
+            mock_list.return_value = [
+                CognitoUserFactory(id=user1, email="first@example.com"),
+                CognitoUserFactory(id=user1, email="second@example.com"),
+            ]
+
+            from flip_api.utils.cognito_helpers import get_username
+
+            result = get_username(str(user1), USER_POOL_ID)
+
+            assert result == "first@example.com"
+            mock_logger.warning.assert_any_call(
+                f"Multiple users found for ID {user1}, returning the first one"
+            )
+
+
+class TestUpdateUser:
+    """Cover update_user — it's a pre-existing helper but the PR refactored
+    its boto3 client call to go through `_cognito_client()`, which made
+    codecov treat the first line as a net-new addition."""
+
+    @pytest.fixture
+    def mock_boto3_client(self):
+        with patch("flip_api.utils.cognito_helpers.boto3.client") as mock_client:
+            yield mock_client
+
+    @pytest.fixture
+    def mock_settings(self):
+        with patch("flip_api.utils.cognito_helpers.get_settings") as mock_get_settings:
+            mock_get_settings.return_value.AWS_REGION = "eu-west-2"
+            yield mock_get_settings
+
+    def test_disables_user_when_disabled_true(self, mock_boto3_client, mock_settings, mock_logger):
+        """disabled=True routes through AdminDisableUser. The returned
+        Disabled schema echoes the requested state so the caller can
+        confirm the flip without a second round-trip."""
+        from flip_api.utils.cognito_helpers import update_user
+
+        result = update_user("user@example.com", "pool-id", disabled=True)
+
+        assert result.disabled is True
+        mock_boto3_client.return_value.admin_disable_user.assert_called_once_with(
+            UserPoolId="pool-id", Username="user@example.com"
+        )
+        mock_boto3_client.return_value.admin_enable_user.assert_not_called()
+
+    def test_enables_user_when_disabled_false(self, mock_boto3_client, mock_settings, mock_logger):
+        """disabled=False routes through AdminEnableUser — the inverse."""
+        from flip_api.utils.cognito_helpers import update_user
+
+        result = update_user("user@example.com", "pool-id", disabled=False)
+
+        assert result.disabled is False
+        mock_boto3_client.return_value.admin_enable_user.assert_called_once_with(
+            UserPoolId="pool-id", Username="user@example.com"
+        )
+        mock_boto3_client.return_value.admin_disable_user.assert_not_called()
+
+    def test_client_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
+        """A boto3 failure surfaces as HTTP 500 with a generic detail —
+        the underlying ClientError text (which can carry request IDs and
+        ARNs) is logged server-side but not echoed in the response."""
+        from flip_api.utils.cognito_helpers import update_user
+
+        client_error = ClientError(
+            error_response={"Error": {"Code": "UserNotFoundException", "Message": "nope"}},
+            operation_name="AdminDisableUser",
+        )
+        mock_boto3_client.return_value.admin_disable_user.side_effect = client_error
+
+        with pytest.raises(HTTPException) as exc_info:
+            update_user("missing@example.com", "pool-id", disabled=True)
+
+        assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
+        assert exc_info.value.detail == "Failed to update user"
+        assert str(client_error) not in exc_info.value.detail
+
+
+class TestDeleteCognitoUser:
+    """Cover delete_cognito_user — same situation as update_user: pre-existing,
+    refactored by the PR to use `_cognito_client()`."""
+
+    @pytest.fixture
+    def mock_boto3_client(self):
+        with patch("flip_api.utils.cognito_helpers.boto3.client") as mock_client:
+            yield mock_client
+
+    @pytest.fixture
+    def mock_settings(self):
+        with patch("flip_api.utils.cognito_helpers.get_settings") as mock_get_settings:
+            mock_get_settings.return_value.AWS_REGION = "eu-west-2"
+            yield mock_get_settings
+
+    def test_deletes_user_successfully(self, mock_boto3_client, mock_settings, mock_logger):
+        """Happy path: AdminDeleteUser is called once and the helper logs success."""
+        from flip_api.utils.cognito_helpers import delete_cognito_user
+
+        delete_cognito_user("user@example.com", "pool-id")
+
+        mock_boto3_client.return_value.admin_delete_user.assert_called_once_with(
+            UserPoolId="pool-id", Username="user@example.com"
+        )
+        mock_logger.info.assert_called_once_with(
+            "Successfully deleted user: user@example.com"
+        )
+
+    def test_client_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
+        """A boto3 failure during delete surfaces as HTTP 500 with a
+        generic detail — boto3 string is server-side log only."""
+        from flip_api.utils.cognito_helpers import delete_cognito_user
+
+        client_error = ClientError(
+            error_response={"Error": {"Code": "ResourceNotFoundException", "Message": "gone"}},
+            operation_name="AdminDeleteUser",
+        )
+        mock_boto3_client.return_value.admin_delete_user.side_effect = client_error
+
+        with pytest.raises(HTTPException) as exc_info:
+            delete_cognito_user("ghost@example.com", "pool-id")
+
+        assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
+        assert exc_info.value.detail == "Failed to delete user"
+        assert str(client_error) not in exc_info.value.detail
+
+
+class TestRevokeToken:
+    """Cover revoke_token — called on logout to invalidate a refresh token."""
+
+    @pytest.fixture
+    def mock_boto3_client(self):
+        with patch("flip_api.utils.cognito_helpers.boto3.client") as mock_client:
+            yield mock_client
+
+    @pytest.fixture
+    def mock_settings(self):
+        with patch("flip_api.utils.cognito_helpers.get_settings") as mock_get_settings:
+            mock_get_settings.return_value.AWS_REGION = "eu-west-2"
+            yield mock_get_settings
+
+    def test_revokes_token_successfully(self, mock_boto3_client, mock_settings, mock_logger):
+        """Happy path: Cognito's RevokeToken API is called with both the
+        refresh token and the app client id (required to authenticate the
+        revoke against the right pool)."""
+        from flip_api.utils.cognito_helpers import revoke_token
+
+        revoke_token("refresh-token-value", "client-id-value")
+
+        mock_boto3_client.return_value.revoke_token.assert_called_once_with(
+            Token="refresh-token-value", ClientId="client-id-value"
+        )
+        mock_logger.info.assert_called_once_with("Successfully revoked refresh token")
+
+    def test_client_error_raises_http_500(self, mock_boto3_client, mock_settings, mock_logger):
+        """A boto3 failure surfaces as HTTP 500. An invalid refresh token
+        is NotAuthorizedException from Cognito — that's still a 500 from
+        the API's perspective because the user already hit logout."""
+        from flip_api.utils.cognito_helpers import revoke_token
+
+        client_error = ClientError(
+            error_response={"Error": {"Code": "NotAuthorizedException", "Message": "invalid"}},
+            operation_name="RevokeToken",
+        )
+        mock_boto3_client.return_value.revoke_token.side_effect = client_error
+
+        with pytest.raises(HTTPException) as exc_info:
+            revoke_token("bad-token", "client-id")
+
+        assert exc_info.value.status_code == HTTP_500_INTERNAL_SERVER_ERROR
+        assert exc_info.value.detail == "Failed to revoke token"
+        assert str(client_error) not in exc_info.value.detail
+
+
+class TestGetUserByEmailOrId:
+    """Cover get_user_by_email_or_id — the PR rewrote its `except HTTPException`
+    branch to re-raise the sanitised 500 from get_cognito_users instead of
+    wrapping it (which would have echoed the inner detail through `str(e)`
+    and risked leaking Cognito internals)."""
+
+    def test_raises_400_when_no_email_or_id(self, mock_logger):
+        """Caller must supply at least one of email/user_id."""
+        with pytest.raises(HTTPException) as exc_info:
+            get_user_by_email_or_id(USER_POOL_ID)
+
+        assert exc_info.value.status_code == HTTP_400_BAD_REQUEST
+        assert "No user email address or ID provided" in exc_info.value.detail
+
+    def test_reraises_http_exception_from_get_cognito_users(self, mock_logger):
+        """A sanitised HTTPException from get_cognito_users must be re-raised
+        verbatim — the wrapper would otherwise re-leak the inner detail."""
+        inner = HTTPException(status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get Cognito users")
+
+        with patch("flip_api.utils.cognito_helpers.get_cognito_users", side_effect=inner):
+            with pytest.raises(HTTPException) as exc_info:
+                get_user_by_email_or_id(USER_POOL_ID, email="user@example.com")
+
+        # Same instance, not a re-wrapped one — verifies the `raise` (no `from`).
+        assert exc_info.value is inner
+        mock_logger.exception.assert_called_with("SKIPPING COGNITO USER LISTING")

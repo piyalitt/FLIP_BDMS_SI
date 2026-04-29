@@ -14,11 +14,9 @@ from log_config import configure_logging, get_logger
 
 from trust_api.config import get_settings
 
-_settings = get_settings()
-
 configure_logging(
     api_name="trust-api",
-    level=_settings.LOG_LEVEL,
+    level=get_settings().LOG_LEVEL,
 )
 
 logger = get_logger(__name__)
