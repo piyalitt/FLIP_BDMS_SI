@@ -97,7 +97,7 @@
             </button>
         </div>
         <div
-            v-if="!displayUsers.length"
+            v-if="!displayUsers?.length"
             class="flex flex-row items-center justify-center w-full p-6 text-sm text-gray-600 border-2 border-gray-300 border-dashed rounded-md dark:text-gray-400 dark:border-gray-600"
         >
             No Project Users
@@ -130,7 +130,7 @@ interface IAddUser {
 
 const props = withDefaults(
     defineProps<IProjectUsersProps>(),
-    { readonly: false }
+    { readonly: false, users: () => [] }
 );
 
 const authStore = useAuthStore();
@@ -138,8 +138,15 @@ const currentUserId = authStore.user?.userId;
 
 const formSubmit = ref<boolean>(false);
 let enteredEmail: string;
-const userList = ref<IProjectUser[]>(props.users);
-const displayUsers = computed(() => userList.value.filter(u => u.id !== currentUserId));
+// `props.users` is briefly undefined during the create-project modal's
+// open/close transitions (HeadlessUI Dialog with :unmount="true" tears
+// down then re-mounts ProjectUsers, and the parent passes a non-reactive
+// `let users: IProjectUser[] = []` whose default value the SFC compiler
+// can't always preserve). Coalescing here keeps `userList.value` an array
+// at all times so the computed and the template `.filter`/`.length`
+// accesses below don't throw "Cannot read properties of undefined".
+const userList = ref<IProjectUser[]>(props.users ?? []);
+const displayUsers = computed(() => (userList.value ?? []).filter(u => u.id !== currentUserId));
 const invalidUser = ref<string[]>([]);
 const userIsDirty = ref(false);
 

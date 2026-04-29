@@ -34,6 +34,14 @@ describe("Model Dashboard - Pre Training", () => {
         cy.intercept("GET", `/files/model/${modelId}/config.json`, {
             fixture: "model/configJsonStandard.json"
         }).as("getConfigJson");
+        // The page calls /model/job-types in onBeforeMount and again from
+        // file-service.getJobTypeFromConfig; without a stub the request
+        // hangs/404s, jobTypes stays empty, and the watcher that gates
+        // `requiredFiles` / `allFilesUploaded` / `readyToTrain` never
+        // unlocks the initiate-training-btn.
+        cy.intercept("GET", "/model/job-types", {
+            standard: ["trainer.py", "validator.py", "models.py", "config.json"]
+        }).as("getJobTypes");
     });
 
     it("redirects you back to the project if the model can not be found.", () => {
@@ -216,6 +224,12 @@ describe("Model Dashboard - Pre Training with only one approved trust", () => {
         ).as("project");
         cy.intercept("GET", `/model/${modelId}/logs`, [])
             .as("getLogs");
+        cy.intercept("GET", `/files/model/${modelId}/config.json`, {
+            fixture: "model/configJsonStandard.json"
+        }).as("getConfigJson");
+        cy.intercept("GET", "/model/job-types", {
+            standard: ["trainer.py", "validator.py", "models.py", "config.json"]
+        }).as("getJobTypes");
     });
 
     it("does not allow the user to initiate training if the approved trust is not selected", () => {
