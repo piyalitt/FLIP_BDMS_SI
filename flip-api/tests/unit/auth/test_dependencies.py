@@ -12,6 +12,7 @@
 
 import uuid
 from unittest.mock import MagicMock, patch
+from uuid import UUID, uuid4
 
 import jwt
 import pytest
@@ -211,23 +212,6 @@ def test_decode_raises_500_on_unexpected_error(credentials):
         assert "connection refused" not in exc_info.value.detail
 
 
-def test_decode_rejects_wrong_token_type(credentials):
-    """Cognito refresh tokens decode cleanly but carry token_use='refresh' —
-    those should 401, not be treated as credentials."""
-    with (
-        patch("flip_api.auth.dependencies.PyJWKClient") as mock_jwks_cls,
-        patch("flip_api.auth.dependencies.jwt.decode") as mock_decode,
-    ):
-        mock_jwks_cls.return_value.get_signing_key_from_jwt.return_value = _make_signing_key()
-        mock_decode.return_value = {"sub": "abc", "token_use": "refresh"}
-
-        with pytest.raises(HTTPException) as exc_info:
-            _decode_verified_claims("refresh.jwt.token")
-
-        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert "token type" in exc_info.value.detail.lower()
-
-
 def test_extract_user_id_rejects_missing_sub(user_sub):
     """A verified JWT payload without a 'sub' claim is structurally valid
     but useless to us — every downstream query keys off the user ID."""
@@ -247,3 +231,184 @@ def test_extract_user_id_rejects_non_uuid_sub():
 
     assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
     assert "invalid user identifier" in exc_info.value.detail.lower()
+
+
+# ---------------------------------------------------------------------------
+# Audience / issuer / client_id validation (PR #343)
+# ---------------------------------------------------------------------------
+
+TEST_REGION = "eu-west-2"
+TEST_USER_POOL_ID = "eu-west-2_TESTPOOL"
+TEST_APP_CLIENT_ID = "test-app-client-id"
+EXPECTED_ISSUER = f"https://cognito-idp.{TEST_REGION}.amazonaws.com/{TEST_USER_POOL_ID}"
+EXPECTED_JWKS_URL = f"{EXPECTED_ISSUER}/.well-known/jwks.json"
+
+PATCH_GET_SETTINGS = "flip_api.auth.dependencies.get_settings"
+PATCH_PYJWK_CLIENT = "flip_api.auth.dependencies.PyJWKClient"
+PATCH_JWT_DECODE = "flip_api.auth.dependencies.jwt.decode"
+
+
+@pytest.fixture
+def mock_settings():
+    """Mock get_settings() with realistic Cognito values and ENFORCE_MFA=False
+    so the audience/issuer assertions exercise only the JWT-validation path."""
+    with patch(PATCH_GET_SETTINGS) as m:
+        settings = MagicMock()
+        settings.AWS_REGION = TEST_REGION
+        settings.AWS_COGNITO_USER_POOL_ID = TEST_USER_POOL_ID
+        settings.AWS_COGNITO_APP_CLIENT_ID = TEST_APP_CLIENT_ID
+        settings.ENFORCE_MFA = False
+        m.return_value = settings
+        yield m
+
+
+@pytest.fixture
+def mock_jwks():
+    with patch(PATCH_PYJWK_CLIENT) as jwks_client_cls:
+        signing_key = MagicMock()
+        signing_key.key = "fake-public-key"
+        jwks_client = MagicMock()
+        jwks_client.get_signing_key_from_jwt.return_value = signing_key
+        jwks_client_cls.return_value = jwks_client
+        yield jwks_client_cls
+
+
+def _bearer(token: str = "fake.jwt.token") -> HTTPAuthorizationCredentials:
+    return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+
+def _id_token_payload(sub: str | None = None, aud: str = TEST_APP_CLIENT_ID) -> dict:
+    return {
+        "sub": sub or str(uuid4()),
+        "aud": aud,
+        "iss": EXPECTED_ISSUER,
+        "token_use": "id",
+        "cognito:username": "user@example.com",
+        "exp": 9999999999,
+    }
+
+
+def _access_token_payload(sub: str | None = None, client_id: str = TEST_APP_CLIENT_ID) -> dict:
+    return {
+        "sub": sub or str(uuid4()),
+        "client_id": client_id,
+        "iss": EXPECTED_ISSUER,
+        "token_use": "access",
+        "username": "user@example.com",
+        "exp": 9999999999,
+    }
+
+
+class TestVerifyTokenSuccess:
+    def test_valid_id_token_returns_user_uuid(self, mock_settings, mock_jwks):
+        sub = str(uuid4())
+        with patch(PATCH_JWT_DECODE, return_value=_id_token_payload(sub=sub)):
+            user_id = verify_token(_bearer())
+        assert user_id == UUID(sub)
+
+    def test_valid_access_token_returns_user_uuid(self, mock_settings, mock_jwks):
+        sub = str(uuid4())
+        with patch(PATCH_JWT_DECODE, return_value=_access_token_payload(sub=sub)):
+            user_id = verify_token(_bearer())
+        assert user_id == UUID(sub)
+
+    def test_jwt_decode_called_with_issuer_and_algorithm(self, mock_settings, mock_jwks):
+        with patch(PATCH_JWT_DECODE, return_value=_id_token_payload()) as decode:
+            verify_token(_bearer())
+        kwargs = decode.call_args.kwargs
+        assert kwargs["algorithms"] == ["RS256"]
+        assert kwargs["issuer"] == EXPECTED_ISSUER
+        assert kwargs["options"]["verify_aud"] is False
+        assert set(kwargs["options"]["require"]) >= {"exp", "iss", "sub", "token_use"}
+
+    def test_jwks_url_uses_configured_pool(self, mock_settings, mock_jwks):
+        with patch(PATCH_JWT_DECODE, return_value=_id_token_payload()):
+            verify_token(_bearer())
+        mock_jwks.assert_called_once_with(EXPECTED_JWKS_URL)
+
+
+class TestVerifyTokenAudienceValidation:
+    def test_id_token_with_wrong_aud_rejected(self, mock_settings, mock_jwks):
+        payload = _id_token_payload(aud="some-other-app-client")
+        with patch(PATCH_JWT_DECODE, return_value=payload):
+            with pytest.raises(HTTPException) as exc_info:
+                verify_token(_bearer())
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert exc_info.value.detail == "Could not validate credentials"
+
+    def test_id_token_missing_aud_rejected(self, mock_settings, mock_jwks):
+        payload = _id_token_payload()
+        del payload["aud"]
+        with patch(PATCH_JWT_DECODE, return_value=payload):
+            with pytest.raises(HTTPException) as exc_info:
+                verify_token(_bearer())
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_access_token_with_wrong_client_id_rejected(self, mock_settings, mock_jwks):
+        payload = _access_token_payload(client_id="some-other-app-client")
+        with patch(PATCH_JWT_DECODE, return_value=payload):
+            with pytest.raises(HTTPException) as exc_info:
+                verify_token(_bearer())
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_access_token_missing_client_id_rejected(self, mock_settings, mock_jwks):
+        payload = _access_token_payload()
+        del payload["client_id"]
+        with patch(PATCH_JWT_DECODE, return_value=payload):
+            with pytest.raises(HTTPException) as exc_info:
+                verify_token(_bearer())
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_unknown_token_use_rejected(self, mock_settings, mock_jwks):
+        payload = _id_token_payload()
+        payload["token_use"] = "refresh"
+        with patch(PATCH_JWT_DECODE, return_value=payload):
+            with pytest.raises(HTTPException) as exc_info:
+                verify_token(_bearer())
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+class TestVerifyTokenJwtErrors:
+    def test_expired_token_returns_specific_message(self, mock_settings, mock_jwks):
+        with patch(PATCH_JWT_DECODE, side_effect=jwt.ExpiredSignatureError):
+            with pytest.raises(HTTPException) as exc_info:
+                verify_token(_bearer())
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert exc_info.value.detail == "Token has expired"
+
+    def test_invalid_issuer_returns_401(self, mock_settings, mock_jwks):
+        with patch(PATCH_JWT_DECODE, side_effect=jwt.InvalidIssuerError("bad issuer")):
+            with pytest.raises(HTTPException) as exc_info:
+                verify_token(_bearer())
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert exc_info.value.detail == "Could not validate credentials"
+
+    def test_invalid_signature_returns_401(self, mock_settings, mock_jwks):
+        with patch(PATCH_JWT_DECODE, side_effect=jwt.InvalidSignatureError):
+            with pytest.raises(HTTPException) as exc_info:
+                verify_token(_bearer())
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_missing_required_claim_returns_401(self, mock_settings, mock_jwks):
+        with patch(PATCH_JWT_DECODE, side_effect=jwt.MissingRequiredClaimError("exp")):
+            with pytest.raises(HTTPException) as exc_info:
+                verify_token(_bearer())
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+class TestVerifyTokenSubject:
+    def test_non_uuid_sub_rejected(self, mock_settings, mock_jwks):
+        payload = _id_token_payload(sub="not-a-uuid")
+        with patch(PATCH_JWT_DECODE, return_value=payload):
+            with pytest.raises(HTTPException) as exc_info:
+                verify_token(_bearer())
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert exc_info.value.detail == "Invalid user identifier format"
+
+
+class TestVerifyTokenUnexpectedErrors:
+    def test_jwks_fetch_failure_returns_500(self, mock_settings):
+        with patch(PATCH_PYJWK_CLIENT, side_effect=RuntimeError("network down")):
+            with pytest.raises(HTTPException) as exc_info:
+                verify_token(_bearer())
+        assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
