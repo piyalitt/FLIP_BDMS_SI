@@ -74,6 +74,7 @@
 </template>
 
 <script setup lang="ts">
+import { fetchAuthSession } from "aws-amplify/auth";
 import { Form } from "vee-validate";
 import { onBeforeMount, ref } from "vue";
 import { object } from "yup";
@@ -84,7 +85,6 @@ import { routeChange } from "@/router";
 import { useAuthStore } from "@/store/auth";
 import { emailValidation, passwordValidation } from "@/utils/forms/validation";
 import { Snackbar } from "@/utils/snackbar";
-import { fetchAuthSession } from "aws-amplify/auth";
 import AccountOutline from "~icons/mdi/account-outline";
 import LockOutline from "~icons/mdi/lock-outline";
 

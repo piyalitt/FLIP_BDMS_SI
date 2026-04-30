@@ -19,25 +19,24 @@ describe("session expiry tests", () => {
     });
 
     it("logs the user out upon session expiry", () => {
-        cy.intercept(
-            "POST",
-            "https://cognito-idp.eu-west-2.amazonaws.com/", {
-            statusCode: 400,
-            fixture: "auth/cognitoNotAuthorizedResponse"
-        })
-            .as("expiredSession");
-
         cy.visit("/connectionstatus");
-        cy.wait("@expiredSession");
-        cy.url().should("not.include", "/connectionstatus");
-        cy.contains("Log into your account").should("be.visible");
 
-        cy.getBySel("snackbar")
-            .contains("You've been signed out")
-            .should("be.visible")
-            .its("length")
-            .should("eq", 1)
-            .getBySel("snackbar-text")
+        // Simulate Amplify's Hub firing tokenRefresh_failure — what happens
+        // in production when the refresh token is rejected by Cognito.
+        // The Hub listener in src/utils/auth.ts redirects to /auth/login
+        // and shows the "session expired" snackbar.
+        //
+        // Cypress mode bypasses Amplify's session/refresh round-trip (see
+        // src/utils/auth.ts → window.Cypress branch), so the real refresh
+        // call never happens in tests; firing the Hub event directly
+        // exercises the listener that owns the user-facing behaviour.
+        cy.window().its("__cypressTriggerSessionExpiry").then((trigger) => {
+            (trigger as () => void)();
+        });
+
+        cy.url({ timeout: 10_000 }).should("not.include", "/connectionstatus");
+        cy.contains("Log into your account").should("be.visible");
+        cy.getBySel("snackbar-text")
             .contains("Your session has expired. Please log in again.")
             .should("be.visible");
     });

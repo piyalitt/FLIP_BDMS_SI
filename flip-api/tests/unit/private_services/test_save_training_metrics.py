@@ -45,7 +45,6 @@ def mock_db_session_fixture():  # Renamed to avoid conflict with mock_db_session
     session.commit = MagicMock()
     session.rollback = MagicMock()
     session.add = MagicMock()
-    session.execute.return_value.scalar_one_or_none.return_value = None
     return session
 
 

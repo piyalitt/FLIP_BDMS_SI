@@ -38,6 +38,14 @@ coverage:
         flags: [flip-ui]
         target: auto
         threshold: 70%
+    patch:
+      default:
+        # Patch coverage is reported but does not block PRs. Strict patch
+        # gating produces noisy failures on refactor/format/lint PRs that
+        # only reformat existing-but-uncovered lines (codecov treats
+        # touched lines as new patch lines). Project coverage above is the
+        # real gate.
+        informational: true
 
 # Carryforward flags ensure that when only a subset of services change
 # (and therefore only a subset of CI workflows run), Codecov inherits the

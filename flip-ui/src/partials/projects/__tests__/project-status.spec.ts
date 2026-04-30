@@ -30,6 +30,7 @@ const mockRoute = reactive({
 
 vi.mock("vue-router", async (importOriginal) => {
     const actual = await importOriginal<typeof import("vue-router")>();
+
     return {
         ...actual,
         useRoute: () => mockRoute
@@ -47,16 +48,14 @@ vi.mock("swrv", () => ({
     })
 }));
 
-vi.mock("@/composables/useErrorHandler", () => ({
-    default: vi.fn()
-}));
+vi.mock("@/composables/useErrorHandler", () => ({ default: vi.fn() }));
 
 const stubs = {
     "icon-heroicons-solid-check": { template: "<span data-test-icon='check' />" },
     "icon-heroicons-outline-clock": { template: "<span data-test-icon='clock' />" },
     ExclamationCircleIcon: { template: "<span data-test-icon='exclamation' />" },
     RefreshIcon: { template: "<span data-test-icon='refresh' />" },
-    Transition: { template: "<div><slot /></div>" },
+    Transition: { template: "<div><slot /></div>" }
 };
 
 const mockTrustData: IImagingProjectStatus[] = [
@@ -64,7 +63,13 @@ const mockTrustData: IImagingProjectStatus[] = [
         trustId: "trust-1",
         trustName: "Alpha Trust",
         projectCreationCompleted: true,
-        importStatus: { successful: 10, failed: 2, processing: 3, queued: 5, queueFailed: 1 },
+        importStatus: {
+            successful: 10,
+            failed: 2,
+            processing: 3,
+            queued: 5,
+            queueFailed: 1
+        },
         reimportCount: 2
     },
     {
@@ -173,7 +178,7 @@ describe("ProjectStatus", () => {
             const trustNames = [
                 wrapper.find("[data-test=trust-name-trust-1]"),
                 wrapper.find("[data-test=trust-name-trust-2]"),
-                wrapper.find("[data-test=trust-name-trust-3]"),
+                wrapper.find("[data-test=trust-name-trust-3]")
             ];
 
             expect(trustNames[0].text()).toBe("Alpha Trust");
