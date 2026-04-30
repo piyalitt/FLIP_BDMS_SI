@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-.PHONY: build dev prod clean stop up down up-trust-1 up-trust-2 down-trust-1 down-trust-2 up-local-trust down-local-trust create-networks create-networks-local-trust remove-networks recreate-networks tests
+.PHONY: build dev prod clean stop up down up-trust-1 up-trust-2 down-trust-1 down-trust-2 up-local-trust down-local-trust create-networks create-networks-local-trust remove-networks recreate-networks tests update-omop-data update-orthanc-data
 # if tag PROD=true is passed, set PROD=true
 ifeq ($(PROD),true)
 MAIN_ENV_FILE=../.env.production
@@ -52,6 +52,7 @@ trust_local = trust-local
 get_json_value = $(shell python3 ../flip-api/src/flip_api/scripts/env_utils.py '$(1)' $(2))
 
 OMOP_DB_CMD=make -C ./omop-db
+ORTHANC_CMD=make -C ./orthanc
 DOCKER_COMPOSE_CMD=docker compose -f $(COMMON_COMPOSE_FILE) -f $(FL_BACKEND_COMPOSE_FILE)
 DEBUG_OVERRIDE_COMPOSE_COMMAND=docker compose -f $(COMMON_COMPOSE_FILE) -f $(FL_BACKEND_COMPOSE_FILE) -f compose_trust.debug.override.yml
 
@@ -68,7 +69,7 @@ TRUST_1_VARS = \
 	BASE_IMAGES_DOWNLOAD_DIR=${BASE_IMAGES_DOWNLOAD_DIR_TRUST1} \
 	OMOP_DB_PORT=${OMOP_DB_PORT_TRUST_1} \
 	PACS_UI_PORT=${PACS_UI_PORT_TRUST_1} \
-	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_1} \
+	ORTHANC_STORAGE_DIR=${ORTHANC_STORAGE_DIR_TRUST_1} \
 	ORTHANC_USERNAME=${ORTHANC_USERNAME} \
 	ORTHANC_PASSWORD=${ORTHANC_PASSWORD} \
 	XNAT_PORT=${XNAT_PORT_TRUST_1} \
@@ -86,7 +87,7 @@ TRUST_2_VARS = \
 	BASE_IMAGES_DOWNLOAD_DIR=${BASE_IMAGES_DOWNLOAD_DIR_TRUST2} \
 	OMOP_DB_PORT=${OMOP_DB_PORT_TRUST_2} \
 	PACS_UI_PORT=${PACS_UI_PORT_TRUST_2} \
-	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_2} \
+	ORTHANC_STORAGE_DIR=${ORTHANC_STORAGE_DIR_TRUST_2} \
 	ORTHANC_USERNAME=${ORTHANC_USERNAME} \
 	ORTHANC_PASSWORD=${ORTHANC_PASSWORD} \
 	XNAT_PORT=${XNAT_PORT_TRUST_2} \
@@ -106,11 +107,19 @@ TRUST_2_VARS = \
 # via `make add-local-trust`) don't need any _LOCAL_TRUST entries in their
 # env files or AWS Secrets Manager. Port numbers / dir names are arbitrary —
 # picked to be non-overlapping with the _TRUST_1/_TRUST_2 allocations.
+#
+# ORTHANC_STORAGE_DIR gets a dedicated `orthanc-storage-local` path rather
+# than reusing whichever TRUST_$(N) dir matches LOCAL_TRUST_NAME. Sharing the
+# dir saves the gigabytes of seeded DICOM data, but two Orthanc containers
+# cannot open the same SQLite index — the second crash-loops on `database is
+# locked` and the trust network loses its `orthanc` alias, which in turn
+# breaks xnat-nginx upstream resolution. To re-seed the local-trust Orthanc
+# on a dev laptop, copy from the matching trust dir once:
+#   cp -r trust/orthanc/orthanc-storage-2/ trust/orthanc/orthanc-storage-local/
 LOCAL_TRUST_VARS = \
 	BASE_IMAGES_DOWNLOAD_DIR=./data/local/$(LOCAL_TRUST_NAME) \
 	OMOP_DB_PORT=5438 \
 	PACS_UI_PORT=8046 \
-	ORTHANC_STORAGE=$(ORTHANC_STORAGE_TRUST_$(subst Trust_,,$(LOCAL_TRUST_NAME))) \
 	XNAT_PORT=8108 \
 	GRAFANA_PORT=3002 \
 	LOKI_PORT=3102 \
@@ -119,7 +128,7 @@ LOCAL_TRUST_VARS = \
 	TRUST_NUMBER=$(subst Trust_,,$(LOCAL_TRUST_NAME)) \
 	TRUST_API_KEY=$(call get_json_value,$(TRUST_API_KEYS),$(LOCAL_TRUST_NAME)) \
 	OMOP_DATA_DIR=./omop-db/volumes/$(LOCAL_TRUST_NAME)/db_data \
-	ORTHANC_STORAGE_DIR=./orthanc/orthanc-storage-2 \
+	ORTHANC_STORAGE_DIR=./orthanc/orthanc-storage-local \
 	OBSERVABILITY_CONFIG_DIR=./observability \
 	LOKI_DATA_VOLUME=trust-local-loki-data \
 	GRAFANA_DATA_VOLUME=trust-local-grafana-data
@@ -129,8 +138,8 @@ build:
 	$(TRUST_2_VARS) ${DOCKER_COMPOSE_CMD} -p ${trust2} build
 
 # Uses --pull always to ensure the latest FL images and omop-db image are used
-# ensure omop data is up to date before bringing up trust 1
-up-trust-1: update-omop-data
+# ensure omop and orthanc data are up to date before bringing up trust 1
+up-trust-1: update-omop-data update-orthanc-data
 	@echo "🚢 Starting Trust 1 services..."
 	@echo "⚙️ Using environment file ${MAIN_ENV_FILE}"
 	@echo "🧠 FL_BACKEND=$(FL_BACKEND) ($(FL_BACKEND_COMPOSE_FILE))"
@@ -181,8 +190,8 @@ down-local-trust:
 		$(DOCKER_COMPOSE_CMD) -f compose_trust.local.yml -p $(trust_local) down --remove-orphans
 
 # Uses --pull always to ensure the latest FL images and omop-db image are used
-# ensure omop data is up to date before bringing up trust 2
-up-trust-2: update-omop-data
+# ensure omop and orthanc data are up to date before bringing up trust 2
+up-trust-2: update-omop-data update-orthanc-data
 	@echo "🚢 Starting Trust 2 services..."
 	@echo "⚙️ Using environment file ${MAIN_ENV_FILE}"
 	@echo "🧠 FL_BACKEND=$(FL_BACKEND) ($(FL_BACKEND_COMPOSE_FILE))"
@@ -201,6 +210,9 @@ down: down-trust-1 down-trust-2
 
 update-omop-data:
 	$(OMOP_DB_CMD) update-omop-data
+
+update-orthanc-data:
+	$(ORTHANC_CMD) update-orthanc-data
 
 tests:
 	cd data-access-api && make test && \
