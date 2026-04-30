@@ -106,26 +106,6 @@ def test_seed_role_permissions_grants_admin_all_and_researcher_create_only(mock_
     assert PermissionRef.CAN_MANAGE_PROJECTS.value not in {rp.permission_id for rp in researcher_added}
 
 
-def test_seed_deletes_legacy_researcher_manage_projects_grant(mock_session):
-    """On any deployed DB that already granted Researcher → CAN_MANAGE_PROJECTS, the seed must remove it."""
-    admin_role_id = uuid4()
-    researcher_role_id = uuid4()
-
-    mock_session.exec.side_effect = [
-        _exec_result(first=admin_role_id),
-        _exec_result(all_=[]),
-        _exec_result(first=researcher_role_id),
-        _exec_result(first=None),
-    ]
-
-    seed_role_permissions(mock_session)
-
-    delete_calls = [str(call.args[0]) for call in mock_session.execute.call_args_list if call.args]
-    assert any("role_permission" in sql.lower() and "DELETE" in sql.upper() for sql in delete_calls), (
-        f"Expected a DELETE against role_permission, got: {delete_calls}"
-    )
-
-
 def test_seed_role_permissions_logs_when_admin_role_missing(mock_session, caplog):
     """Missing Admin role logs a debug message and skips the admin grant."""
     researcher_role_id = uuid4()

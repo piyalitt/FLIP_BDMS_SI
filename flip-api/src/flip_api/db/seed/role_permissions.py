@@ -12,7 +12,7 @@
 
 from uuid import UUID
 
-from sqlmodel import Session, col, delete, select
+from sqlmodel import Session, select
 
 from flip_api.db.database import engine
 from flip_api.db.models.user_models import Permission, PermissionRef, Role, RolePermission
@@ -54,10 +54,8 @@ def seed_role_permissions(session: Session) -> None:
     seed (that would need an explicit migration, not a seed).
 
     - Admin: every permission defined in ``PermissionRef``.
-    - Researcher: ``CAN_CREATE_PROJECTS``. ``CAN_MANAGE_PROJECTS`` is
-      reserved for Admin (it bypasses per-project access checks); any
-      legacy Researcher → ``CAN_MANAGE_PROJECTS`` grant is removed on
-      seed (see issue #358).
+    - Researcher: ``CAN_CREATE_PROJECTS`` only. ``CAN_MANAGE_PROJECTS`` is
+      reserved for Admin — it bypasses per-project access checks (see issue #358).
     - Observer: none — read-only access is enforced at the route layer by
       the absence of ``CAN_MANAGE_PROJECTS``.
 
@@ -76,16 +74,6 @@ def seed_role_permissions(session: Session) -> None:
 
     researcher_role_id = session.exec(select(Role.id).where(Role.name == "Researcher")).first()
     if researcher_role_id:
-        # Remove the legacy Researcher → CAN_MANAGE_PROJECTS grant from any pre-existing
-        # deployment. That permission is reserved for Admin (it bypasses per-project
-        # access checks); Researcher only needs CAN_CREATE_PROJECTS. See issue #358.
-        session.execute(
-            delete(RolePermission).where(
-                col(RolePermission.role_id) == researcher_role_id,
-                col(RolePermission.permission_id) == PermissionRef.CAN_MANAGE_PROJECTS.value,
-            )
-        )
-        session.commit()
         _grant_permissions(session, researcher_role_id, [PermissionRef.CAN_CREATE_PROJECTS.value])
     else:
         logger.debug("Researcher role not found. Cannot seed role permissions.")
