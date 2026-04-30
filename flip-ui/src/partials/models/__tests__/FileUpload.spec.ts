@@ -83,13 +83,14 @@ describe("FileUpload observer-aware rendering", () => {
 
         expect(slot.exists()).toBe(true);
         expect(slot.html()).toContain("diffusion");
-        expect(slot.html()).toContain("trainer.py, config.json");
+        expect(slot.html()).toContain("<code>trainer.py</code>");
+        expect(slot.html()).toContain("<code>config.json</code>");
     });
 
-    it("escapes job type so user-controlled config values cannot inject HTML", () => {
+    it("escapes job type and file names so user-controlled values cannot inject HTML", () => {
         const payload = "<img src=x onerror=alert(1)>";
 
-        const wrapper = mountFileUpload({ jobType: payload });
+        const wrapper = mountFileUpload({ jobType: payload, requiredFiles: [payload] });
         const slot = wrapper.find("[data-test=alert-stub]");
 
         expect(slot.find("img").exists()).toBe(false);

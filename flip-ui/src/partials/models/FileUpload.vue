@@ -30,7 +30,10 @@
             Your current job type is: <strong><code>{{ jobType }}</code></strong>.
             If you want to change it, add it as a <code>job_type</code> variable in your <code>config.json</code> file.
             <br>
-            Required files: {{ requiredFiles.join(", ") }}
+            Required files:
+            <template v-for="(f, i) in requiredFiles" :key="f">
+                <code>{{ f }}</code><template v-if="i < requiredFiles.length - 1">, </template>
+            </template>
         </AiAlert>
 
         <div
