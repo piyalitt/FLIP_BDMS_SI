@@ -32,6 +32,7 @@ TAGS_THAT_MUST_BE_REMOVED: list[tuple[int, str]] = [
     (0x00100032, "Patient Birth Time"),
     (0x00101000, "Other Patient IDs"),
     (0x00101001, "Other Patient Names"),
+    (0x00101002, "Other Patient IDs Sequence"),
     (0x00101005, "Patient Birth Name"),
     (0x00101040, "Patient Address"),
     (0x00102154, "Patient Telephone Numbers"),
@@ -69,6 +70,7 @@ PHI_VALUES_THAT_MUST_NOT_LEAK = [
     "private comment with PHI",
     "PHI history of test",
     "OLD-MRN-99999",
+    "SEQ-OLD-MRN-PHI",
 ]
 
 ORIGINAL_UID_VALUES = [

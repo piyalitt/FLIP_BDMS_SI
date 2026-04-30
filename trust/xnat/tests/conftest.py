@@ -69,6 +69,15 @@ def _phi_study() -> Dataset:
     ds.OtherPatientIDs = "OLD-MRN-99999"
     ds.OtherPatientNames = "DOE^J^PHI"
 
+    # Other Patient IDs Sequence (SQ): nested item carrying PHI. The whole
+    # sequence must be stripped by the `- (0010,1002)` rule. We embed a
+    # recognisable PHI string inside the sequence item so iterall()-based
+    # leak-scans flag it if the sequence ever survives anonymization.
+    other_id_item = Dataset()
+    other_id_item.PatientID = "SEQ-OLD-MRN-PHI"
+    other_id_item.add_new(0x00100022, "CS", "TEXT")  # Type of Patient ID
+    ds.OtherPatientIDsSequence = [other_id_item]
+
     # Institutional identifiers
     ds.InstitutionName = "St Imaginary Hospital"
     ds.InstitutionAddress = "1 Hospital Way, London"

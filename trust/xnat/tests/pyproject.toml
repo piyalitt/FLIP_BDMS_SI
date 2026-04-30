@@ -31,7 +31,7 @@ dev = [
 pythonpath = ["."]
 python_files = ["test_*.py"]
 addopts = ["-ra"]
-filterwarnings = ["ignore::DeprecationWarning"]
+filterwarnings = ["ignore::DeprecationWarning:pydicom"]
 
 [tool.ruff]
 line-length = 120
