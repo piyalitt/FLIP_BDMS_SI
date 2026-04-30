@@ -103,6 +103,8 @@ services:
       DEBUG: ${DEBUG}
       ENV: development
       LOG_LEVEL: ${TRUST_LOG_LEVEL}
+      TRUST_INTERNAL_SERVICE_KEY_HEADER: ${TRUST_INTERNAL_SERVICE_KEY_HEADER}
+      TRUST_INTERNAL_SERVICE_KEY: ${TRUST_INTERNAL_SERVICE_KEY}
     volumes:
       - ./data-access-api/data_access_api:/app/data_access_api
       - ./data-access-api/tests:/app/tests

@@ -87,6 +87,8 @@ services:
       DEBUG: ${DEBUG}
       ENV: production
       LOG_LEVEL: ${TRUST_LOG_LEVEL}
+      TRUST_INTERNAL_SERVICE_KEY_HEADER: ${TRUST_INTERNAL_SERVICE_KEY_HEADER}
+      TRUST_INTERNAL_SERVICE_KEY: ${TRUST_INTERNAL_SERVICE_KEY}
 
   trust-api:
     image: ghcr.io/londonaicentre/trust-api:${DOCKER_TAG}
