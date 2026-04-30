@@ -98,7 +98,6 @@ up-xnat-1: create-network-trust-1
 	XNAT_PATH=${XNAT_PATH} \
 	XNAT_PORT=${XNAT_PORT_TRUST_1} \
 	PACS_UI_PORT=${PACS_UI_PORT_TRUST_1} \
-	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_1} \
 	DOCKER_NETWORK_NAME=${network1} \
 	docker stack deploy --with-registry-auth --detach=false ${STACK_FILES} ${project1}
 	$(MAKE) xnat-configure-trust-1
@@ -107,7 +106,6 @@ up-xnat-2: create-network-trust-2
 	XNAT_PATH=${XNAT_PATH} \
 	XNAT_PORT=${XNAT_PORT_TRUST_2} \
 	PACS_UI_PORT=${PACS_UI_PORT_TRUST_2} \
-	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_2} \
 	DOCKER_NETWORK_NAME=${network2} \
 	docker stack deploy --with-registry-auth --detach=false ${STACK_FILES} ${project2}
 	$(MAKE) xnat-configure-trust-2
@@ -121,7 +119,6 @@ up-xnat-local: create-network-trust-local
 	XNAT_PATH=${XNAT_PATH} \
 	XNAT_PORT=8108 \
 	PACS_UI_PORT=8046 \
-	ORTHANC_STORAGE=$(ORTHANC_STORAGE_TRUST_$(subst Trust_,,$(LOCAL_TRUST_NAME))) \
 	DOCKER_NETWORK_NAME=${network_local} \
 	docker stack deploy --with-registry-auth --detach=false ${STACK_FILES} ${project_local}
 	$(MAKE) xnat-configure-local

@@ -39,7 +39,7 @@ services:
       # - "${PACS_DICOM_PORT}:4242"
       - "${PACS_UI_PORT}:8042"
     volumes:
-      - ./orthanc/${ORTHANC_STORAGE}:/var/lib/orthanc/db
+      - ${ORTHANC_STORAGE_DIR}:/var/lib/orthanc/db
     environment:
       ORTHANC__REGISTERED_USERS: |
           {"${ORTHANC_USERNAME}": "${ORTHANC_PASSWORD}"}
@@ -121,7 +121,12 @@ services:
     # No ports here: trust 1 instance declares its own host port in its override file (compose_trust-1_override.yml) for 
     # debugging purposes
     environment:
-      CENTRAL_HUB_API_URL: ${CENTRAL_HUB_API_URL}
+      # Dev-only override: the env-file value of CENTRAL_HUB_API_URL is the browser-facing
+      # URL (host port 8080 published by flip-ui's nginx) and is unreachable from inside
+      # this container, so trust-api dials flip-api directly over the docker network here.
+      # In prod compose files the env-file value is the shared public CloudFront URL and
+      # works for both browser and trust-api, so this override is dev-only.
+      CENTRAL_HUB_API_URL: http://flip-api:8000/api
       DATA_ACCESS_API_URL: ${DATA_ACCESS_API_URL}
       IMAGING_API_URL: ${IMAGING_API_URL}
       DEBUG_PORT: ${TRUST_DEBUG_PORT}

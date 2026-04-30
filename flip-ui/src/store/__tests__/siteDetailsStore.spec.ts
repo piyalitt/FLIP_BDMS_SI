@@ -17,9 +17,7 @@ import { updateSiteDetails } from "@/services/site-service";
 import { ISiteBanner, ISiteDetails, useSiteDetailsStore } from "@/store/siteDetailsStore";
 import { Snackbar } from "@/utils/snackbar";
 
-vi.mock("@/services/site-service", () => ({
-    updateSiteDetails: vi.fn()
-}));
+vi.mock("@/services/site-service", () => ({ updateSiteDetails: vi.fn() }));
 
 vi.mock("@/utils/snackbar", () => ({
     Snackbar: {
@@ -68,7 +66,10 @@ describe("siteDetailsStore", () => {
 
     describe("setSiteDetails", () => {
         it("sets state with full details", () => {
-            store.setSiteDetails({ banner: mockBanner, deploymentMode: true });
+            store.setSiteDetails({
+                banner: mockBanner,
+                deploymentMode: true
+            });
 
             expect(store.banner).toEqual(mockBanner);
             expect(store.deploymentMode).toBe(true);
@@ -99,7 +100,10 @@ describe("siteDetailsStore", () => {
 
         it("preserves current deploymentMode in the API call", async () => {
             store.setSiteDetails({ deploymentMode: false });
-            vi.mocked(updateSiteDetails).mockResolvedValue({ banner: mockBanner, deploymentMode: false });
+            vi.mocked(updateSiteDetails).mockResolvedValue({
+                banner: mockBanner,
+                deploymentMode: false
+            });
 
             await store.updateBanner(mockBanner);
 
@@ -136,7 +140,10 @@ describe("siteDetailsStore", () => {
 
     describe("updateDeploymentMode", () => {
         it("calls updateSiteDetails with correct payload and updates state on success", async () => {
-            store.setSiteDetails({ banner: mockBanner, deploymentMode: false });
+            store.setSiteDetails({
+                banner: mockBanner,
+                deploymentMode: false
+            });
             vi.mocked(updateSiteDetails).mockResolvedValue(mockResponse);
 
             await store.updateDeploymentMode(true);
@@ -149,8 +156,14 @@ describe("siteDetailsStore", () => {
         });
 
         it("includes current banner in the API call", async () => {
-            store.setSiteDetails({ banner: mockBanner, deploymentMode: false });
-            vi.mocked(updateSiteDetails).mockResolvedValue({ banner: mockBanner, deploymentMode: true });
+            store.setSiteDetails({
+                banner: mockBanner,
+                deploymentMode: false
+            });
+            vi.mocked(updateSiteDetails).mockResolvedValue({
+                banner: mockBanner,
+                deploymentMode: true
+            });
 
             await store.updateDeploymentMode(true);
 
@@ -174,8 +187,15 @@ describe("siteDetailsStore", () => {
         // NOTE: The error message says "Banner Not Updated" — likely a copy-paste bug in the source code.
         // Asserting actual behavior here.
         it("shows error snackbar and does not update state on failure", async () => {
-            const initialBanner: ISiteBanner = { message: "Initial", link: "", enabled: false };
-            store.setSiteDetails({ banner: initialBanner, deploymentMode: false });
+            const initialBanner: ISiteBanner = {
+                message: "Initial",
+                link: "",
+                enabled: false
+            };
+            store.setSiteDetails({
+                banner: initialBanner,
+                deploymentMode: false
+            });
             vi.mocked(updateSiteDetails).mockRejectedValue(new Error("API error"));
 
             await store.updateDeploymentMode(true);

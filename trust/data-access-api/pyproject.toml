@@ -25,7 +25,7 @@ dependencies = [
     "pandas>=2.2.3",
     "psycopg2-binary>=2.9.10",
     "pydantic-settings>=2.9.1",
-    "python-multipart>=0.0.22",
+    "python-multipart>=0.0.26",
     "sqlalchemy>=2.0.39",
     "sqlglot>=26.33.0",
     "starlette>=0.49.1",
@@ -39,6 +39,11 @@ dev = [
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=6.1.0",
     "ruff>=0.11.4",
+]
+
+[tool.uv]
+constraint-dependencies = [
+    "python-dotenv>=1.2.2",  # GHSA: symlink-following file overwrite; transitive via pydantic-settings
 ]
 
 [tool.pytest.ini_options]

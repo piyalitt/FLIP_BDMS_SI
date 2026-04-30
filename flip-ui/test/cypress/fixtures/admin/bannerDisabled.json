@@ -4,5 +4,6 @@
         "enabled": false,
         "link": "https://google.com"
     },
-    "deploymentMode": false
+    "deploymentMode": false,
+    "maxReimportCount": 5
 }

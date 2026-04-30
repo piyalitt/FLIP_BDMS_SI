@@ -27,10 +27,14 @@ describe("404 Page", () => {
 
     beforeEach(() => {
         cy.restoreLocalStorage();
+        // Each `it` runs in a fresh page context, so each one needs its own
+        // visit to the unknown URL. The previous version had the visit only
+        // in the first `it`, leaving the second one running against the
+        // baseUrl page (where the home button doesn't exist).
+        cy.visit("/akjskaj");
     });
 
     it("should display when an unknown url is naviagted to", () => {
-        cy.visit("/akjskaj");
         cy.get(PageNotFound.Title).should("exist");
         cy.get(PageNotFound.SubTitle).should("exist");
     });

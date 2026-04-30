@@ -28,7 +28,7 @@ from imaging_api.routers.schemas import (
 )
 from imaging_api.services.imaging import query_by_accession_number, queue_image_import_request
 from imaging_api.services.projects import get_experiments, get_project
-from imaging_api.services_external.data_access import get_dataframe
+from imaging_api.services_external.data_access import get_accession_ids
 from imaging_api.utils.auth import get_xnat_auth_headers
 from imaging_api.utils.encryption import encrypt
 from imaging_api.utils.exceptions import NotFoundError
@@ -44,11 +44,10 @@ async def retrieve_images_for_project(project_id: str, query: str, headers: XNAT
     Steps:
 
     1. Encrypt project ID to send to the data access API
-    2. Get dataframe from data access API, using the provided query
-    3. Get accession IDs, unencrypt them
-    4. Query PACS to find study for each accession ID -> put into a list
-    5. Make a ImportStudyRequest object with the list of studies
-    6. Check response gives all to QUEUED
+    2. Fetch the cohort's accession IDs from the data access API
+    3. Query PACS to find study for each accession ID -> put into a list
+    4. Make a ImportStudyRequest object with the list of studies
+    5. Check response gives all to QUEUED
 
     Args:
         project_id (str): The imaging project ID to retrieve the data about.
@@ -69,21 +68,12 @@ async def retrieve_images_for_project(project_id: str, query: str, headers: XNAT
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # Get dataframe from data access API
+    # Get accession IDs from data access API. The endpoint projects the cohort
+    # query to the accession_id column server-side, so no other columns are
+    # transmitted across the trust boundary.
     encrypted_project_id = encrypt(project_id)
-    cohort_df = await get_dataframe(encrypted_project_id, query)
-    cohort_df.to_csv("dataframe.csv")
+    accession_ids: list[str] = await get_accession_ids(encrypted_project_id, query)
 
-    # QC check if cohort dataframe has an accession_id column
-    accession_id_column = "accession_id"
-    if accession_id_column not in cohort_df.columns:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Dataframe does not contain a column '{accession_id_column}' [{cohort_df.columns.tolist()}]",
-        )
-
-    # For each accession ID, unencrypt it and find the study
-    accession_ids: list[str] = cohort_df["accession_id"]
     studies_list: list[ImportStudy] = []
 
     total_accessions = len(accession_ids)
@@ -147,7 +137,7 @@ async def get_import_status(project_id: str, query: str, headers: XNATAuthHeader
     * `Queued`: Studies waiting in the queue
     * `QueueFailed`: Studies that couldn't be queued for import
 
-    1. Get dataframe from data access API
+    1. Fetch the cohort's accession IDs from the data access API
     2. Get project experiments
     3. Get project import status
 
@@ -165,22 +155,13 @@ async def get_import_status(project_id: str, query: str, headers: XNATAuthHeader
     # Encrypt project ID to send to the data access API
     encrypted_project_id = encrypt(project_id)
 
-    # Get dataframe from data access API
-    cohort_df = await get_dataframe(encrypted_project_id, query)
-    cohort_df.to_csv("dataframe.csv")
-
-    # QC check if cohort dataframe has an accession_id column
-    accession_id_column = "accession_id"
-    if accession_id_column not in cohort_df.columns:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Dataframe does not contain a column '{accession_id_column}' [{cohort_df.columns.tolist()}]",
-        )
+    # Get accession IDs from data access API (server-side projection — no other
+    # cohort columns leave the trust).
+    accession_ids: list[str] = await get_accession_ids(encrypted_project_id, query)
 
     # Fetches a list of XNAT experiments associated with a given XNAT project.
     experiments = get_experiments(project_id, headers)
     experiments_df = pd.DataFrame([exp.model_dump(by_alias=True) for exp in experiments])
-    # experiments_df.to_csv("experiments.csv")
 
     # We need to check if there are any experiments at all in the dataframe
     successfully_imported_accession_numbers: list[str] = (
@@ -206,8 +187,6 @@ async def get_import_status(project_id: str, query: str, headers: XNATAuthHeader
     logger.debug(f"Queued PACS requests: {len(queued_pacs_requests)}")
 
     import_status = ImportStatus()
-
-    accession_ids: list[str] = cohort_df["accession_id"]
 
     for accession_number in accession_ids:
         # TODO Unlike in the old repo, accession numbers are now not encrypted in OMOP database, so no need to decrypt

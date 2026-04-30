@@ -11,8 +11,7 @@
  * limitations under the License.
  */
 
-import {
-    confirmResetPassword,
+import { confirmResetPassword,
     confirmSignIn,
     fetchAuthSession,
     fetchUserAttributes,
@@ -22,9 +21,7 @@ import {
     signIn,
     signOut,
     updateMFAPreference,
-    verifyTOTPSetup
-} from "aws-amplify/auth";
-
+    verifyTOTPSetup } from "aws-amplify/auth";
 import { defineStore } from "pinia";
 
 import { IChangePassword } from "@/interfaces/auth/interfaces";
@@ -51,10 +48,10 @@ type Attributes = {
 };
 
 type AmplifyUser = {
-  username: string;
-  userId: string;
-  attributes: Attributes;
-  permissions: string[];
+    username: string;
+    userId: string;
+    attributes: Attributes;
+    permissions: string[];
 };
 
 type UserCredentials = {
@@ -78,34 +75,34 @@ type TotpSetupDetails = {
 };
 
 type AuthState = {
-  user: AmplifyUser | null;
-  signInStep: SignInStep | null;
-  totpSetup: TotpSetupDetails | null;
-  // null = not yet known (store hydration in progress or sign-in incomplete)
-  mfaEnabled: boolean | null;
-  // Mirrors the backend's Settings.ENFORCE_MFA flag (sourced from
-  // /users/me/mfa/status). null until the first hydrate lands; once
-  // populated the router guard uses it to skip the /auth/mfa-setup
-  // redirect in dev environments where MFA is not required.
-  mfaRequired: boolean | null;
-  // Username captured at sign-in, used as the account label when building
-  // the TOTP setup URI before `user` is populated (challenge chain step).
-  pendingUsername: string | null;
+    user: AmplifyUser | null;
+    signInStep: SignInStep | null;
+    totpSetup: TotpSetupDetails | null;
+    // null = not yet known (store hydration in progress or sign-in incomplete)
+    mfaEnabled: boolean | null;
+    // Mirrors the backend's Settings.ENFORCE_MFA flag (sourced from
+    // /users/me/mfa/status). null until the first hydrate lands; once
+    // populated the router guard uses it to skip the /auth/mfa-setup
+    // redirect in dev environments where MFA is not required.
+    mfaRequired: boolean | null;
+    // Username captured at sign-in, used as the account label when building
+    // the TOTP setup URI before `user` is populated (challenge chain step).
+    pendingUsername: string | null;
 };
 
 const buildUserWithPermissions = async (
-  base: Pick<AmplifyUser, "username" | "userId">
+    base: Pick<AmplifyUser, "username" | "userId">
 ): Promise<AmplifyUser> => {
-  const [attributes, permsRes] = await Promise.all([
-    fetchUserAttributes() as Promise<Attributes>,
-    getUserPermissions(base.userId)
-  ]);
+    const [attributes, permsRes] = await Promise.all([
+        fetchUserAttributes() as Promise<Attributes>,
+        getUserPermissions(base.userId)
+    ]);
 
-  return {
-    ...base,
-    attributes,
-    permissions: permsRes.permissions ?? []
-  };
+    return {
+        ...base,
+        attributes,
+        permissions: permsRes.permissions ?? []
+    };
 };
 
 // Amplify v6 can resolve `signIn({isSignedIn: true})` a beat before
@@ -142,7 +139,10 @@ const waitForSessionTokens = async (): Promise<void> => {
         // (token-refresh issue), then throw so the caller surfaces it.
         console.warn(
             "waitForSessionTokens: no idToken after forceRefresh",
-            { userSub: session.userSub, hasCredentials: !!session.credentials }
+            {
+                userSub: session.userSub,
+                hasCredentials: !!session.credentials
+            }
         );
         throw new MissingSessionTokensError(
             "Authenticated but no session tokens — local storage may be blocked or your session has expired."
@@ -211,10 +211,18 @@ export const useAuthStore = defineStore("auth", {
             // required but not yet enrolled" case, where the permissions
             // endpoint would 403 under the app-layer gate.
             if (mfaState.enabled || !mfaState.required) {
-                this.user = await buildUserWithPermissions({ username, userId });
+                this.user = await buildUserWithPermissions({
+                    username,
+                    userId
+                });
             } else {
                 const attributes = (await fetchUserAttributes()) as Attributes;
-                this.user = { username, userId, attributes, permissions: [] };
+                this.user = {
+                    username,
+                    userId,
+                    attributes,
+                    permissions: []
+                };
             }
         },
 
@@ -239,11 +247,24 @@ export const useAuthStore = defineStore("auth", {
             // comment) is configured for USER_PASSWORD_AUTH. SRP on the
             // same client can 400 at InitiateAuth if the browser's SRP_A
             // handshake disagrees with the pool's curve config.
-            const out = await signIn({
+            const credentials = {
                 username: details.username,
                 password: details.password,
-                options: { authFlowType: "USER_PASSWORD_AUTH" }
-            });
+                options: { authFlowType: "USER_PASSWORD_AUTH" as const }
+            };
+            // Amplify throws UserAlreadyAuthenticatedException when storage
+            // already holds tokens — e.g. credentials typed at /login while
+            // another tab still has a live session. Sign the stale session
+            // out and retry once so the user isn't stuck behind a generic
+            // "problem logging you in" snackbar.
+            let out;
+            try {
+                out = await signIn(credentials);
+            } catch (e) {
+                if ((e as Error).name !== "UserAlreadyAuthenticatedException") throw e;
+                await signOut();
+                out = await signIn(credentials);
+            }
 
             const step = out.nextStep?.signInStep as SignInStep | undefined;
             if (step) {
@@ -252,6 +273,7 @@ export const useAuthStore = defineStore("auth", {
 
             if (step === "CONTINUE_SIGN_IN_WITH_TOTP_SETUP") {
                 this.captureTotpSetupDetails(out.nextStep);
+
                 return;
             }
 
@@ -305,6 +327,7 @@ export const useAuthStore = defineStore("auth", {
 
             if (step === "CONTINUE_SIGN_IN_WITH_TOTP_SETUP") {
                 this.captureTotpSetupDetails(out.nextStep);
+
                 return;
             }
 
@@ -329,7 +352,10 @@ export const useAuthStore = defineStore("auth", {
             // Network Error" — misleadingly blaming the code.
             await waitForSessionTokens();
             try {
-                await this.hydrate({ enabled: true, required: true });
+                await this.hydrate({
+                    enabled: true,
+                    required: true
+                });
             } catch (e) {
                 console.error("Failed to hydrate user post-TOTP-challenge:", e);
                 this.signInStep = "DONE";
@@ -383,7 +409,10 @@ export const useAuthStore = defineStore("auth", {
                 throw e;
             }
             try {
-                await this.hydrate({ enabled: true, required: true });
+                await this.hydrate({
+                    enabled: true,
+                    required: true
+                });
             } catch (e) {
                 console.error("Failed to hydrate user post-MFA setup:", e);
                 // Leave `mfaEnabled=null` so the router guard re-fetches
@@ -442,7 +471,10 @@ export const useAuthStore = defineStore("auth", {
                 throw e;
             }
             try {
-                await this.hydrate({ enabled: true, required: true });
+                await this.hydrate({
+                    enabled: true,
+                    required: true
+                });
             } catch (e) {
                 console.error("Failed to hydrate user post-MFA enrolment:", e);
                 // See confirmTotpSetup: leave mfaEnabled=null so the
@@ -488,12 +520,9 @@ export const useAuthStore = defineStore("auth", {
         async resetPassword(email: string) {
             const response = await resetPassword({
                 username: email,
-                options: {
-                clientMetadata: {
-                    source: "web-app"
-                }
-                }
+                options: { clientMetadata: { source: "web-app" } }
             });
+
             return response;
         },
 
@@ -502,12 +531,9 @@ export const useAuthStore = defineStore("auth", {
                 username: email,
                 confirmationCode: code,
                 newPassword,
-                options: {
-                    clientMetadata: {
-                        source: "web-app"
-                    }
-                }
+                options: { clientMetadata: { source: "web-app" } }
             });
+
             return response;
         },
 
