@@ -29,8 +29,8 @@ LOCAL_DATA_VERSION_FILE="${VOLUMES_DIR}/.local_data_version"    # tracks local v
 
 # Required env vars
 : "${AICENTRE_BUCKET_NAME:?AICENTRE_BUCKET_NAME is required}"
-: "${ORTHANC_STORAGE_TRUST_1:?ORTHANC_STORAGE_TRUST_1 is required}"
-: "${ORTHANC_STORAGE_TRUST_2:?ORTHANC_STORAGE_TRUST_2 is required}"
+: "${ORTHANC_STORAGE_DIR_TRUST_1:?ORTHANC_STORAGE_DIR_TRUST_1 is required}"
+: "${ORTHANC_STORAGE_DIR_TRUST_2:?ORTHANC_STORAGE_DIR_TRUST_2 is required}"
 
 S3_ORTHANC_PREFIX="s3://${AICENTRE_BUCKET_NAME}/orthanc"
 
@@ -83,12 +83,12 @@ else
 fi
 
 echo "🗑️ Removing existing orthanc storage dirs..."
-sudo rm -rf "./${ORTHANC_STORAGE_TRUST_1}" "./${ORTHANC_STORAGE_TRUST_2}"
-mkdir -p "./${ORTHANC_STORAGE_TRUST_1}" "./${ORTHANC_STORAGE_TRUST_2}"
+sudo rm -rf "./${ORTHANC_STORAGE_DIR_TRUST_1}" "./${ORTHANC_STORAGE_DIR_TRUST_2}"
+mkdir -p "./${ORTHANC_STORAGE_DIR_TRUST_1}" "./${ORTHANC_STORAGE_DIR_TRUST_2}"
 
 echo "📁 Extracting .tar.gz files (will replace existing storage dirs)..."
-tar -xzf "${LOCAL_TRUST1_ARCHIVE}" -C "./${ORTHANC_STORAGE_TRUST_1}"
-tar -xzf "${LOCAL_TRUST2_ARCHIVE}" -C "./${ORTHANC_STORAGE_TRUST_2}"
+tar -xzf "${LOCAL_TRUST1_ARCHIVE}" -C "./${ORTHANC_STORAGE_DIR_TRUST_1}"
+tar -xzf "${LOCAL_TRUST2_ARCHIVE}" -C "./${ORTHANC_STORAGE_DIR_TRUST_2}"
 
 # Record the new local data version
 echo "${DATA_VERSION}" > "${LOCAL_DATA_VERSION_FILE}"

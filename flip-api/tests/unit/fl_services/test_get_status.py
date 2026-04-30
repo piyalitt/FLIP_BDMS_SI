@@ -78,19 +78,47 @@ def mock_fetch_client_status():
         yield mock
 
 
+@pytest.fixture
+def mock_get_settings():
+    with patch("flip_api.fl_services.get_status.get_settings") as mock:
+        mock.return_value.FL_BACKEND = "nvflare"
+        yield mock
+
+
 def test_get_status_endpoint_success(
-    fake_request, mock_db, mock_get_nets, mock_get_trusts, mock_fetch_server_status, mock_fetch_client_status
+    fake_request,
+    mock_db,
+    mock_get_nets,
+    mock_get_trusts,
+    mock_fetch_server_status,
+    mock_fetch_client_status,
+    mock_get_settings,
 ):
     result = get_status_endpoint(fake_request, mock_db, user_id="user-1")
     assert len(result) == 1
     net = result[0]
     assert net.name == "net-1"
+    assert net.fl_backend == "nvflare"
     assert net.online is True
     assert net.net_in_use is True
     assert net.registered_clients == 2
     assert len(net.clients) == 2
     assert any(c.name == "trust-1" and c.online for c in net.clients)
     assert any(c.name == "trust-2" and not c.online for c in net.clients)
+
+
+def test_get_status_endpoint_reports_flower_backend(
+    fake_request,
+    mock_db,
+    mock_get_nets,
+    mock_get_trusts,
+    mock_fetch_server_status,
+    mock_fetch_client_status,
+    mock_get_settings,
+):
+    mock_get_settings.return_value.FL_BACKEND = "flower"
+    result = get_status_endpoint(fake_request, mock_db, user_id="user-1")
+    assert result[0].fl_backend == "flower"
 
 
 def test_get_status_endpoint_error(fake_request, mock_db):
@@ -101,17 +129,24 @@ def test_get_status_endpoint_error(fake_request, mock_db):
 
 
 def test_get_status_endpoint_server_status_none(
-    fake_request, mock_db, mock_get_nets, mock_get_trusts, mock_fetch_server_status
+    fake_request, mock_db, mock_get_nets, mock_get_trusts, mock_fetch_server_status, mock_get_settings
 ):
     mock_fetch_server_status.return_value = None
     result = get_status_endpoint(fake_request, mock_db, user_id="user-1")
     assert len(result) == 1
     assert result[0].online is False
+    assert result[0].fl_backend == "nvflare"
     assert result[0].clients == []
 
 
 def test_get_status_endpoint_client_status_none(
-    fake_request, mock_db, mock_get_nets, mock_get_trusts, mock_fetch_server_status, mock_fetch_client_status
+    fake_request,
+    mock_db,
+    mock_get_nets,
+    mock_get_trusts,
+    mock_fetch_server_status,
+    mock_fetch_client_status,
+    mock_get_settings,
 ):
     mock_fetch_server_status.return_value = IServerStatus(
         status="stopped",
@@ -121,4 +156,5 @@ def test_get_status_endpoint_client_status_none(
     result = get_status_endpoint(fake_request, mock_db, user_id="user-1")
     assert len(result) == 1
     assert result[0].online is False
+    assert result[0].fl_backend == "nvflare"
     assert result[0].clients == []
