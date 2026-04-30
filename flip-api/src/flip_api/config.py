@@ -76,6 +76,14 @@ class Settings(BaseSettings):
     # FL settings
     FL_BACKEND: Literal["nvflare", "flower"] = "nvflare"
 
+    # MFA enforcement gate. Defaults to True so every unknown environment
+    # (prod, stag, any new deploy) requires TOTP enrolment. Dev compose
+    # overrides to False so local developers aren't forced through the
+    # enrolment flow on a burner authenticator app just to click around.
+    # Not tied to ENV — kept as a dedicated flag so a developer can flip
+    # it on locally to verify MFA end-to-end without pretending to be prod.
+    ENFORCE_MFA: bool = True
+
     # Trust task queue settings
     HEARTBEAT_TIMEOUT_SECONDS: int = 30  # How long since last heartbeat before a trust is considered offline
     TASK_STALE_TIMEOUT_MINUTES: int = 30  # Tasks older than this in IN_PROGRESS are considered stale

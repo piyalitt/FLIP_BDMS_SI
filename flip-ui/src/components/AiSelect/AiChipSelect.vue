@@ -11,7 +11,7 @@
     limitations under the License.
 -->
 
-﻿<template>
+<template>
     <Listbox v-model="currentlySelected">
         <ListboxButton
             class="relative w-full py-2 pl-3 pr-10 mt-2 text-left bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-700 rounded-md cursor-default focus:border-primary-500 focus:ring-primary-500 dark:focus:ring-primary-400 dark:focus:border-primary-400 focus:ring-1"

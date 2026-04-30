@@ -34,6 +34,14 @@ describe("Model Dashboard - Pre Training", () => {
         cy.intercept("GET", `/files/model/${modelId}/config.json`, {
             fixture: "model/configJsonStandard.json"
         }).as("getConfigJson");
+        // The page calls /model/job-types in onBeforeMount and again from
+        // file-service.getJobTypeFromConfig; without a stub the request
+        // hangs/404s, jobTypes stays empty, and the watcher that gates
+        // `requiredFiles` / `allFilesUploaded` / `readyToTrain` never
+        // unlocks the initiate-training-btn.
+        cy.intercept("GET", "/model/job-types", {
+            standard: ["trainer.py", "validator.py", "models.py", "config.json"]
+        }).as("getJobTypes");
     });
 
     it("redirects you back to the project if the model can not be found.", () => {
@@ -53,7 +61,14 @@ describe("Model Dashboard - Pre Training", () => {
         cy.visit(`project/${projectId}/model/${modelId}`);
         cy.wait("@getModel");
 
-        cy.contains("All required model files must be uploaded before starting training.").should("be.visible");
+        // Training.vue shows the dynamic missingFilesMessage when required
+        // files are defined but not uploaded ("For job type X, required
+        // files are: ... <br/>Missing: ..."), and falls back to this
+        // generic message only when requiredFiles is empty. The fixture
+        // (getModel) declares required files, so we assert on the dynamic
+        // message instead.
+        cy.contains("required files are:").should("be.visible");
+        cy.contains("Missing:").should("be.visible");
         cy.contains("Complete the following fields to initiate training.").should("be.visible");
         cy.getBySel("initiate-training-btn").should("be.disabled");
 
@@ -79,8 +94,9 @@ describe("Model Dashboard - Pre Training", () => {
 
         cy.getBySel("initiate-training-btn").should("be.disabled");
 
-        // Should show which specific files are missing
-        cy.contains("Missing required files:").should("be.visible");
+        // The Training.vue alert lists specific missing files in the
+        // form "For job type X, required files are: ... <br/>Missing: a.py".
+        cy.contains("Missing:").should("be.visible");
     });
 
     it("does not allow the user to initiate training if the data enrichment button has not been checked", () => {
@@ -216,6 +232,12 @@ describe("Model Dashboard - Pre Training with only one approved trust", () => {
         ).as("project");
         cy.intercept("GET", `/model/${modelId}/logs`, [])
             .as("getLogs");
+        cy.intercept("GET", `/files/model/${modelId}/config.json`, {
+            fixture: "model/configJsonStandard.json"
+        }).as("getConfigJson");
+        cy.intercept("GET", "/model/job-types", {
+            standard: ["trainer.py", "validator.py", "models.py", "config.json"]
+        }).as("getJobTypes");
     });
 
     it("does not allow the user to initiate training if the approved trust is not selected", () => {

@@ -25,6 +25,7 @@ export interface IFLStatusClients {
 }
 export interface IFLStatus {
     name: string;
+    fl_backend?: "nvflare" | "flower";
     clients: IFLStatusClients[]
 }
 
