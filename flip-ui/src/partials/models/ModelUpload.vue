@@ -93,12 +93,16 @@
     </section>
     <AiConfirmModal
         :dialog="confirmFileDeletion"
-        :confirmation-text="deleteFileConfirmationText"
         continue-button-text="Delete File"
         :continue-action="deleteFile"
         :submitting="deletingFile"
         @close-modal="closeFileDeletion"
-    />
+    >
+        <template #confirmation>
+            Are you sure you wish to delete <code class="font-black">{{ fileToDelete }}</code>?
+            This file will not be available as part of model training.
+        </template>
+    </AiConfirmModal>
 </template>
 
 <script lang="ts" setup>
@@ -143,11 +147,6 @@ const confirmFileDeletion = ref<boolean>(false);
 const deletingFile = ref<boolean>(false);
 const downloadingFile = ref<string>();
 const fileToDelete = ref<string>();
-
-const deleteFileConfirmationText = computed(() =>
-    `Are you sure you wish to delete <code class='font-black'>${fileToDelete.value}</code>?
-This file will not be available as part of model training.`
-);
 
 watch(props, () => {
     handleFiles();
