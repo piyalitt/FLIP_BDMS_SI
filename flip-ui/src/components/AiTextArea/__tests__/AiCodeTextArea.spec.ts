@@ -30,6 +30,6 @@ describe("Ai Code TextArea", () => {
         });
 
         expect(comp.exists()).toBe(true);
-        expect(comp.find('label').text()).toBe('Test Code Label');
+        expect(comp.find("label").text()).toBe("Test Code Label");
     });
 });

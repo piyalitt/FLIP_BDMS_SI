@@ -14,17 +14,17 @@
 
 
 
-import { isAxiosError, type AxiosResponse } from "axios";
+import { type AxiosResponse, isAxiosError } from "axios";
+
 import { FileUploadStatus } from "@/interfaces/model/types";
+
 import { _http } from "./api";
-import {
-    DEFAULT_JOB_TYPE,
+import { DEFAULT_JOB_TYPE,
     fetchJobTypes,
     getRequiredFilesForJobType,
     isValidJobType,
     type JobType,
-    type JobTypesResponse
-} from "./model-service";
+    type JobTypesResponse } from "./model-service";
 
 /**
  * Typed view of `config.json`. Only `job_type` is consumed by the UI; other
@@ -36,9 +36,9 @@ export interface IModelConfig {
 }
 
 export const downloadModelFile = async (url: string): Promise<Blob> => {
-  const response: AxiosResponse<Blob> = await _http.get(url, { responseType: "blob" });
+    const response: AxiosResponse<Blob> = await _http.get(url, { responseType: "blob" });
 
-  return response.data;
+    return response.data;
 };
 
 /**
@@ -63,12 +63,14 @@ export const getModelConfig = async (modelId: string): Promise<IModelConfig | nu
     }
     try {
         const text = await blob.text();
+
         return JSON.parse(text) as IModelConfig;
     } catch (error) {
         console.warn(
             `[getModelConfig] config.json for model ${modelId} could not be parsed; treating as missing:`,
             error
         );
+
         return null;
     }
 };
@@ -114,11 +116,11 @@ export const getJobTypeFromConfig = async (
 export type IResolvedConfigState =
     | { changed: false }
     | {
-          changed: true;
-          configStatus: FileUploadStatus | null;
-          jobType: JobType;
-          requiredFiles: string[];
-      };
+        changed: true;
+        configStatus: FileUploadStatus | null;
+        jobType: JobType;
+        requiredFiles: string[];
+    };
 
 /**
  * Decides whether `config.json` needs re-reading for a poll tick and — if so —
@@ -163,6 +165,7 @@ export const resolveModelConfigState = async (
                 `[resolveModelConfigState] Failed to fetch config.json for model ${modelId}; will retry on next poll:`,
                 error
             );
+
             return { changed: false };
         }
     }

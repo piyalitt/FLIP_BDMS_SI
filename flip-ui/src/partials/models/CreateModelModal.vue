@@ -123,7 +123,7 @@ import AiDialogOverlay from "@/components/AiDialogOverlay/AiDialogOverlay.vue";
 import AiInput from "@/components/AiInput/AiInput.vue";
 import AiTextArea from "@/components/AiTextArea/AiTextArea.vue";
 import { routeChange } from "@/router";
-import { createModel,IModelCreate } from "@/services/model-service";
+import { createModel, IModelCreate } from "@/services/model-service";
 import { useModalsStore } from "@/store/modals";
 import { modelSchema } from "@/utils/forms/validation";
 import { Snackbar } from "@/utils/snackbar";

@@ -32,7 +32,9 @@
             <br>
             Required files:
             <template v-for="(f, i) in requiredFiles" :key="f">
-                <code>{{ f }}</code><template v-if="i < requiredFiles.length - 1">, </template>
+                <code>{{ f }}</code><template v-if="i < requiredFiles.length - 1">
+                    ,
+                </template>
             </template>
         </AiAlert>
 
