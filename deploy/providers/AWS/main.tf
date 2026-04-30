@@ -352,9 +352,18 @@ resource "aws_iam_role_policy" "trust_ec2_s3" {
   })
 }
 
-# CloudWatch Log Group
+# CloudWatch Log Groups for EC2 hosts. The CloudWatch agent on each host
+# (configured via Ansible — see deploy/providers/AWS/site.yml and the
+# templates/cloudwatch-agent*.json.j2 files) ships system + Docker logs
+# here. Defining the groups in Terraform pins retention deliberately rather
+# than relying on the agent's auto-create default (which never expires).
 resource "aws_cloudwatch_log_group" "flip_log_group" {
   name              = "/aws/ec2/flip"
+  retention_in_days = 7
+}
+
+resource "aws_cloudwatch_log_group" "flip_trust_log_group" {
+  name              = "/aws/ec2/flip-trust"
   retention_in_days = 7
 }
 
