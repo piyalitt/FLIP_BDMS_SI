@@ -39,7 +39,7 @@ def request_access(request: IAccessRequest):
     Raises:
         HTTPException: If there is an error sending the email or if there is an internal server error.
     """
-    logger.info(request)
+    logger.info("Received access request")
     try:
         admin_email = get_settings().AWS_SES_ADMIN_EMAIL_ADDRESS
         sender_email = get_settings().AWS_SES_SENDER_EMAIL_ADDRESS
@@ -55,7 +55,7 @@ def request_access(request: IAccessRequest):
             "purpose": request.reason_for_access,
         }
 
-        logger.info(f"Sending access request to admin email: {template_data}")
+        logger.info("Dispatching access request email to admin")
 
         result = sesv2.send_email(
             FromEmailAddress=sender_email,
