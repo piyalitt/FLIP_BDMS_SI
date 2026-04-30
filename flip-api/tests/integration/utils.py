@@ -14,7 +14,7 @@ import boto3
 from botocore.exceptions import ProfileNotFound
 
 from flip_api.config import get_settings
-from flip_api.utils.constants import ADMIN_EMAIL
+from flip_api.utils.constants import ADMIN_EMAIL_1 as ADMIN_EMAIL
 
 
 def admin_authentication():

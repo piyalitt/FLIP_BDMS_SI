@@ -30,21 +30,30 @@ class Permission(SQLModel, table=True):
         return self.permission_name
 
 
-class PermissionRef(str, Enum):
-    """Enum for predefined permissions."""
+class PermissionRef(Enum):
+    """Enum for predefined permissions.
 
-    CAN_ACCESS_ADMIN_PANEL = "6d1da2d7-e510-488c-9085-8608cd817256"
-    CAN_APPROVE_PROJECTS = "e2703e64-0186-4bc1-ac40-ba4ef63255ec"
-    CAN_DELETE_ANY_PROJECT = "fa2f251f-9d4d-4ba7-8dd1-becd9230dac0"
-    CAN_MANAGE_DEPLOYMENTS = "4c9769ed-a939-4c73-b320-139f574368c3"
-    CAN_MANAGE_PROJECTS = "fc2f242e-848f-4983-ab14-fd3c5604535d"
-    CAN_MANAGE_SITE_BANNER = "5a6c4185-6c90-4b26-bc87-f9436e2042b8"
-    CAN_MANAGE_USERS = "f6dbd04e-d1ef-4cb7-84c2-c29fb35cf83b"
-    CAN_UNSTAGE_PROJECTS = "a695be07-23c7-448d-a5df-36c3f63ca29d"
+    Values are real :class:`UUID` objects, not strings. Consumers should
+    pass ``.value`` directly to SQLModel UUID columns or compare against
+    UUIDs fetched from the DB — no ``UUID(...)`` wrapping needed.
+    """
+
+    CAN_ACCESS_ADMIN_PANEL = UUID("6d1da2d7-e510-488c-9085-8608cd817256")
+    CAN_APPROVE_PROJECTS = UUID("e2703e64-0186-4bc1-ac40-ba4ef63255ec")
+    CAN_DELETE_ANY_PROJECT = UUID("fa2f251f-9d4d-4ba7-8dd1-becd9230dac0")
+    CAN_MANAGE_DEPLOYMENTS = UUID("4c9769ed-a939-4c73-b320-139f574368c3")
+    CAN_MANAGE_PROJECTS = UUID("fc2f242e-848f-4983-ab14-fd3c5604535d")
+    CAN_MANAGE_SITE_BANNER = UUID("5a6c4185-6c90-4b26-bc87-f9436e2042b8")
+    CAN_MANAGE_USERS = UUID("f6dbd04e-d1ef-4cb7-84c2-c29fb35cf83b")
+    CAN_UNSTAGE_PROJECTS = UUID("a695be07-23c7-448d-a5df-36c3f63ca29d")
 
 
-class RoleRef(str, Enum):
-    """Enum for predefined roles."""
+class RoleRef(Enum):
+    """Enum for predefined roles.
+
+    Values are real :class:`UUID` objects, not strings. See
+    :class:`PermissionRef` for the same contract.
+    """
 
     ADMIN = UUID("64d3145b-034c-4328-b637-8eb54313b7c5")
     RESEARCHER = UUID("10b64ed0-bc90-4c01-9cc3-933c704905c1")

@@ -23,3 +23,12 @@ class ISiteBanner(BaseModel):
 class ISiteDetails(BaseModel):
     deploymentMode: bool
     banner: ISiteBanner | None = None
+    # Cap on automatic reimport retries for failed studies. Sourced from
+    # Settings.MAX_REIMPORT_COUNT (env-driven) rather than the DB — the
+    # backend enforces the cap via the SQL query in
+    # get_reimport_queries_service, so exposing the same number here lets
+    # the UI's status display and the backend's enforcement agree without
+    # a duplicate frontend env var. Optional because the PUT endpoint
+    # only updates banner/deploymentMode (maxReimportCount is not DB
+    # state to mutate) — GET always populates it.
+    maxReimportCount: int | None = None
