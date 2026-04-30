@@ -10,7 +10,6 @@
 # limitations under the License.
 #
 
-import hashlib
 import json
 from unittest.mock import patch
 
@@ -22,7 +21,6 @@ ENV_TEMPLATE = """\
 SOME_VAR=foo
 TRUST_INTERNAL_SERVICE_KEY_HEADER=X-Trust-Internal-Service-Key
 TRUST_NAMES=["Trust_1", "Trust_2"]
-TRUST_INTERNAL_SERVICE_KEY_HASHES={{"Trust_1": "<hash1>", "Trust_2": "<hash2>"}}
 OTHER_VAR=bar
 """
 
@@ -37,8 +35,8 @@ def _parse_env(content: str) -> dict[str, str]:
 
 
 class TestGenerateTrustInternalServiceKeys:
-    def test_generates_keys_and_updates_hashes(self, tmp_path):
-        """main() should write TRUST_INTERNAL_SERVICE_KEYS and TRUST_INTERNAL_SERVICE_KEY_HASHES as JSON dicts."""
+    def test_generates_keys(self, tmp_path):
+        """main() should write TRUST_INTERNAL_SERVICE_KEYS as a JSON dict keyed by trust name."""
         env_file = tmp_path / ".env.test"
         env_file.write_text(ENV_TEMPLATE)
 
@@ -58,11 +56,8 @@ class TestGenerateTrustInternalServiceKeys:
         assert "Trust_2" in keys
         assert len(keys["Trust_1"]) > 0
         assert len(keys["Trust_2"]) > 0
-
-        # Hashes match keys
-        hashes = json.loads(env["TRUST_INTERNAL_SERVICE_KEY_HASHES"])
-        assert hashes["Trust_1"] == hashlib.sha256(keys["Trust_1"].encode()).hexdigest()
-        assert hashes["Trust_2"] == hashlib.sha256(keys["Trust_2"].encode()).hexdigest()
+        # Hash dict no longer exists — receivers compare plaintext directly.
+        assert "TRUST_INTERNAL_SERVICE_KEY_HASHES" not in env
 
     def test_exits_when_env_file_missing(self, tmp_path):
         """main() should exit with error when env file does not exist."""
@@ -105,12 +100,6 @@ class TestGenerateTrustInternalServiceKeys:
         # Trust_2 key generated
         assert "Trust_2" in keys
         assert keys["Trust_2"] != existing_key
-
-        # Hashes always rebuilt to match current keys (cannot drift out of sync)
-        hashes = json.loads(env["TRUST_INTERNAL_SERVICE_KEY_HASHES"])
-        assert len(hashes) == 2
-        assert hashes["Trust_1"] == hashlib.sha256(existing_key.encode()).hexdigest()
-        assert hashes["Trust_2"] == hashlib.sha256(keys["Trust_2"].encode()).hexdigest()
 
     def test_force_regenerates_all_keys(self, tmp_path):
         """--force should regenerate keys even when TRUST_INTERNAL_SERVICE_KEYS already has values."""

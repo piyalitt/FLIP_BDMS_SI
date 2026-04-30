@@ -17,16 +17,22 @@ Without caller authentication, any container on the trust Docker network or
 any operator with SSM port-forward access can drive those operations as the
 service account. This module enforces a shared-secret check on every router
 that is not ``/health``: callers (trust-api, fl-client) send the plaintext
-``TRUST_INTERNAL_SERVICE_KEY`` in a header, and imaging-api validates it
-against the stored SHA-256 hash using constant-time comparison.
+``TRUST_INTERNAL_SERVICE_KEY`` in a header, and imaging-api compares it to
+its own copy of the same key using constant-time comparison.
+
+The key is held in plaintext by every trust-internal service (sender or
+receiver) because the trust-internal trust boundary is the trust itself —
+all containers in a single trust can already talk to each other on the
+Docker network. The earlier hash-only-on-receivers split provided no real
+defence within that boundary while complicating deploy config; we collapsed
+it to a single plaintext env var.
 
 This is the trust-side analogue of ``flip-api``'s ``INTERNAL_SERVICE_KEY``
 (which protects fl-server → flip-api on the Central Hub). The two keys are
 deliberately distinct: a leaked trust key only compromises that trust's
-imaging-api, and a leaked hub key cannot drive any trust.
+APIs, and a leaked hub key cannot drive any trust.
 """
 
-import hashlib
 import hmac
 
 from fastapi import HTTPException, Security, status
@@ -59,20 +65,17 @@ def authenticate_internal_service(api_key: str | None = Security(internal_key_he
             detail="Not authenticated: trust-internal service key is missing.",
         )
 
-    expected_hash = get_settings().TRUST_INTERNAL_SERVICE_KEY_HASH
-    if not expected_hash:
-        # Fail closed: refusing to start without the hash would block /health too.
+    expected = get_settings().TRUST_INTERNAL_SERVICE_KEY
+    if not expected:
+        # Fail closed: refusing to start without the key would block /health too.
         # Returning 401 keeps health checks working while blocking every privileged route.
-        logger.warning(
-            "Trust-internal service authentication failed: TRUST_INTERNAL_SERVICE_KEY_HASH not configured."
-        )
+        logger.warning("Trust-internal service authentication failed: TRUST_INTERNAL_SERVICE_KEY not configured.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Trust-internal service auth not configured.",
         )
 
-    provided_hash = hashlib.sha256(api_key.encode()).hexdigest()
-    if not hmac.compare_digest(provided_hash, expected_hash):
+    if not hmac.compare_digest(api_key.encode(), expected.encode()):
         logger.warning("Trust-internal service authentication failed: invalid key.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

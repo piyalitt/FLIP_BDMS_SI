@@ -10,7 +10,6 @@
 # limitations under the License.
 #
 
-import hashlib
 from unittest.mock import patch
 
 import pytest
@@ -22,23 +21,22 @@ from imaging_api.main import app
 from imaging_api.utils.internal_auth import authenticate_internal_service
 
 VALID_KEY = "trust-internal-key-abc123"
-VALID_HASH = hashlib.sha256(VALID_KEY.encode()).hexdigest()
 HEADER_NAME = get_settings().TRUST_INTERNAL_SERVICE_KEY_HEADER
 
 
-def _patch_hash(value: str):
-    """Patch the configured hash without rebuilding Settings."""
-    return patch.object(get_settings(), "TRUST_INTERNAL_SERVICE_KEY_HASH", value)
+def _patch_key(value: str):
+    """Patch the configured key without rebuilding Settings."""
+    return patch.object(get_settings(), "TRUST_INTERNAL_SERVICE_KEY", value)
 
 
 def test_valid_key_passes():
-    with _patch_hash(VALID_HASH):
+    with _patch_key(VALID_KEY):
         # No exception means success
         authenticate_internal_service(api_key=VALID_KEY)
 
 
 def test_missing_key_rejected():
-    with _patch_hash(VALID_HASH):
+    with _patch_key(VALID_KEY):
         with pytest.raises(HTTPException) as exc_info:
             authenticate_internal_service(api_key=None)
         assert exc_info.value.status_code == 401
@@ -46,7 +44,7 @@ def test_missing_key_rejected():
 
 
 def test_empty_key_rejected():
-    with _patch_hash(VALID_HASH):
+    with _patch_key(VALID_KEY):
         with pytest.raises(HTTPException) as exc_info:
             authenticate_internal_service(api_key="")
         assert exc_info.value.status_code == 401
@@ -54,16 +52,16 @@ def test_empty_key_rejected():
 
 
 def test_invalid_key_rejected():
-    with _patch_hash(VALID_HASH):
+    with _patch_key(VALID_KEY):
         with pytest.raises(HTTPException) as exc_info:
             authenticate_internal_service(api_key="wrong-key")
         assert exc_info.value.status_code == 401
         assert "invalid" in exc_info.value.detail.lower()
 
 
-def test_unconfigured_hash_rejects_all_callers():
-    """Fail-closed: even with a valid-looking key, a missing hash blocks access."""
-    with _patch_hash(""):
+def test_unconfigured_key_rejects_all_callers():
+    """Fail-closed: even with a valid-looking key, a missing configured key blocks access."""
+    with _patch_key(""):
         with pytest.raises(HTTPException) as exc_info:
             authenticate_internal_service(api_key=VALID_KEY)
         assert exc_info.value.status_code == 401
@@ -76,7 +74,7 @@ def test_unconfigured_hash_rejects_all_callers():
 def test_health_endpoint_does_not_require_auth():
     """/health must remain reachable for Docker healthchecks."""
     client = TestClient(app)
-    with _patch_hash(VALID_HASH):
+    with _patch_key(VALID_KEY):
         resp = client.get("/health")
     assert resp.status_code == 200
 
@@ -93,7 +91,7 @@ def test_health_endpoint_does_not_require_auth():
 def test_protected_endpoints_reject_missing_header(method, path):
     """Routers must 401 when no header is sent — even before any handler logic runs."""
     client = TestClient(app)
-    with _patch_hash(VALID_HASH):
+    with _patch_key(VALID_KEY):
         resp = client.request(method, path)
     assert resp.status_code == 401
 
@@ -107,6 +105,6 @@ def test_protected_endpoints_reject_missing_header(method, path):
 )
 def test_protected_endpoints_reject_wrong_key(method, path):
     client = TestClient(app)
-    with _patch_hash(VALID_HASH):
+    with _patch_key(VALID_KEY):
         resp = client.request(method, path, headers={HEADER_NAME: "wrong-key"})
     assert resp.status_code == 401

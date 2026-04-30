@@ -10,18 +10,19 @@
 # limitations under the License.
 #
 
-"""Generate per-trust internal-service keys used by trust-api / fl-client to call imaging-api.
+"""Generate per-trust internal-service keys used across the trust services.
 
 This is the trust-side analogue of ``generate_internal_service_key.py`` (which
 covers the hub's fl-server → flip-api boundary). Each trust gets a distinct
-key so a leak in one trust never affects another, and the hub never sees these
-keys at all.
+plaintext key shared by every trust-internal service (trust-api, imaging-api,
+data-access-api, fl-client) — the receiver does a constant-time compare against
+its own copy. The hub never sees these keys.
 
-Trust names are read from the ``TRUST_NAMES`` env var (a JSON list). Both
-plaintext keys (``TRUST_INTERNAL_SERVICE_KEYS``) and their hashes
-(``TRUST_INTERNAL_SERVICE_KEY_HASHES``) are written as JSON dicts into the
-environment file. ``trust/Makefile`` extracts the per-trust value at deploy
-time via ``get_json_value``, the same way it already handles ``TRUST_API_KEYS``.
+Trust names are read from the ``TRUST_NAMES`` env var (a JSON list). The
+plaintext keys are written as a JSON dict into ``TRUST_INTERNAL_SERVICE_KEYS``
+in the environment file. ``trust/Makefile`` extracts the per-trust value at
+deploy time via ``get_json_value``, the same way it already handles
+``TRUST_API_KEYS``.
 
 Usage:
     make generate-trust-internal-service-keys
@@ -30,7 +31,6 @@ Usage:
 """
 
 import argparse
-import hashlib
 import json
 import sys
 from pathlib import Path
@@ -59,9 +59,7 @@ def _parse_trust_names(lines: list[str]) -> list[str]:
 def main() -> None:
     """Generate per-trust internal service keys and update the environment file.
 
-    Existing per-trust keys are preserved unless ``--force`` is given. After
-    the run, ``TRUST_INTERNAL_SERVICE_KEY_HASHES`` is always rebuilt so it
-    cannot drift out of sync with ``TRUST_INTERNAL_SERVICE_KEYS``.
+    Existing per-trust keys are preserved unless ``--force`` is given.
 
     Raises:
         SystemExit: If the env file is missing or contains no ``TRUST_NAMES`` entry.
@@ -110,9 +108,7 @@ def main() -> None:
             keys_dict[trust_name] = key
             actions[trust_name] = "generated"
 
-    hashes_dict = {name: hashlib.sha256(keys_dict[name].encode()).hexdigest() for name in trust_names}
     lines = update_or_append(lines, "TRUST_INTERNAL_SERVICE_KEYS", json.dumps(keys_dict))
-    lines = update_or_append(lines, "TRUST_INTERNAL_SERVICE_KEY_HASHES", json.dumps(hashes_dict))
 
     env_file.write_text("\n".join(lines) + "\n")
 
@@ -122,10 +118,7 @@ def main() -> None:
     for name, action in actions.items():
         print(f"  {name}: {action}")
     if generated:
-        print(
-            f"  TRUST_INTERNAL_SERVICE_KEYS and TRUST_INTERNAL_SERVICE_KEY_HASHES updated with "
-            f"{len(trust_names)} entries"
-        )
+        print(f"  TRUST_INTERNAL_SERVICE_KEYS updated with {len(trust_names)} entries")
 
 
 if __name__ == "__main__":
