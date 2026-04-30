@@ -15,12 +15,93 @@ import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import status
 from fastapi.exceptions import HTTPException
+from fastapi.testclient import TestClient
 
+from flip_api.auth.dependencies import verify_token
 from flip_api.config import Settings
+from flip_api.db.database import get_session
 from flip_api.db.models.main_models import UploadedFiles
 from flip_api.domain.schemas.file import BucketStatus, FileUploadStatus, ScannedFileInput
 from flip_api.file_services.uploaded_file import process_scanned_file
+from flip_api.main import app
+
+# ---------- Authorisation tests for /files/process-scanned-file ----------
+
+client = TestClient(app)
+
+auth_test_user_id = uuid.uuid4()
+auth_test_model_id = uuid.uuid4()
+auth_test_file_name = "weights.bin"
+
+
+@pytest.fixture
+def override_auth_dependencies():
+    """Inject a deterministic user_id and a mock DB session into the endpoint."""
+    mock_session = MagicMock()
+    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[verify_token] = lambda: auth_test_user_id
+    yield mock_session
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def mocked_settings_for_auth():
+    settings = Settings(UPLOADED_MODEL_FILES_BUCKET="test-uploaded-bucket")
+    with patch("flip_api.file_services.uploaded_file.get_settings", return_value=settings):
+        yield settings
+
+
+@pytest.fixture
+def mock_s3_for_auth():
+    with patch("flip_api.file_services.uploaded_file.S3Client") as mock_client:
+        instance = MagicMock()
+        instance.head_object.return_value = {"ContentLength": 1024, "ContentType": "application/octet-stream"}
+        mock_client.return_value = instance
+        yield instance
+
+
+def test_process_scanned_file_returns_403_when_user_cannot_modify_model(
+    override_auth_dependencies, mocked_settings_for_auth, mock_s3_for_auth
+):
+    mock_session = override_auth_dependencies
+    with patch("flip_api.file_services.uploaded_file.can_modify_model", return_value=False):
+        response = client.post(f"/api/files/process-scanned-file/{auth_test_model_id}/{auth_test_file_name}")
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert str(auth_test_user_id) in response.json()["detail"]
+    mock_session.add.assert_not_called()
+    mock_session.commit.assert_not_called()
+    mock_s3_for_auth.head_object.assert_not_called()
+
+
+def test_process_scanned_file_succeeds_when_user_can_modify_model(
+    override_auth_dependencies, mocked_settings_for_auth, mock_s3_for_auth
+):
+    mock_session = override_auth_dependencies
+    mock_session.exec.return_value.first.return_value = None  # no existing row → insert path
+    with patch("flip_api.file_services.uploaded_file.can_modify_model", return_value=True):
+        response = client.post(f"/api/files/process-scanned-file/{auth_test_model_id}/{auth_test_file_name}")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json() == {"message": "File processed successfully"}
+    mock_session.add.assert_called_once()
+    mock_session.commit.assert_called_once()
+
+
+def test_process_scanned_file_returns_422_for_non_uuid_model_id(
+    override_auth_dependencies, mocked_settings_for_auth, mock_s3_for_auth
+):
+    """FastAPI must reject malformed model_id at the path-parameter layer."""
+    with patch("flip_api.file_services.uploaded_file.can_modify_model", return_value=True) as can_modify:
+        response = client.post(f"/api/files/process-scanned-file/not-a-uuid/{auth_test_file_name}")
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    can_modify.assert_not_called()
+
+
+# ---------- Legacy SNS-pipeline tests (skipped, see comment below) ----------
 
 
 @pytest.fixture

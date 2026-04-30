@@ -127,25 +127,26 @@ export const authCheck = async (
             // No valid session, redirect to login
             auth.user = null;
             auth.signInStep = null;
+
             return next("/auth/login");
         }
 
         // If we are in new-password challenge
-        if (auth.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
-            return next('/auth/new-password');
+        if (auth.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
+            return next("/auth/new-password");
         }
 
         // First-time MFA enrollment (TOTP setup with QR code), sign-in chain.
         // Same-path guard: if the user is already on /auth/mfa-setup let
         // them stay there — re-issuing `next('/auth/mfa-setup')` would
         // raise NavigationDuplicated in vue-router.
-        if (auth.signInStep === 'CONTINUE_SIGN_IN_WITH_TOTP_SETUP') {
-            return to.path === '/auth/mfa-setup' ? next() : next('/auth/mfa-setup');
+        if (auth.signInStep === "CONTINUE_SIGN_IN_WITH_TOTP_SETUP") {
+            return to.path === "/auth/mfa-setup" ? next() : next("/auth/mfa-setup");
         }
 
         // Returning user — enter the code from their authenticator app.
-        if (auth.signInStep === 'CONFIRM_SIGN_IN_WITH_TOTP_CODE') {
-            return to.path === '/auth/mfa-verify' ? next() : next('/auth/mfa-verify');
+        if (auth.signInStep === "CONFIRM_SIGN_IN_WITH_TOTP_CODE") {
+            return to.path === "/auth/mfa-verify" ? next() : next("/auth/mfa-verify");
         }
 
         // Load user info if needed (page reload after sign-in). This also
@@ -160,13 +161,13 @@ export const authCheck = async (
         // but only if this environment requires MFA at all. In dev
         // (backend Settings.ENFORCE_MFA=False), `mfaRequired` is false
         // and we skip the redirect even for unenrolled users.
-        if (auth.mfaRequired === true && auth.mfaEnabled === false && to.path !== '/auth/mfa-setup') {
-            return next('/auth/mfa-setup');
+        if (auth.mfaRequired === true && auth.mfaEnabled === false && to.path !== "/auth/mfa-setup") {
+            return next("/auth/mfa-setup");
         }
 
         return next();
 
-    } catch (error) {
+    } catch {
         auth.$reset();
         localStorage.clear();
         routeChange.gotoLogin();
@@ -198,7 +199,7 @@ export const apiGateway = "CentralHubAPIGateway";
 export const authConfig = {
     Auth: {
         Cognito: {
-            region: window.AWS_REGION || 'eu-west-2',
+            region: window.AWS_REGION || "eu-west-2",
             userPoolId: window.AWS_USER_POOL_ID,
             userPoolClientId: window.AWS_CLIENT_ID
         }

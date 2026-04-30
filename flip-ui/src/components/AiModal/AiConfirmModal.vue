@@ -59,7 +59,9 @@
                                             {{ title }}
                                         </DialogTitle>
                                         <div class="mt-2">
-                                            <span class="font-normal leading-5 text-gray-700 dark:text-gray-400" v-html="confirmationText" />
+                                            <span class="font-normal leading-5 text-gray-700 dark:text-gray-400">
+                                                <slot name="confirmation">{{ confirmationText }}</slot>
+                                            </span>
                                         </div>
                                         <AiInput
                                             v-if="typingConfirmation"

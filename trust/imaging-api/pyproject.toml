@@ -27,7 +27,7 @@ dependencies = [
     "pandas>=2.2.3",
     "pydicom>=2.4.5",
     "pydantic-settings>=2.9.1",
-    "python-multipart>=0.0.22",
+    "python-multipart>=0.0.26",
     "requests>=2.33.0",
     "sqlalchemy>=2.0.39",
     "starlette>=0.49.1",
@@ -45,6 +45,11 @@ dev = [
     "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.0.0",
     "ruff>=0.11.4",
+]
+
+[tool.uv]
+constraint-dependencies = [
+    "python-dotenv>=1.2.2",  # GHSA: symlink-following file overwrite; transitive via pydantic-settings
 ]
 
 [tool.pytest.ini_options]

@@ -159,4 +159,43 @@ describe("Ai ConfirmModal", () => {
         });
     });
 
+    test("escapes HTML in confirmationText to prevent XSS", () => {
+        const payload = "<img src=x onerror=alert(1)>";
+
+        const comp = mount(AiConfirmModal, {
+            global: { renderStubDefaultSlot: true },
+            props: {
+                dialog: true,
+                continueAction: () => {},
+                confirmationText: payload
+            }
+        });
+
+        const html = comp.html();
+
+        expect(html).not.toContain("<img");
+        expect(html).toContain("&lt;img");
+
+        comp.unmount();
+    });
+
+    test("renders the confirmation slot when provided", () => {
+        const comp = mount(AiConfirmModal, {
+            global: { renderStubDefaultSlot: true },
+            props: {
+                dialog: true,
+                continueAction: () => {}
+            },
+            slots: {
+                confirmation: "<strong data-test=\"slot-marker\">slot content</strong>"
+            }
+        });
+
+        const html = comp.html();
+
+        expect(html).toContain("data-test=\"slot-marker\"");
+        expect(html).toContain("slot content");
+
+        comp.unmount();
+    });
 });

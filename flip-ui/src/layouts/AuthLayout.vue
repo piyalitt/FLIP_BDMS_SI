@@ -11,7 +11,7 @@
     limitations under the License.
 -->
 
-﻿<template>
+<template>
     <AiErrorAlert v-if="errorStore.hasError" class="absolute z-10" />
     <div class="bg-body dark:bg-gray-900">
         <div class="flex items-center justify-center h-screen">

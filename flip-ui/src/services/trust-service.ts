@@ -27,7 +27,7 @@ export async function getTrusts(): Promise<ITrustResponse[]> {
 
         return Array.isArray(response.data) ? response.data : [];
 
-    } catch (error) {
+    } catch {
         return [];
     }
 }
