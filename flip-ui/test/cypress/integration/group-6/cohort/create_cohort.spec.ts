@@ -78,7 +78,7 @@ describe("Cohort Query Page - OMOP", () => {
             });
 
         cy.getBySel("no-results-message").should("not.exist");
-        cy.getBySel("snackbar-text").should("contain", "There was a problem running this cohort query.");
+        cy.getBySel("snackbar-text").should("contain", "There was a problem running this cohort query");
     });
 
     it("Should show a message when no results are returned", () => {

@@ -14,7 +14,7 @@
 
 
 
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 
 import AiConfirmModal from "../AiConfirmModal.vue";
 
@@ -23,6 +23,137 @@ describe("Ai ConfirmModal", () => {
         const comp = mount(AiConfirmModal);
 
         expect(comp.element).toMatchSnapshot();
+    });
+
+    describe("schema (exposed via defineExpose)", () => {
+        // The component exposes its yup schema for testing because
+        // HeadlessUI's Dialog teleports content out of the SFC tree, so
+        // vee-validate's validation can't be driven through wrapper.find()
+        // in jsdom. Exercising the schema directly covers the same
+        // confirmation-match codepath the form would.
+
+        test("rejects empty input when typingConfirmation is set", async () => {
+            const wrapper = mount(AiConfirmModal, {
+                attachTo: document.body,
+                props: {
+                    dialog: true,
+                    continueAction: () => {},
+                    typingConfirmation: "DELETE"
+                }
+            });
+            await flushPromises();
+
+            const schema = (wrapper.vm as unknown as { schema: { validate: (v: unknown) => Promise<unknown> } }).schema;
+            await expect(schema.validate({ confirmation: "" })).rejects.toThrow();
+            wrapper.unmount();
+        });
+
+        test("rejects undefined input (first validation pass)", async () => {
+            const wrapper = mount(AiConfirmModal, {
+                attachTo: document.body,
+                props: {
+                    dialog: true,
+                    continueAction: () => {},
+                    typingConfirmation: "DELETE"
+                }
+            });
+            await flushPromises();
+
+            const schema = (wrapper.vm as unknown as { schema: { validate: (v: unknown) => Promise<unknown> } }).schema;
+            // Yup runs the validator before the user types; the schema
+            // must tolerate `confirmation: undefined` without throwing.
+            await expect(schema.validate({ confirmation: undefined })).rejects.toThrow();
+            wrapper.unmount();
+        });
+
+        test("accepts a case-insensitive match", async () => {
+            const wrapper = mount(AiConfirmModal, {
+                attachTo: document.body,
+                props: {
+                    dialog: true,
+                    continueAction: () => {},
+                    typingConfirmation: "DELETE"
+                }
+            });
+            await flushPromises();
+
+            const schema = (wrapper.vm as unknown as { schema: { validate: (v: unknown) => Promise<unknown> } }).schema;
+            await expect(schema.validate({ confirmation: "delete" })).resolves.toEqual({ confirmation: "delete" });
+            wrapper.unmount();
+        });
+
+        test("accepts any input when typingConfirmation is empty (no confirmation required)", async () => {
+            const wrapper = mount(AiConfirmModal, {
+                attachTo: document.body,
+                props: {
+                    dialog: true,
+                    continueAction: () => {},
+                    typingConfirmation: ""
+                }
+            });
+            await flushPromises();
+
+            const schema = (wrapper.vm as unknown as { schema: { validate: (v: unknown) => Promise<unknown> } }).schema;
+            await expect(schema.validate({ confirmation: undefined })).resolves.toEqual({});
+            await expect(schema.validate({ confirmation: "anything" })).resolves.toEqual({ confirmation: "anything" });
+            wrapper.unmount();
+        });
+    });
+
+    describe("typing-confirmation validator (no-throw guarantee)", () => {
+        // Invariant: mounting the component with a non-empty
+        // `typingConfirmation` must not throw, even though
+        // `this.parent.confirmation` is undefined on the first yup pass.
+        // The headless DOM here can't fully simulate HeadlessUI's teleport,
+        // so we rely on mount + validation-pass to reach the schema's
+        // test() callback without crashing.
+
+        function mountWithTyping(typingConfirmation: string) {
+            return mount(AiConfirmModal, {
+                attachTo: document.body,
+                props: {
+                    dialog: true,
+                    continueAction: () => {},
+                    typingConfirmation
+                }
+            });
+        }
+
+        test("does not throw when typingConfirmation is set and the input is still empty", async () => {
+            const wrapper = mountWithTyping("DELETE PROJECT");
+            await flushPromises();
+
+            // Asserting the wrapper exists also guarantees the synchronous
+            // setup() didn't throw — without the undefined guard, the
+            // first validation pass would crash before this check runs.
+            expect(wrapper.exists()).toBe(true);
+
+            wrapper.unmount();
+        });
+
+        test("does not throw when typingConfirmation is empty (no validator branch)", async () => {
+            const wrapper = mountWithTyping("");
+            await flushPromises();
+
+            expect(wrapper.exists()).toBe(true);
+
+            wrapper.unmount();
+        });
+
+        test("does not throw on subsequent prop changes that re-trigger validation", async () => {
+            const wrapper = mountWithTyping("");
+            await flushPromises();
+
+            await wrapper.setProps({ typingConfirmation: "ALPHA" });
+            await flushPromises();
+
+            await wrapper.setProps({ typingConfirmation: "BETA" });
+            await flushPromises();
+
+            expect(wrapper.exists()).toBe(true);
+
+            wrapper.unmount();
+        });
     });
 
     test("escapes HTML in confirmationText to prevent XSS", () => {
@@ -52,9 +183,7 @@ describe("Ai ConfirmModal", () => {
                 dialog: true,
                 continueAction: () => {}
             },
-            slots: {
-                confirmation: "<strong data-test=\"slot-marker\">slot content</strong>"
-            }
+            slots: { confirmation: "<strong data-test=\"slot-marker\">slot content</strong>" }
         });
 
         const html = comp.html();

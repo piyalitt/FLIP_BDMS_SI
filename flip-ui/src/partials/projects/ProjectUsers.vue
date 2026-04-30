@@ -130,7 +130,7 @@ interface IAddUser {
 
 const props = withDefaults(
     defineProps<IProjectUsersProps>(),
-    { readonly: false }
+    { readonly: false, users: () => [] }
 );
 
 const authStore = useAuthStore();

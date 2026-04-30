@@ -57,9 +57,24 @@
                             >
                                 <div class="relative flex items-center justify-center w-full text-gray-700 bg-gray-100 border border-gray-300 rounded-full shadow dark:bg-gray-800 dark:text-gray-300 grow dark:border-gray-500">
                                     <Transition name="fade" mode="out-in">
-                                        <AiLoader v-if="file.status === FileUploadStatus.UPLOADING || file.status === FileUploadStatus.SCANNING" small />
-                                        <icon-ph-file-duotone v-else-if="file.status === FileUploadStatus.COMPLETED" />
-                                        <icon-ph-x-circle-duotone v-else-if="file.status === FileUploadStatus.ERROR" />
+                                        <AiLoader
+                                            v-if="file.status === FileUploadStatus.UPLOADING"
+                                            small
+                                            :data-test="`file-upload-status-uploading`"
+                                        />
+                                        <AiLoader
+                                            v-else-if="file.status === FileUploadStatus.SCANNING"
+                                            small
+                                            :data-test="`file-upload-status-scanning`"
+                                        />
+                                        <icon-ph-file-duotone
+                                            v-else-if="file.status === FileUploadStatus.COMPLETED"
+                                            :data-test="`file-upload-status-completed`"
+                                        />
+                                        <icon-ph-x-circle-duotone
+                                            v-else-if="file.status === FileUploadStatus.ERROR"
+                                            :data-test="`file-upload-status-error`"
+                                        />
                                     </Transition>
                                 </div>
                             </div>

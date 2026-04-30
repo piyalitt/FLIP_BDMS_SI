@@ -125,6 +125,8 @@ import AiButton from "@/components/AiButton/AiButton.vue";
 import AiDialogOverlay from "@/components/AiDialogOverlay/AiDialogOverlay.vue";
 import AiInput from "@/components/AiInput/AiInput.vue";
 
+import { confirmsTypedValue } from "./confirmsTypedValue";
+
 interface IAiConfirmModalProps {
     dialog: boolean;
     submitting?: boolean;
@@ -154,8 +156,7 @@ const props = withDefaults(
 const schema = object().shape({
     confirmation: string()
         .test("confirmation-match", "", function () {
-            return props.typingConfirmation === "" ||
-                this.parent.confirmation.toUpperCase() === props.typingConfirmation.toUpperCase();
+            return confirmsTypedValue(this.parent.confirmation, props.typingConfirmation);
         })
 });
 
@@ -164,5 +165,10 @@ const emit = defineEmits(["closeModal"]);
 const close = () => {
     emit("closeModal", false);
 };
+
+// HeadlessUI's Dialog teleports the form out of the SFC's render tree,
+// so vue-test-utils can't reach the schema validator through the wrapper.
+// Exposing the schema lets a unit test invoke it directly.
+defineExpose({ schema });
 
 </script>
