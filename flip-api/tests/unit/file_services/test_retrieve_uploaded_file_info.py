@@ -105,11 +105,15 @@ class TestGetUploadedFilesInfo:
     """Tests for the GET endpoint get_uploaded_files_info."""
 
     def test_get_files_info_success(self, mock_db_session, sample_files):
-        """Test successful retrieval of file information."""
+        """Authorised users see metadata for files in their scope."""
         _, sample_file_ids, model_id = sample_files
         file_ids_str = ",".join(str(fid) for fid in sample_file_ids[:2])
 
-        result = get_uploaded_files_info(file_ids=file_ids_str, db=mock_db_session, user_id="test-user-id")
+        with patch(
+            "flip_api.file_services.retrieve_uploaded_file_info.can_access_model",
+            return_value=True,
+        ):
+            result = get_uploaded_files_info(file_ids=file_ids_str, db=mock_db_session, user_id=uuid.uuid4())
 
         assert len(result) == 2
         assert result[0]["id"] == str(sample_file_ids[0])
@@ -125,13 +129,112 @@ class TestGetUploadedFilesInfo:
         assert result[1]["name"] == "test_file2.csv"
         assert result[1]["status"] == "SCANNING"
 
+    def test_get_files_info_access_denied(self, mock_db_session, sample_files):
+        """Files outside the caller's scope are not returned (404)."""
+        _, sample_file_ids, _ = sample_files
+        file_ids_str = ",".join(str(fid) for fid in sample_file_ids[:2])
+
+        with patch(
+            "flip_api.file_services.retrieve_uploaded_file_info.can_access_model",
+            return_value=False,
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                get_uploaded_files_info(file_ids=file_ids_str, db=mock_db_session, user_id=uuid.uuid4())
+
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+        assert "No files found" in exc_info.value.detail
+
+    def test_get_files_info_partial_access(self, sample_file_ids):
+        """When some files are in scope and others are not, only allowed files are returned."""
+        allowed_model_id = uuid.uuid4()
+        denied_model_id = uuid.uuid4()
+        files = [
+            UploadedFiles(
+                id=sample_file_ids[0],
+                name="allowed.txt",
+                size=10,
+                type="text/plain",
+                status="PROCESSED",
+                model_id=allowed_model_id,
+            ),
+            UploadedFiles(
+                id=sample_file_ids[1],
+                name="denied.txt",
+                size=20,
+                type="text/plain",
+                status="PROCESSED",
+                model_id=denied_model_id,
+            ),
+        ]
+
+        class MockSession:
+            def exec(self, query):
+                class MockResult:
+                    def all(self_inner):  # noqa: N805 - mock signature
+                        return files
+
+                return MockResult()
+
+        file_ids_str = ",".join(str(fid) for fid in sample_file_ids[:2])
+
+        def fake_can_access(_user_id, model_id, _db):
+            return model_id == allowed_model_id
+
+        with patch(
+            "flip_api.file_services.retrieve_uploaded_file_info.can_access_model",
+            side_effect=fake_can_access,
+        ):
+            result = get_uploaded_files_info(file_ids=file_ids_str, db=MockSession(), user_id=uuid.uuid4())
+
+        assert len(result) == 1
+        assert result[0]["name"] == "allowed.txt"
+        assert result[0]["modelId"] == str(allowed_model_id)
+
+    def test_get_files_info_orphan_file_denied(self, sample_file_ids):
+        """Files with no model_id are denied by default."""
+        files = [
+            UploadedFiles(
+                id=sample_file_ids[0],
+                name="orphan.txt",
+                size=10,
+                type="text/plain",
+                status="PROCESSED",
+                model_id=None,
+            ),
+        ]
+
+        class MockSession:
+            def exec(self, query):
+                class MockResult:
+                    def all(self_inner):  # noqa: N805 - mock signature
+                        return files
+
+                return MockResult()
+
+        with patch(
+            "flip_api.file_services.retrieve_uploaded_file_info.can_access_model",
+            return_value=True,
+        ) as access_check:
+            with pytest.raises(HTTPException) as exc_info:
+                get_uploaded_files_info(
+                    file_ids=str(sample_file_ids[0]), db=MockSession(), user_id=uuid.uuid4()
+                )
+
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+        # Orphan files must not even reach the access check.
+        access_check.assert_not_called()
+
     def test_get_files_info_no_files_found(self, empty_db_session, sample_files):
         """Test handling of no files found."""
         _, sample_file_ids, _ = sample_files
         file_ids_str = ",".join(str(fid) for fid in sample_file_ids[:2])
 
-        with pytest.raises(HTTPException) as exc_info:
-            get_uploaded_files_info(file_ids=file_ids_str, db=empty_db_session, user_id="test-user-id")
+        with patch(
+            "flip_api.file_services.retrieve_uploaded_file_info.can_access_model",
+            return_value=True,
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                get_uploaded_files_info(file_ids=file_ids_str, db=empty_db_session, user_id=uuid.uuid4())
 
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
         assert "No files found" in exc_info.value.detail
@@ -139,7 +242,7 @@ class TestGetUploadedFilesInfo:
     def test_get_files_info_invalid_uuid(self):
         """Test handling of invalid UUID format."""
         with pytest.raises(HTTPException) as exc_info:
-            get_uploaded_files_info(file_ids="invalid-uuid,another-invalid", db=MagicMock(), user_id="test-user-id")
+            get_uploaded_files_info(file_ids="invalid-uuid,another-invalid", db=MagicMock(), user_id=uuid.uuid4())
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
         assert "Invalid UUID format" in exc_info.value.detail
@@ -151,8 +254,12 @@ class TestGetUploadedFilesInfo:
 
         mock_db_session.exec = MagicMock(side_effect=Exception("Database connection error"))
 
-        with pytest.raises(HTTPException) as exc_info:
-            get_uploaded_files_info(file_ids=file_ids_str, db=mock_db_session, user_id="test-user-id")
+        with patch(
+            "flip_api.file_services.retrieve_uploaded_file_info.can_access_model",
+            return_value=True,
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                get_uploaded_files_info(file_ids=file_ids_str, db=mock_db_session, user_id=uuid.uuid4())
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert "Internal server error" in exc_info.value.detail
@@ -162,11 +269,15 @@ class TestGetUploadedFilesInfoPost:
     """Tests for the POST endpoint get_uploaded_files_info_post."""
 
     def test_post_files_info_success(self, mock_db_session, sample_files):
-        """Test successful retrieval of file information using POST."""
+        """Authorised users see metadata for files in their scope."""
         _, sample_file_ids, model_id = sample_files
         id_list = IdList(ids=sample_file_ids[:2])
 
-        result = get_uploaded_files_info_post(id_list=id_list, db=mock_db_session, user_id="test-user-id")
+        with patch(
+            "flip_api.file_services.retrieve_uploaded_file_info.can_access_model",
+            return_value=True,
+        ):
+            result = get_uploaded_files_info_post(id_list=id_list, db=mock_db_session, user_id=uuid.uuid4())
 
         assert len(result) == 2
         assert result[0]["id"] == str(sample_file_ids[0])
@@ -174,13 +285,32 @@ class TestGetUploadedFilesInfoPost:
         assert result[1]["id"] == str(sample_file_ids[1])
         assert result[1]["name"] == "test_file2.csv"
 
+    def test_post_files_info_access_denied(self, mock_db_session, sample_files):
+        """Files outside the caller's scope are not returned (404)."""
+        _, sample_file_ids, _ = sample_files
+        id_list = IdList(ids=sample_file_ids[:2])
+
+        with patch(
+            "flip_api.file_services.retrieve_uploaded_file_info.can_access_model",
+            return_value=False,
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                get_uploaded_files_info_post(id_list=id_list, db=mock_db_session, user_id=uuid.uuid4())
+
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+        assert "No files found" in exc_info.value.detail
+
     def test_post_files_info_no_files_found(self, empty_db_session, sample_files):
         """Test handling of no files found using POST."""
         _, sample_file_ids, _ = sample_files
         id_list = IdList(ids=sample_file_ids[:2])
 
-        with pytest.raises(HTTPException) as exc_info:
-            get_uploaded_files_info_post(id_list=id_list, db=empty_db_session, user_id="test-user-id")
+        with patch(
+            "flip_api.file_services.retrieve_uploaded_file_info.can_access_model",
+            return_value=True,
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                get_uploaded_files_info_post(id_list=id_list, db=empty_db_session, user_id=uuid.uuid4())
 
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
         assert "No files found" in exc_info.value.detail
@@ -192,8 +322,12 @@ class TestGetUploadedFilesInfoPost:
 
         mock_db_session.exec = MagicMock(side_effect=Exception("Database connection error"))
 
-        with pytest.raises(HTTPException) as exc_info:
-            get_uploaded_files_info_post(id_list=id_list, db=mock_db_session, user_id="test-user-id")
+        with patch(
+            "flip_api.file_services.retrieve_uploaded_file_info.can_access_model",
+            return_value=True,
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                get_uploaded_files_info_post(id_list=id_list, db=mock_db_session, user_id=uuid.uuid4())
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert "Internal server error" in exc_info.value.detail
