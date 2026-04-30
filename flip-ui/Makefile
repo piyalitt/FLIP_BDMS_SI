@@ -46,4 +46,4 @@ e2e_test:
 	}
 	@# `pretest:start` runs scripts/generate-window-js.sh which reads VITE_*
 	@# from the shell env (NOT the .env file). Source the file to export them.
-	set -a && . ./.env.development && set +a && npm run test:ci:docker:docker
+	set -a && . ./.env.development && set +a && npm run test:ci:docker
