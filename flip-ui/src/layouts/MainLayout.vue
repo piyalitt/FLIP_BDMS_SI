@@ -26,7 +26,13 @@
             <div class="flex flex-col w-full overflow-hidden grow">
                 <!-- TopBar -->
                 <AiHeader :title="route.name?.toString() ?? ''" :current-page="route.fullPath" :is-dark="isDark" @toggle-dark="toggleDark">
-                    <AiUserDropdown :is-dark="isDark" :email-address="emailAddress" :role="userRole" @sign-out="signOut" @toggle-dark-mode="toggleDark" />
+                    <AiUserDropdown
+                        :is-dark="isDark"
+                        :email-address="emailAddress"
+                        :role="userRole"
+                        @sign-out="signOut"
+                        @toggle-dark-mode="toggleDark"
+                    />
                 </AiHeader>
 
                 <!-- Main Content -->
@@ -96,6 +102,7 @@ const emailAddress = authStore.user?.attributes?.email ?? "";
 const userRole = computed(() => {
     if (authStore.hasPermissions(["CanAccessAdminPanel"])) return "Admin";
     if (authStore.hasPermissions(["CanManageProjects"])) return "Researcher";
+
     return "Observer";
 });
 

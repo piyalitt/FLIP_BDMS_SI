@@ -174,9 +174,6 @@ module "ec2_role" {
   custom_role_policy_arns = [
     "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
     "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
-    "arn:aws:iam::aws:policy/AmazonCognitoPowerUser", # TODO Restrict this policy to only what we need in production
-    "arn:aws:iam::aws:policy/AmazonS3FullAccess",     # TODO Restrict this policy to only what we need in production
-    "arn:aws:iam::aws:policy/AmazonSESFullAccess",    # TODO Restrict this policy to only what we need in production
   ]
   role_requires_mfa = "false"
 }
@@ -200,6 +197,75 @@ resource "aws_iam_role_policy" "ec2_secret" {
         module.flip_db.db_instance_master_user_secret_arn,
         module.flip_api_secret.secret_arn
       ]
+    }]
+  })
+}
+
+# Scoped S3 access — limited to FLIP application buckets only
+resource "aws_iam_role_policy" "s3_access" {
+  name = "flip-s3-scoped"
+  role = module.ec2_role.iam_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "s3:CopyObject",
+        "s3:DeleteObject",
+        "s3:GetBucketLocation",
+        "s3:GetObject",
+        "s3:HeadObject",
+        "s3:ListBucket",
+        "s3:PutObject",
+      ]
+      Resource = [
+        aws_s3_bucket.flip_bucket.arn,
+        "${aws_s3_bucket.flip_bucket.arn}/*",
+        aws_s3_bucket.aicentre_bucket.arn,
+        "${aws_s3_bucket.aicentre_bucket.arn}/*",
+      ]
+    }]
+  })
+}
+
+# Scoped Cognito access — limited to FLIP user pool operations
+resource "aws_iam_role_policy" "cognito_access" {
+  name = "flip-cognito-scoped"
+  role = module.ec2_role.iam_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "cognito-idp:AdminCreateUser",
+        "cognito-idp:AdminDeleteUser",
+        "cognito-idp:AdminGetUser",
+        "cognito-idp:AdminInitiateAuth",
+        "cognito-idp:AdminRespondToAuthChallenge",
+        "cognito-idp:AdminSetUserPassword",
+        "cognito-idp:AdminUserGlobalSignOut",
+        "cognito-idp:DescribeUserPool",
+        "cognito-idp:DescribeUserPoolClient",
+        "cognito-idp:ListUsers",
+      ]
+      Resource = [module.cognito.user_pool_arn]
+    }]
+  })
+}
+
+# Scoped SES access — send-only from the verified sender identity
+resource "aws_iam_role_policy" "ses_access" {
+  name = "flip-ses-scoped"
+  role = module.ec2_role.iam_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ses:SendEmail", "ses:SendRawEmail", "ses:SendTemplatedEmail"]
+      Resource = [module.ses.sender_identity_arn]
     }]
   })
 }

@@ -150,13 +150,7 @@ class TestAggregateAndSaveResults:
         self, mock_db_session: MagicMock, query_id_for_agg: UUID, mock_aggregation_select_success: MagicMock
     ):
         mock_insert_stats_result = MagicMock()
-        mock_db_session.execute.return_value.all = lambda: [mock_insert_stats_result]
         mock_insert_stats_result.all.return_value.count = 1
-
-        mock_db_session.execute.side_effect = [
-            mock_aggregation_select_success,
-            mock_insert_stats_result,
-        ]
 
         mock_db_session.exec.return_value.all.return_value = mock_aggregation_select_success
 

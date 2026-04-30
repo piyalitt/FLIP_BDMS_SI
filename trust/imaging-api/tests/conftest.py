@@ -30,7 +30,12 @@ _TEST_ENV_DEFAULTS = {
 }
 
 for key, value in _TEST_ENV_DEFAULTS.items():
-    os.environ.setdefault(key, value)
+    # Treat unset *and* unreplaced `<placeholder>` values from .env.development.example
+    # as missing — otherwise the placeholder leaks through and base64-decoding the
+    # AES key fails with "Incorrect padding" mid-test.
+    current = os.environ.get(key, "")
+    if not current or (current.startswith("<") and current.endswith(">")):
+        os.environ[key] = value
 
 # BASE_IMAGES_DOWNLOAD_DIR must point at a writable directory: download_and_unzip_images
 # now calls os.makedirs() on it before any mocks can intercept. The service Makefile

@@ -10,6 +10,7 @@
 # limitations under the License.
 #
 
+from fastapi import HTTPException, status
 from sqlmodel import Session, select
 
 from flip_api.config import get_settings
@@ -32,7 +33,17 @@ def ensure_user_and_role(email: str, role_ref: RoleRef, session: Session) -> Non
     user_pool_id = get_settings().AWS_COGNITO_USER_POOL_ID
 
     # 1️⃣ Try to get the user from Cognito
-    cognito_user = get_user_by_email_or_id(user_pool_id=user_pool_id, email=email)
+    try:
+        cognito_user = get_user_by_email_or_id(user_pool_id=user_pool_id, email=email)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_404_NOT_FOUND:
+            logger.warning(
+                "Skipping seed user %s with role %s because the user does not exist in Cognito.",
+                email,
+                role_ref.name,
+            )
+            return
+        raise
     user_id = cognito_user.id
     logger.debug(f"Found Cognito user {email} with sub {user_id}")
 

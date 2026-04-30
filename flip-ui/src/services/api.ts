@@ -11,7 +11,7 @@
  * limitations under the License.
  */
 
-import { fetchAuthSession } from 'aws-amplify/auth';
+import { fetchAuthSession } from "aws-amplify/auth";
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
 
 import { useAuthStore } from "@/store/auth";
@@ -86,6 +86,7 @@ class Http {
                         config.headers.Authorization = "Bearer " + token;
                     }
                 }
+
                 return config;
             },
             error => {

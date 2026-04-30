@@ -30,7 +30,7 @@ describe("Ai TextArea", () => {
 
         // Test functionality instead of snapshots
         expect(comp.exists()).toBe(true);
-        expect(comp.find('textarea').exists()).toBe(true);
-        expect(comp.find('label').text()).toBe('Test Label');
+        expect(comp.find("textarea").exists()).toBe(true);
+        expect(comp.find("label").text()).toBe("Test Label");
     });
 });

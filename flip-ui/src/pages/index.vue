@@ -13,7 +13,7 @@
 
 <!-- eslint-disable vue/multi-word-component-names -->
 <template>
-  <div></div>
+    <div />
 </template>
 
 <route lang="yaml">

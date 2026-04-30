@@ -13,7 +13,6 @@
 # Interacts with Data Access API
 
 import httpx
-import pandas as pd
 from pydantic import BaseModel, Field
 
 from imaging_api.config import get_settings
@@ -23,44 +22,47 @@ DATA_ACCESS_API_URL = get_settings().DATA_ACCESS_API_URL
 logger.info(f"Data Access API URL: {DATA_ACCESS_API_URL}")
 
 
-class DataframeRequest(BaseModel):
-    """Request model for the Data Access API to fetch a DataFrame."""
+class AccessionIdsRequest(BaseModel):
+    """Request model for the Data Access API to fetch a cohort's accession IDs."""
 
     encrypted_project_id: str = Field(..., description="The unique identifier for the project")
     query: str = Field(..., description="The raw SQL query to execute")
 
 
-async def get_dataframe(encrypted_project_id: str, query: str) -> pd.DataFrame:
+async def get_accession_ids(encrypted_project_id: str, query: str) -> list[str]:
     """
-    Calls the remote data access API endpoint using HTTPX and returns its raw JSON response.
+    Calls the data-access-api ``/cohort/accession-ids`` endpoint and returns the
+    list of accession IDs for the cohort.
+
+    The endpoint projects the cohort query to the ``accession_id`` column
+    server-side, so no other patient attributes leave the trust's data store.
 
     Args:
         encrypted_project_id (str): The encrypted project ID.
         query (str): The SQL query to execute.
 
     Returns:
-        pd.DataFrame: The DataFrame containing the results of the query.
+        list[str]: The accession IDs returned by the cohort query, in query order.
 
     Raises:
         RuntimeError: If the HTTP call to the Data Access API fails (network error or non-2xx
             response).
     """
-    dataframe_request = DataframeRequest(encrypted_project_id=encrypted_project_id, query=query)
+    request = AccessionIdsRequest(encrypted_project_id=encrypted_project_id, query=query)
 
-    logger.debug(f"get_dataframe: Sending request to Data Access API with {encrypted_project_id=} and {query=}")
+    logger.debug(f"get_accession_ids: Sending request to Data Access API with {encrypted_project_id=}")
 
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{DATA_ACCESS_API_URL}/cohort/dataframe",
-                json=dataframe_request.model_dump(),
+                f"{DATA_ACCESS_API_URL}/cohort/accession-ids",
+                json=request.model_dump(),
             )
 
         response.raise_for_status()
-        dataframe = pd.DataFrame(response.json())
-        return dataframe
+        return list(response.json().get("accession_ids", []))
 
     except httpx.HTTPError as exc:
-        error_message = f"get_dataframe: HTTP error occurred while calling the Data Access API: {exc}"
+        error_message = f"get_accession_ids: HTTP error occurred while calling the Data Access API: {exc}"
         logger.error(error_message)
         raise RuntimeError(error_message) from exc

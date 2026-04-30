@@ -48,14 +48,21 @@
     </div>
     <AiConfirmModal
         :dialog="confirmDialog"
-        :confirmation-text="confirmationText"
         close-button-text="Cancel"
         title="Enable deployment mode?"
         continue-button-text="Enable Deployment Mode"
         :continue-action="toggleDeploymentMode"
         :submitting="loadingButton"
         @close-modal="close"
-    />
+    >
+        <template #confirmation>
+            Are you sure you want to enable <strong>deployment mode</strong>?
+            <p class="mt-2">
+                This will disable core functionality across the platform.
+                You probably want to enable a site banner whilst this is enabled.
+            </p>
+        </template>
+    </AiConfirmModal>
 </template>
 
 <script setup lang="ts">
@@ -68,13 +75,6 @@ import { useSiteDetailsStore } from "@/store/siteDetailsStore";
 const details = useSiteDetailsStore();
 const loadingButton = ref(false);
 const confirmDialog = ref(false);
-
-const confirmationText = `
-    Are you sure you want to enable <strong>deployment mode</strong>?
-    <p class='mt-2'>
-        This will disable core functionality across the platform.
-        You probably want to enable a site banner whilst this is enabled.
-    </p>`;
 
 const confirm = async () => {
     if(details.deploymentMode) {

@@ -11,7 +11,7 @@
     limitations under the License.
 -->
 
-﻿<template>
+<template>
     <AiCard>
         <div class="p-4">
             <div class="flex flex-row items-center">
@@ -264,7 +264,7 @@ const { data, error } = useSWRV(
     {
         refreshInterval: 10_000,
         dedupingInterval: 5_000,
-        shouldRetryOnError: false,
+        shouldRetryOnError: false
     }
 );
 
@@ -272,7 +272,7 @@ useErrorHandler(error);
 
 watch(() => route.params.projectId, () => {
     data.value = undefined;
-}, { flush: 'sync' });
+}, { flush: "sync" });
 
 const sortedData = computed(() =>
     sortBy(

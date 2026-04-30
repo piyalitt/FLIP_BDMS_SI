@@ -13,10 +13,11 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import HTTPException, status
 from sqlmodel import Session
 
 from flip_api.db.models.user_models import RoleRef
-from flip_api.db.seed.main_users import seed_main_users
+from flip_api.db.seed.main_users import ensure_user_and_role, seed_main_users
 from flip_api.utils.constants import (
     ADMIN_EMAIL_1,
     ADMIN_EMAIL_2,
@@ -29,6 +30,13 @@ from flip_api.utils.constants import (
 @pytest.fixture
 def mock_session():
     return MagicMock(spec=Session)
+
+
+@pytest.fixture
+def mock_settings():
+    settings = MagicMock()
+    settings.AWS_COGNITO_USER_POOL_ID = "test-pool"
+    return settings
 
 
 @patch("flip_api.db.seed.main_users.ensure_user_and_role")
@@ -83,3 +91,39 @@ def test_seed_main_users_runs_all_when_each_succeeds(mock_logger, mock_ensure_us
 
     # Final log
     mock_logger.info.assert_called_with("✅ Finished seeding main users.")
+
+
+@patch("flip_api.db.seed.main_users.get_settings")
+@patch("flip_api.db.seed.main_users.get_user_by_email_or_id")
+@patch("flip_api.db.seed.main_users.logger")
+def test_ensure_user_and_role_skips_missing_cognito_user(
+    mock_logger, mock_get_user_by_email_or_id, mock_get_settings, mock_session, mock_settings
+):
+    mock_get_settings.return_value = mock_settings
+    mock_get_user_by_email_or_id.side_effect = HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Not found",
+    )
+
+    ensure_user_and_role("missing@example.com", RoleRef.RESEARCHER, mock_session)
+
+    mock_get_user_by_email_or_id.assert_called_once_with(user_pool_id="test-pool", email="missing@example.com")
+    mock_session.exec.assert_not_called()
+    mock_logger.warning.assert_called_once()
+
+
+@patch("flip_api.db.seed.main_users.get_settings")
+@patch("flip_api.db.seed.main_users.get_user_by_email_or_id")
+def test_ensure_user_and_role_reraises_non_404_cognito_errors(
+    mock_get_user_by_email_or_id, mock_get_settings, mock_session, mock_settings
+):
+    mock_get_settings.return_value = mock_settings
+    mock_get_user_by_email_or_id.side_effect = HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Cognito failure",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        ensure_user_and_role("missing@example.com", RoleRef.RESEARCHER, mock_session)
+
+    assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
