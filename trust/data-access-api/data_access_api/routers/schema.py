@@ -68,3 +68,12 @@ class StatisticsResponse(BaseModel):
     record_count: int
     created: str
     data: list[dict[str, Any]]
+
+
+class AccessionIdsResponse(BaseModel):
+    """Represents the response for an accession-ids query."""
+
+    accession_ids: list[str] = Field(
+        ...,
+        description="The accession IDs of the cohort, in query order.",
+    )
