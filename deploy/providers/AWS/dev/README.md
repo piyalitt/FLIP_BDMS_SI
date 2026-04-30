@@ -114,4 +114,4 @@ make status     # list resources under terraform management
 - `deploy/providers/AWS/dev/` — **this directory**, only Cognito + SES via the same modules
 - `deploy/providers/AWS/modules/{cognito,ses}/` — single source of truth for both envs
 
-A change to the Cognito config (token lifetimes, password policy, email templates) goes in the module and rolls out to both environments via each stack's own `apply`. A change that should land in only one environment goes in that stack's root (via module input variables).
+A change to the Cognito config (token lifetimes, MFA mode, email templates) goes in the module and rolls out to both environments via each stack's own `apply`. A change that should land in only one environment goes in that stack's root (via module input variables).

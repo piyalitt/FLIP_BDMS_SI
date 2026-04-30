@@ -144,11 +144,22 @@
                 :typing-confirmation="name"
                 :continue-action="confirmDeleteModel"
                 title="Are you sure you want to delete this model?"
-                :confirmation-text="getconfirmDeleteModelText()"
                 placeholder="Model name"
                 :submitting="submittingDeleteModel"
                 @close-modal="confirmDeleteOpen = false"
-            />
+            >
+                <template #confirmation>
+                    <div class="my-4 space-y-2">
+                        <strong>Training for this model will also be stopped if active. This can not be undone.</strong>
+                        <p>Your username will be recorded against this action.</p>
+                        <p>
+                            To delete this model, enter
+                            <code class="p-1 font-bold tracking-tight bg-gray-100 rounded dark:bg-gray-700 dark:text-primary-200">{{ name }}</code>
+                            below.
+                        </p>
+                    </div>
+                </template>
+            </AiConfirmModal>
         </Dialog>
     </TransitionRoot>
 </template>
@@ -199,13 +210,6 @@ const emit = defineEmits(["close", "save"]);
 
 const confirmDeleteOpen = ref(false);
 const submittingDeleteModel = ref(false);
-
-const getconfirmDeleteModelText = () => `
-<div class="my-4 space-y-2">
-    <strong>Training for this model will also be stopped if active. This can not be undone.</strong>
-    <p>Your username will be recorded against this action.</p>
-    <p>To delete this model, enter <code class="p-1 font-bold tracking-tight bg-gray-100 rounded dark:bg-gray-700 dark:text-primary-200">${props.name}</code> below.</p>
-</div>`;
 
 const closeDrawer = () => {
     emit("close");

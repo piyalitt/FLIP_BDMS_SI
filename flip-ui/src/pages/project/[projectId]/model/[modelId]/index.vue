@@ -105,7 +105,7 @@ import ModelDetails from "@/partials/models/ModelDetails.vue";
 import ModelUpload from "@/partials/models/ModelUpload.vue";
 import Training from "@/partials/models/Training.vue";
 import { routeChange } from "@/router";
-import { getJobTypeFromConfig } from "@/services/file-service";
+import { resolveModelConfigState } from "@/services/file-service";
 import { DEFAULT_JOB_TYPE, editModel, fetchJobTypes, getModel, getRequiredFilesForJobType, ModelStatusEnum, type JobType, type JobTypesResponse } from "@/services/model-service";
 import { useAuthStore, UserPermissions } from "@/store/auth";
 import { useErrorStore } from "@/store/error";
@@ -126,6 +126,7 @@ const allFilesUploaded = ref(false);
 const allFilesPassScan = ref(false);
 const jobTypes = ref<JobTypesResponse>({});
 const currentJobType = ref<JobType>(DEFAULT_JOB_TYPE);
+const resolvedConfigFileStatus = ref<FileUploadStatus | null>(null);
 const requiredFiles = ref<string[]>([]);
 const editProjectPermissions = ref(["CanManageProjects"] as UserPermissions[]);
 const editDrawerOpen = ref(false);
@@ -262,21 +263,25 @@ const trainingStartedOrStopped = computed(() => {
 watch([modelData, jobTypes], async () => {
     if (!modelData.value || !Object.keys(jobTypes.value).length) return;
     if (modelData.value?.files?.length) {
-        // Check if config.json exists in uploaded files and is fully scanned
-    const configFile = modelData.value.files.find((f: { name: string; status: string }) => f.name === "config.json");
-        const hasCompletedConfigJson = configFile && configFile.status === FileUploadStatus.COMPLETED;
-        let jobType = DEFAULT_JOB_TYPE;
-        if (hasCompletedConfigJson) {
-            // Fetch job type from config.json (only if file is ready)
-            jobType = await getJobTypeFromConfig(modelData.value.modelId, jobTypes.value);
+        const resolved = await resolveModelConfigState(
+            modelData.value.files,
+            resolvedConfigFileStatus.value,
+            jobTypes.value,
+            modelData.value.modelId
+        );
+        if (resolved.changed) {
+            resolvedConfigFileStatus.value = resolved.configStatus;
+            currentJobType.value = resolved.jobType;
+            requiredFiles.value = resolved.requiredFiles;
         }
-        currentJobType.value = jobType;
-        requiredFiles.value = getRequiredFilesForJobType(jobTypes.value, jobType);
+
         allFilesUploaded.value = stringArrayContainsAll(
             modelData.value.files.map((f: { name: string }) => f.name),
             requiredFiles.value
         );
-        allFilesPassScan.value = modelData.value.files.every((f: { status: string }) => f.status === FileUploadStatus.COMPLETED);
+        allFilesPassScan.value = modelData.value.files.every(
+            (f: { status: string }) => f.status === FileUploadStatus.COMPLETED
+        );
     }
 }, { immediate: true });
 
@@ -286,7 +291,9 @@ const update = () => {
 };
 
 const onFileDeleted = () => {
-    // Re-fetch model data and trigger job type/required files logic
+    // A new config.json after deletion may declare a different job_type;
+    // clear the cached status so the next poll re-resolves required files.
+    resolvedConfigFileStatus.value = null;
     update();
 };
 

@@ -10,6 +10,7 @@
 # limitations under the License.
 #
 
+from fastapi import HTTPException, status
 from sqlmodel import Session, select
 
 from flip_api.config import get_settings
@@ -17,7 +18,7 @@ from flip_api.db.models.user_models import RoleRef, User, UserRole
 from flip_api.utils.cognito_helpers import (
     get_user_by_email_or_id,
 )
-from flip_api.utils.constants import ADMIN_EMAIL, RESEARCHER_EMAIL
+from flip_api.utils.constants import ADMIN_EMAIL_1, ADMIN_EMAIL_2, ADMIN_EMAIL_3, OBSERVER_EMAIL, RESEARCHER_EMAIL
 from flip_api.utils.logger import logger
 
 
@@ -32,7 +33,17 @@ def ensure_user_and_role(email: str, role_ref: RoleRef, session: Session) -> Non
     user_pool_id = get_settings().AWS_COGNITO_USER_POOL_ID
 
     # 1️⃣ Try to get the user from Cognito
-    cognito_user = get_user_by_email_or_id(user_pool_id=user_pool_id, email=email)
+    try:
+        cognito_user = get_user_by_email_or_id(user_pool_id=user_pool_id, email=email)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_404_NOT_FOUND:
+            logger.warning(
+                "Skipping seed user %s with role %s because the user does not exist in Cognito.",
+                email,
+                role_ref.name,
+            )
+            return
+        raise
     user_id = cognito_user.id
     logger.debug(f"Found Cognito user {email} with sub {user_id}")
 
@@ -70,10 +81,15 @@ def seed_main_users(session: Session) -> None:
     """
     logger.debug("Seeding main users...")
 
-    # Create / sync the admin user
-    ensure_user_and_role(ADMIN_EMAIL, RoleRef.ADMIN, session)
+    # Create / sync the admin users
+    ensure_user_and_role(ADMIN_EMAIL_1, RoleRef.ADMIN, session)
+    ensure_user_and_role(ADMIN_EMAIL_2, RoleRef.ADMIN, session)
+    ensure_user_and_role(ADMIN_EMAIL_3, RoleRef.ADMIN, session)
 
     # Create / sync the researcher user
     ensure_user_and_role(RESEARCHER_EMAIL, RoleRef.RESEARCHER, session)
+
+    # Create / sync the observer user
+    ensure_user_and_role(OBSERVER_EMAIL, RoleRef.OBSERVER, session)
 
     logger.info("✅ Finished seeding main users.")

@@ -28,13 +28,20 @@ export interface ISiteBanner {
 export interface ISiteDetails {
     banner?: ISiteBanner;
     deploymentMode: boolean;
+    // Backend-enforced cap on automatic reimport retries. Sourced from the
+    // flip-api's MAX_REIMPORT_COUNT setting so the status widget and the
+    // actual enforcement agree. Nullable while the initial /site/details
+    // fetch is in flight — callers should fall back to backend-driven
+    // booleans rather than compute display thresholds before it lands.
+    maxReimportCount?: number;
 }
 
 export const useSiteDetailsStore = defineStore("siteDetails", {
     state: (): ISiteDetails => {
         return {
             banner: undefined,
-            deploymentMode: false
+            deploymentMode: false,
+            maxReimportCount: undefined
         };
     },
     getters: {

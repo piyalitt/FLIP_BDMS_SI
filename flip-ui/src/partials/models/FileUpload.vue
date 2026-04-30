@@ -23,11 +23,18 @@
     >
         <AiAlert
             variant="info"
-            :text="requiredFilesMessage"
             class="w-full"
             :rounded="false"
             :bordered="false"
-        />
+        >
+            Your current job type is: <strong><code>{{ jobType }}</code></strong>.
+            If you want to change it, add it as a <code>job_type</code> variable in your <code>config.json</code> file.
+            <br>
+            Required files:
+            <template v-for="(f, i) in requiredFiles" :key="f">
+                <code>{{ f }}</code><template v-if="i < requiredFiles.length - 1">, </template>
+            </template>
+        </AiAlert>
 
         <div
             class="flex items-center justify-center px-4 py-4 mx-auto grow h-[150px]"
@@ -66,7 +73,7 @@ interface IFileUploadProps {
     jobType: JobTypes;
 }
 
-const props = defineProps<IFileUploadProps>();
+defineProps<IFileUploadProps>();
 
 const emit = defineEmits<{
     (e: "newFiles", files: FileList): void;
@@ -77,14 +84,6 @@ const isObserver = computed(() => !authStore.hasPermissions(["CanManageProjects"
 
 const dragover = ref(false);
 const fileUpload = ref<HTMLInputElement | null>(null);
-
-/**
- * Generates the required files message based on job type
- */
-const requiredFilesMessage = computed(() => {
-    const filesList = props.requiredFiles.join(", ");
-    return `Your current job type is: <strong><code>${props.jobType}</code></strong>. If you want to change it, add it as a <code>job_type</code> variable in your <code>config.json</code> file.<br/>Required files: ${filesList}`;
-});
 
 const openFilesNativeDialog = () => {
     if (fileUpload.value) {

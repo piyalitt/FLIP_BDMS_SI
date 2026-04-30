@@ -71,13 +71,12 @@ def test_get_details_success(client, mock_db):
     assert response.json() == {
         "banner": {"message": "Banner message", "enabled": True, "link": "https://example.com/"},
         "deploymentMode": True,
+        "maxReimportCount": 5,
     }
 
 
 def test_get_details_not_found(client, mock_db):
-    mock_result = MagicMock()
-    mock_result.fetchone.return_value = None
-    mock_db.execute.return_value = mock_result
+    mock_db.exec.return_value.first.return_value = None
 
     response = client.get("/api/site/details")
 
@@ -119,7 +118,10 @@ def test_put_details_success(mock_perms, client, mock_db):
     response = client.put("/api/site/details", json=payload)
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.json() == payload  # expecting updated result
+    # Response echoes the updated banner/deploymentMode plus the
+    # env-driven maxReimportCount that the GET half of the handler reads
+    # back from Settings — PUT doesn't accept/mutate that field.
+    assert response.json() == {**payload, "maxReimportCount": 5}
 
 
 @patch("flip_api.site_services.details.has_permissions", return_value=True)
