@@ -538,6 +538,33 @@ describe("authStore", () => {
             expect(store.user?.username).toBe("u");
         });
 
+        it("propagates UserAlreadyAuthenticatedException from the retry without a second retry", async () => {
+            // Single-retry contract: if the post-signOut signIn ALSO throws
+            // UserAlreadyAuthenticatedException (token write hadn't settled,
+            // another tab racing), the store must let the error bubble
+            // instead of retrying again. Two attempts max, no infinite loop.
+            const stale = Object.assign(new Error("There is already a signed in user."), {
+                name: "UserAlreadyAuthenticatedException"
+            });
+            vi.mocked(signIn)
+                .mockReset()
+                .mockRejectedValueOnce(stale)
+                .mockRejectedValueOnce(stale);
+            vi.mocked(signOut).mockResolvedValue(undefined as never);
+
+            await expect(
+                store.signIn({ username: "u", password: "p" })
+            ).rejects.toMatchObject({
+                name: "UserAlreadyAuthenticatedException"
+            });
+
+            expect(signIn).toHaveBeenCalledTimes(2);
+            expect(signOut).toHaveBeenCalledTimes(1);
+            // hydrate must not have been attempted — Cognito never accepted
+            // the credentials, so getCurrentUser would 401 generically.
+            expect(getCurrentUser).not.toHaveBeenCalled();
+        });
+
         it("does not retry on errors other than UserAlreadyAuthenticatedException", async () => {
             const wrongPassword = Object.assign(new Error("Incorrect username or password."), {
                 name: "NotAuthorizedException"
