@@ -147,8 +147,7 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) 
 # CORS middleware — explicit allowlist required because allow_credentials=True. The allowlist
 # is derived at startup from the Cognito user-pool client's CallbackURLs (the canonical UI
 # origins per env), so "where users can sign in" and "where the UI may call this API" stay in
-# sync. The mutable list is populated by `lifespan`; Starlette reads it per-request and emits
-# Vary: Origin automatically when allow_origins is not a wildcard.
+# sync. The mutable list is populated by `lifespan` and held by reference here.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_allowed_origins,
