@@ -13,6 +13,7 @@
 import json
 from enum import Enum
 from pathlib import Path
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, computed_field, field_validator
@@ -129,6 +130,7 @@ class IClientStatus(BaseModel):
 
 class INetStatus(BaseModel):
     name: str
+    fl_backend: Literal["nvflare", "flower"]
     online: bool | None = None
     registered_clients: int | None = None
     net_in_use: bool | None = None

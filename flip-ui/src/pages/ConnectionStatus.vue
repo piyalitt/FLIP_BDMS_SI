@@ -62,7 +62,7 @@
                                     <div class="flex flex-wrap items-center justify-between -mt-2 -ml-4 sm:flex-nowrap">
                                         <div class="mt-2 ml-4">
                                             <h3 class="text-lg font-medium leading-6 text-gray-900 uppercase dark:text-gray-300">
-                                                {{ net.name }}
+                                                {{ net.name }}<span v-if="net.fl_backend" class="normal-case"> ({{ formatBackend(net.fl_backend) }})</span>
                                             </h3>
                                         </div>
                                         <div class="flex-shrink-0 mt-2 ml-4">
@@ -186,6 +186,9 @@ const hideDetails = () => {
 const offlineClients = (clients: IFLStatusClients[]) => {
     return clients.some(c => !c.online);
 };
+
+const formatBackend = (backend: "nvflare" | "flower") =>
+    backend === "nvflare" ? "NVFlare" : "Flower";
 
 const setAndShowDetails = async (netName: string) => {
     showDetails.value = true;

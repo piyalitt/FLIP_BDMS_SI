@@ -39,7 +39,8 @@ vi.mock("aws-amplify/utils", () => ({
             (_channel: string, listener: (data: { payload: { event: string } }) => void) => {
                 capturedListener.fn = listener;
             }
-        )
+        ),
+        dispatch: vi.fn()
     }
 }));
 
@@ -284,6 +285,192 @@ describe("authCheck", () => {
             text: "Please log in again to confirm your identity."
         });
         localStorageClear.mockRestore();
+    });
+});
+
+describe("authCheck — Cypress hook (VITE_E2E build flag)", () => {
+    // The src code branches at the top of authCheck on isCypressMode(),
+    // which reads `import.meta.env.VITE_E2E` and is dead-code-eliminated
+    // in non-E2E builds. Stubbing the env var lets unit tests drive the
+    // same paths Cypress E2E exercises without spinning up Amplify.
+
+    beforeEach(() => {
+        setActivePinia(createPinia());
+        vi.mocked(fetchAuthSession).mockReset();
+        window.localStorage.clear();
+        vi.stubEnv("VITE_E2E", "true");
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+        window.localStorage.clear();
+    });
+
+    it("redirects to /auth/login when no cypress.auth.user is set", async () => {
+        const { next, calls } = makeNext();
+
+        await authCheck(route("/projects") as never, route("/") as never, next as never);
+
+        expect(calls).toEqual(["/auth/login"]);
+        expect(fetchAuthSession).not.toHaveBeenCalled();
+    });
+
+    it("populates the auth store from cypress.auth.user and continues", async () => {
+        const user = {
+            username: "u",
+            userId: "id",
+            attributes: { sub: "s", email: "u@e.com" },
+            permissions: ["CanManageProjects"]
+        };
+        window.localStorage.setItem("cypress.auth.user", JSON.stringify(user));
+        const { next, calls } = makeNext();
+        const auth = useAuthStore();
+
+        await authCheck(route("/projects") as never, route("/") as never, next as never);
+
+        expect(auth.user).toEqual(user);
+        expect(auth.signInStep).toBe("DONE");
+        expect(calls).toEqual([undefined]);
+        expect(fetchAuthSession).not.toHaveBeenCalled();
+    });
+
+    it("routes new-password challenge users to /auth/new-password", async () => {
+        const auth = useAuthStore();
+        auth.signInStep = "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED";
+        const { next, calls } = makeNext();
+
+        await authCheck(route("/projects") as never, route("/") as never, next as never);
+
+        expect(calls).toEqual(["/auth/new-password"]);
+    });
+
+    it("lets new-password challenge users stay on /auth/new-password without recursing", async () => {
+        const auth = useAuthStore();
+        auth.signInStep = "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED";
+        const { next, calls } = makeNext();
+
+        await authCheck(route("/auth/new-password") as never, route("/") as never, next as never);
+
+        expect(calls).toEqual([undefined]);
+    });
+
+    it("routes TOTP-setup challenge to /auth/mfa-setup", async () => {
+        const auth = useAuthStore();
+        auth.signInStep = "CONTINUE_SIGN_IN_WITH_TOTP_SETUP";
+        const { next, calls } = makeNext();
+
+        await authCheck(route("/projects") as never, route("/") as never, next as never);
+
+        expect(calls).toEqual(["/auth/mfa-setup"]);
+    });
+
+    it("routes TOTP-code challenge to /auth/mfa-verify", async () => {
+        const auth = useAuthStore();
+        auth.signInStep = "CONFIRM_SIGN_IN_WITH_TOTP_CODE";
+        const { next, calls } = makeNext();
+
+        await authCheck(route("/projects") as never, route("/") as never, next as never);
+
+        expect(calls).toEqual(["/auth/mfa-verify"]);
+    });
+
+    it("treats a malformed cypress.auth.user as 'no fixture' rather than nuking the session", async () => {
+        // The earlier version threw inside JSON.parse and the umbrella
+        // catch in authCheck would call $reset() + clear localStorage +
+        // show "You've been signed out", masking the real cause from a
+        // confused test author. We now log the error, drop the bad
+        // fixture, and redirect to /auth/login deliberately.
+        window.localStorage.setItem("cypress.auth.user", "{not json");
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        const { next, calls } = makeNext();
+
+        await authCheck(route("/projects") as never, route("/") as never, next as never);
+
+        expect(calls).toEqual(["/auth/login"]);
+        expect(consoleError).toHaveBeenCalled();
+        expect(window.localStorage.getItem("cypress.auth.user")).toBeNull();
+        // The umbrella "signed out" snackbar must NOT fire — that's the
+        // generic error path we explicitly skirt.
+        expect(Snackbar.error).not.toHaveBeenCalled();
+        consoleError.mockRestore();
+    });
+
+    it("does not overwrite a preloaded auth.user", async () => {
+        const auth = useAuthStore();
+        auth.user = {
+            username: "preloaded",
+            userId: "p",
+            attributes: { sub: "p", email: "p@e.com" },
+            permissions: []
+        };
+        window.localStorage.setItem(
+            "cypress.auth.user",
+            JSON.stringify({ username: "fromStorage", userId: "x", attributes: {}, permissions: [] })
+        );
+        const { next, calls } = makeNext();
+
+        await authCheck(route("/projects") as never, route("/") as never, next as never);
+
+        expect(auth.user.username).toBe("preloaded");
+        expect(calls).toEqual([undefined]);
+    });
+});
+
+describe("__cypressTriggerSessionExpiry", () => {
+    // auth.ts installs this onto `window` at module import time when the
+    // VITE_E2E build flag is set. The session-expired Cypress spec
+    // dispatches the Hub event through it without having to simulate a
+    // Cognito refresh round-trip. We resetModules + stubEnv so the
+    // module-level installer runs under our control.
+
+    it("is a function that dispatches the tokenRefresh_failure Hub event", async () => {
+        vi.stubEnv("VITE_E2E", "true");
+        vi.resetModules();
+
+        // Re-mock aws-amplify/utils for this resetModules scope so the
+        // re-imported auth.ts captures *our* Hub.dispatch reference.
+        const dispatch = vi.fn();
+        vi.doMock("aws-amplify/utils", () => ({
+            Hub: { listen: vi.fn(), dispatch }
+        }));
+
+        await import("@/utils/auth");
+
+        const trigger = (window as unknown as {
+            __cypressTriggerSessionExpiry?: () => void;
+        }).__cypressTriggerSessionExpiry;
+
+        expect(typeof trigger).toBe("function");
+
+        trigger?.();
+
+        expect(dispatch).toHaveBeenCalledWith("auth", { event: "tokenRefresh_failure" });
+
+        vi.doUnmock("aws-amplify/utils");
+        vi.unstubAllEnvs();
+        delete (window as unknown as { __cypressTriggerSessionExpiry?: unknown })
+            .__cypressTriggerSessionExpiry;
+    });
+
+    it("does NOT install the trigger when VITE_E2E is unset", async () => {
+        vi.stubEnv("VITE_E2E", "");
+        vi.resetModules();
+        vi.doMock("aws-amplify/utils", () => ({
+            Hub: { listen: vi.fn(), dispatch: vi.fn() }
+        }));
+        // Make sure we're starting from a clean state.
+        delete (window as unknown as { __cypressTriggerSessionExpiry?: unknown })
+            .__cypressTriggerSessionExpiry;
+
+        await import("@/utils/auth");
+
+        expect(
+            (window as unknown as { __cypressTriggerSessionExpiry?: unknown })
+                .__cypressTriggerSessionExpiry
+        ).toBeUndefined();
+
+        vi.doUnmock("aws-amplify/utils");
+        vi.unstubAllEnvs();
     });
 });
 

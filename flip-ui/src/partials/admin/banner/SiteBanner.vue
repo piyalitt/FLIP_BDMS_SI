@@ -49,7 +49,7 @@
                         <div class="overflow-hidden border border-gray-300 rounded-lg shadow-lg dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
                             <div class="w-full">
                                 <div class="p-2 transition bg-primary-500 sm:p-3">
-                                    <div class="flex flex-wrap items-center justify-between mx-auto max-w-7xl">
+                                    <div class="flex flex-wrap items-center justify-between">
                                         <div class="flex items-center flex-1">
                                             <span class="flex p-2 rounded-lg bg-primary-700">
                                                 <icon-ph-megaphone-duotone
@@ -128,14 +128,20 @@
     </div>
     <AiConfirmModal
         :dialog="confirmDialog"
-        :confirmation-text="confirmationText"
         close-button-text="Cancel"
         title="Enable site banner?"
         continue-button-text="Enable site banner"
         :continue-action="toggleBanner"
         :submitting="loadingButton"
         @close-modal="close"
-    />
+    >
+        <template #confirmation>
+            Are you sure you want to enable the <strong>site banner</strong>?
+            <p class="mt-2">
+                This will show across all pages for every user. Make to check the preview before enabling it.
+            </p>
+        </template>
+    </AiConfirmModal>
 </template>
 
 <script setup lang="ts">
@@ -160,12 +166,6 @@ const schema = object().shape({
     link: string().notRequired().url("Please enter a valid URL, prefixed with 'http(s)://'"),
     enabled: string().optional()
 });
-
-const confirmationText = `
-    Are you sure you want to enable the <strong>site banner</strong>?
-    <p class='mt-2'>
-        This will show across all pages for every user. Make to check the preview before enabling it.
-    </p>`;
 
 const confirm = async () => {
     if(details.banner?.enabled) {

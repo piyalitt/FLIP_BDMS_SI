@@ -11,35 +11,43 @@
  * limitations under the License.
  */
 
+// cy.login writes a fully-formed AmplifyUser into the `cypress.auth.user`
+// localStorage key. The auth route guard in src/utils/auth.ts checks for this
+// when running under Cypress and populates the auth store directly, bypassing
+// Amplify v6's `fetchAuthSession()` / `fetchUserAttributes()` round-trip.
+//
+// Going through the live Amplify flow would require simulating Cognito's SRP
+// handshake, which a static fixture can't do — so the production flow uses
+// real Cognito and the test flow uses this hook. The auth-related specs in
+// group-3 still drive the real `signIn` codepath through the login form.
 
+interface LoginOptions {
+    username?: string;
+    permissionsFixture?: string;
+}
 
-Cypress.Commands.add("login", (username = "HasAdminRole@gmail.com", password = "NewPassword!1") => {
+const DEFAULT_USER_ID = "f10ff491-9418-49fa-9ed7-e0fe4bd01c58";
 
-    const clientId = Cypress.env("AWS_COGNITO_APP_CLIENT_ID");
+Cypress.Commands.add("login", (options: LoginOptions | string = {}) => {
+    // Support the legacy `cy.login("user@example.com", "password")` shape that
+    // some specs still use.
+    const opts: LoginOptions = typeof options === "string" ? { username: options } : options;
+    const username = opts.username ?? "HasAdminRole@gmail.com";
+    const permissionsFixture = opts.permissionsFixture ?? "user/getPermissions";
 
-    cy.fixture("auth/cognitoAuth")
-        .then((cognitoResponse) => {
-            window.localStorage.setItem(
-                `CognitoIdentityServiceProvider.${clientId}.${username}.idToken`,
-                cognitoResponse.AuthenticationResult.IdToken
-            );
-            window.localStorage.setItem(
-                `CognitoIdentityServiceProvider.${clientId}.${username}.accessToken`,
-                cognitoResponse.AuthenticationResult.AccessToken
-            );
-            window.localStorage.setItem(
-                `CognitoIdentityServiceProvider.${clientId}.${username}.refreshToken`,
-                cognitoResponse.AuthenticationResult.RefreshToken
-            );
-            window.localStorage.setItem(
-                `CognitoIdentityServiceProvider.${clientId}.${username}.clockDrift`,
-                "1"
-            );
-            window.localStorage.setItem(
-                `CognitoIdentityServiceProvider.${clientId}.LastAuthUser`,
-                username
-            );
-        });
+    cy.fixture(permissionsFixture).then((perms: { permissions: string[] }) => {
+        const user = {
+            username: DEFAULT_USER_ID,
+            userId: DEFAULT_USER_ID,
+            attributes: {
+                sub: DEFAULT_USER_ID,
+                email: username
+            },
+            permissions: perms.permissions ?? []
+        };
+
+        window.localStorage.setItem("cypress.auth.user", JSON.stringify(user));
+    });
 
     cy.saveLocalStorage();
 });

@@ -22,15 +22,19 @@ describe("the login page", () => {
     it("validates form fields and logs in as expected", () => {
         cy.getBySel("login-btn").click();
         cy.contains("An email address is required").should("be.visible");
-        cy.contains("Your password must be at least 8 characters").should("be.visible");
+        cy.contains("A password is required").should("be.visible");
         cy.getBySel("username").clear().type("username@@");
         cy.getBySel("password").clear().type("NewPassword!1");
         cy.getBySel("login-btn").click();
         cy.contains("Please enter a valid email address").should("be.visible");
 
-        cy.log("Shows error with invalid password");
+        cy.log("Shows error with too-short password");
         cy.getBySel("username").clear().type("HasResearcherRole@gmail.com");
-        cy.getBySel("password").clear().type("Pass");
+        // "Aa1!" passes special/upper/lower/digit so the only failing yup
+        // validator left is min(8). Using e.g. "Pass" instead would trip
+        // the missing-digit matcher first and yup (abortEarly: true)
+        // would surface that message instead.
+        cy.getBySel("password").clear().type("Aa1!");
         cy.getBySel("login-btn").click();
         cy.contains("Your password must be at least 8 characters").should("be.visible");
 

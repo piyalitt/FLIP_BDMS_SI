@@ -29,7 +29,11 @@ def session():
 
 @pytest.fixture
 def mock_db_session():
-    """Fixture for mocking the database session."""
+    """Fixture for mocking the database session.
+
+    SQLModel `session.exec()` is used for SELECT statements; `session.execute()` is used for
+    DELETE/UPDATE/INSERT and raw SQL (per SQLModel docs), so we stub both.
+    """
     # Mock the fluent interface for query execution
     mock_exec = MagicMock()
     mock_exec.one_or_none.return_value = None  # Default: user not found
@@ -40,18 +44,16 @@ def mock_db_session():
     session.execute.return_value = MagicMock()
     session.execute.return_value.first.return_value = None
     session.execute.return_value.rowcount = 1
-    session.execute.return_value.scalar_one_or_none.return_value = None
     session.rollback = MagicMock()
     return session
 
 
 @pytest.fixture
 def mock_db_session_with_exec():
-    """Fixture for mocking the database session."""
+    """Fixture for mocking the database session, returning the session and the exec mock."""
     session = MagicMock(spec=Session)
     session.execute.return_value = MagicMock()
     session.execute.return_value.rowcount = 1
-    session.execute.return_value.scalar_one_or_none.return_value = None
     session.execute.return_value.first.return_value = None
     # Mock the fluent interface for query execution
     mock_exec = MagicMock()

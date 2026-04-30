@@ -64,13 +64,31 @@ def mock_get_trusts():
         yield mock
 
 
-def test_get_net_status_success(fake_request, mock_db, mock_get_net_by_name, mock_fetch_client_status, mock_get_trusts):
+@pytest.fixture
+def mock_get_settings():
+    with patch("flip_api.fl_services.get_net_status.get_settings") as mock:
+        mock.return_value.FL_BACKEND = "nvflare"
+        yield mock
+
+
+def test_get_net_status_success(
+    fake_request, mock_db, mock_get_net_by_name, mock_fetch_client_status, mock_get_trusts, mock_get_settings
+):
     result = get_net_status("net-name", fake_request, mock_db)
     assert result.name == "net-name"
+    assert result.fl_backend == "nvflare"
     assert len(result.clients) == 3
     assert any(client.name == "client1" and client.online for client in result.clients)
     assert any(client.name == "client2" and not client.online for client in result.clients)
     assert any(client.name == "client3" and not client.online for client in result.clients)
+
+
+def test_get_net_status_reports_flower_backend(
+    fake_request, mock_db, mock_get_net_by_name, mock_fetch_client_status, mock_get_trusts, mock_get_settings
+):
+    mock_get_settings.return_value.FL_BACKEND = "flower"
+    result = get_net_status("net-name", fake_request, mock_db)
+    assert result.fl_backend == "flower"
 
 
 def test_get_net_status_net_not_found(fake_request, mock_db):

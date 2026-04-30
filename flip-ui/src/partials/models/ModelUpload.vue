@@ -57,9 +57,24 @@
                             >
                                 <div class="relative flex items-center justify-center w-full text-gray-700 bg-gray-100 border border-gray-300 rounded-full shadow dark:bg-gray-800 dark:text-gray-300 grow dark:border-gray-500">
                                     <Transition name="fade" mode="out-in">
-                                        <AiLoader v-if="file.status === FileUploadStatus.UPLOADING || file.status === FileUploadStatus.SCANNING" small />
-                                        <icon-ph-file-duotone v-else-if="file.status === FileUploadStatus.COMPLETED" />
-                                        <icon-ph-x-circle-duotone v-else-if="file.status === FileUploadStatus.ERROR" />
+                                        <AiLoader
+                                            v-if="file.status === FileUploadStatus.UPLOADING"
+                                            small
+                                            :data-test="`file-upload-status-uploading`"
+                                        />
+                                        <AiLoader
+                                            v-else-if="file.status === FileUploadStatus.SCANNING"
+                                            small
+                                            :data-test="`file-upload-status-scanning`"
+                                        />
+                                        <icon-ph-file-duotone
+                                            v-else-if="file.status === FileUploadStatus.COMPLETED"
+                                            :data-test="`file-upload-status-completed`"
+                                        />
+                                        <icon-ph-x-circle-duotone
+                                            v-else-if="file.status === FileUploadStatus.ERROR"
+                                            :data-test="`file-upload-status-error`"
+                                        />
                                     </Transition>
                                 </div>
                             </div>
@@ -93,12 +108,16 @@
     </section>
     <AiConfirmModal
         :dialog="confirmFileDeletion"
-        :confirmation-text="deleteFileConfirmationText"
         continue-button-text="Delete File"
         :continue-action="deleteFile"
         :submitting="deletingFile"
         @close-modal="closeFileDeletion"
-    />
+    >
+        <template #confirmation>
+            Are you sure you wish to delete <code class="font-black">{{ fileToDelete }}</code>?
+            This file will not be available as part of model training.
+        </template>
+    </AiConfirmModal>
 </template>
 
 <script lang="ts" setup>
@@ -112,11 +131,10 @@ import AiConfirmModal from "@/components/AiModal/AiConfirmModal.vue";
 import { FileInfo, FileUploadStatus } from "@/interfaces/model/types";
 import { deleteModelFile, downloadModelFile, processScannedFile } from "@/services/file-service";
 import { JobTypes } from "@/services/model-service";
+import { useAuthStore } from "@/store/auth";
 import { createPreSignedUrl, uploadFile as uploadFileService } from "@/utils/file";
 import { formatBytes, getRandomId } from "@/utils/helpers";
 import { Snackbar } from "@/utils/snackbar";
-
-import { useAuthStore } from "@/store/auth";
 
 import FileUpload from "./FileUpload.vue";
 
@@ -143,11 +161,6 @@ const confirmFileDeletion = ref<boolean>(false);
 const deletingFile = ref<boolean>(false);
 const downloadingFile = ref<string>();
 const fileToDelete = ref<string>();
-
-const deleteFileConfirmationText = computed(() =>
-    `Are you sure you wish to delete <code class='font-black'>${fileToDelete.value}</code>?
-This file will not be available as part of model training.`
-);
 
 watch(props, () => {
     handleFiles();
@@ -193,7 +206,7 @@ const uploadFile = async (fileList: FileList) => {
 
     if (blacklistedEnvVar) {
         // Simple comma-separated list from BLACKLISTED_MODEL_FILES — see generate-window-js.sh.
-        blacklistedModelFiles = blacklistedEnvVar.split(',').map(file => file.trim());
+        blacklistedModelFiles = blacklistedEnvVar.split(",").map(file => file.trim());
     }
 
     for (const file of fileList) {
@@ -294,24 +307,24 @@ const closeFileDeletion = () => {
 };
 
 const downloadFile = async (fileName: string) => {
-  downloadingFile.value = fileName;
+    downloadingFile.value = fileName;
 
-  try {
-    const path = `/files/model/${props.modelId}/${encodeURIComponent(fileName)}`;
-    const blob = await downloadModelFile(path);
+    try {
+        const path = `/files/model/${props.modelId}/${encodeURIComponent(fileName)}`;
+        const blob = await downloadModelFile(path);
 
-    const blobUrl = URL.createObjectURL(blob);
+        const blobUrl = URL.createObjectURL(blob);
 
-    const a = document.createElement("a");
-    a.href = blobUrl;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
 
-    URL.revokeObjectURL(blobUrl);
-  } finally {
-    downloadingFile.value = undefined;
-  }
+        URL.revokeObjectURL(blobUrl);
+    } finally {
+        downloadingFile.value = undefined;
+    }
 };
 </script>

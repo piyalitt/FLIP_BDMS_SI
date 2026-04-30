@@ -152,11 +152,22 @@
                 :typing-confirmation="name"
                 :continue-action="confirmDeleteProject"
                 title="Are you sure you want to delete this project?"
-                :confirmation-text="getConfirmDeleteProjectText()"
                 placeholder="Project name"
                 :submitting="submittingDeleteProject"
                 @close-modal="confirmDeleteOpen = false"
-            />
+            >
+                <template #confirmation>
+                    <div class="my-4 space-y-2">
+                        <strong>Any active training jobs performed on the models within the project will be stopped. This can not be undone.</strong>
+                        <p>Your username will be recorded against this action.</p>
+                        <p>
+                            To delete this project, enter
+                            <code class="p-1 font-bold leading-loose tracking-tight bg-gray-100 rounded dark:bg-gray-700 dark:text-primary-200">{{ name }}</code>
+                            below.
+                        </p>
+                    </div>
+                </template>
+            </AiConfirmModal>
         </Dialog>
     </TransitionRoot>
 </template>
@@ -211,13 +222,6 @@ const emit = defineEmits(["close", "delete", "save"]);
 
 const confirmDeleteOpen = ref(false);
 const submittingDeleteProject = ref(false);
-
-const getConfirmDeleteProjectText = () => `
-<div class="my-4 space-y-2">
-    <strong>Any active training jobs performed on the models within the project will be stopped. This can not be undone.</strong>
-    <p>Your username will be recorded against this action.</p>
-    <p>To delete this project, enter <code class="p-1 font-bold leading-loose tracking-tight bg-gray-100 rounded dark:bg-gray-700 dark:text-primary-200">${props.name}</code> below.</p>
-</div>`;
 
 const closeDrawer = () => {
     emit("close");

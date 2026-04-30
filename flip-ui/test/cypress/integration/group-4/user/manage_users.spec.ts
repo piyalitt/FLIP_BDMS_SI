@@ -19,11 +19,10 @@ const adminRoleId = "8ce0351a-33cc-432b-8d6e-161122c712dd";
 
 describe("Manage Users as Researcher", () => {
     it("Should not allow you on the users page without the CanManageUsers Permission", () => {
-        cy.login();
+        cy.login({ permissionsFixture: "user/getPermissionsResearcher" });
         cy.intercept("GET", "/users/**/permissions", { fixture: "user/getPermissionsResearcher" })
             .as("getPermissionsResearcher");
         cy.visit("/admin/users");
-        cy.wait("@getPermissionsResearcher");
         cy.url().should("include", "projects");
     });
 });
@@ -136,7 +135,7 @@ describe("Manage Users as Administrator", () => {
 
     it("allows reset of a user's password", () => {
         cy.getBySel("user").contains("researcher.user@flip.com").click();
-        cy.intercept("POST", "https://cognito-idp.eu-west-2.amazonaws.com/", { statusCode: 200 })
+        cy.intercept("POST", "https://cognito-idp.eu-west-2.amazonaws.com/", { statusCode: 200, body: {} })
             .as("passwordReset");
         cy.getBySel("more-options-btn").click();
         cy.getBySel("reset-password-btn").click();

@@ -23,8 +23,51 @@ from flip_api.utils.cognito_helpers import is_mfa_enabled
 from flip_api.utils.logger import logger
 
 security = HTTPBearer()
-AWS_REGION = get_settings().AWS_REGION
-USER_POOL_ID = get_settings().AWS_COGNITO_USER_POOL_ID
+
+
+def _decode_cognito_jwt(token: str) -> dict[str, Any]:
+    """
+    Verify a Cognito-issued JWT and return its claims.
+
+    Performs the verification steps documented by AWS for Cognito user pool tokens:
+    signature, expiry, issuer, token_use, and audience binding to this app client.
+
+    Raises ``jwt.InvalidTokenError`` (or a subclass) on any validation failure.
+    """
+    settings = get_settings()
+    aws_region = settings.AWS_REGION
+    user_pool_id = settings.AWS_COGNITO_USER_POOL_ID
+    app_client_id = settings.AWS_COGNITO_APP_CLIENT_ID
+    issuer = f"https://cognito-idp.{aws_region}.amazonaws.com/{user_pool_id}"
+
+    jwks_url = f"{issuer}/.well-known/jwks.json"
+    jwks_client = PyJWKClient(jwks_url)
+    signing_key = jwks_client.get_signing_key_from_jwt(token)
+
+    payload: dict[str, Any] = jwt.decode(
+        token,
+        signing_key.key,
+        algorithms=["RS256"],
+        issuer=issuer,
+        options={
+            # aud is validated manually below so we can also handle access tokens (which use client_id).
+            # TODO(#344): drop ID-token support and validate aud directly via PyJWT once flip-ui sends access tokens.
+            "verify_aud": False,
+            "require": ["exp", "iss", "sub", "token_use"],
+        },
+    )
+
+    token_use = payload.get("token_use")
+    if token_use == "id":
+        if payload.get("aud") != app_client_id:
+            raise jwt.InvalidTokenError("Invalid audience")
+    elif token_use == "access":
+        if payload.get("client_id") != app_client_id:
+            raise jwt.InvalidTokenError("Invalid client_id")
+    else:
+        raise jwt.InvalidTokenError(f"Unsupported token_use: {token_use!r}")
+
+    return payload
 
 
 def _decode_verified_claims(token: str) -> dict[str, Any]:
@@ -41,26 +84,7 @@ def _decode_verified_claims(token: str) -> dict[str, Any]:
         HTTPException: If token is invalid, expired, or wrong type.
     """
     try:
-        jwks_url = f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json"
-        jwks_client = PyJWKClient(jwks_url)
-        signing_key = jwks_client.get_signing_key_from_jwt(token)
-
-        payload = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256"],
-            audience=None,
-            options={"verify_aud": False},
-        )
-
-        if payload.get("token_use") not in ["id", "access"]:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token type. Expected an ID or access token.",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        return payload
+        return _decode_cognito_jwt(token)
 
     except jwt.ExpiredSignatureError:
         raise HTTPException(
@@ -154,7 +178,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
         logger.debug(f"ENFORCE_MFA disabled — skipping MFA gate for user: {user_id}")
         return user_id
 
-    if not is_mfa_enabled(username, USER_POOL_ID):
+    if not is_mfa_enabled(username, get_settings().AWS_COGNITO_USER_POOL_ID):
         logger.warning(f"User {user_id} hit MFA-gated route without active TOTP")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
