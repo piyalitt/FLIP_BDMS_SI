@@ -288,9 +288,27 @@ resource "aws_iam_role_policy" "ses_access" {
 # The Trust host runs trust-api, imaging-api, data-access-api, fl-client, XNAT,
 # Orthanc and the OMOP DB — none of those services use boto3. The only AWS
 # call from the Trust host is `aws s3 sync` against the AI Centre bucket
-# during Ansible provisioning to fetch the FL participant kit (see
-# deploy/providers/AWS/site.yml). Cognito, SES and the FLIP application
-# bucket are deliberately *not* granted here.
+# during Ansible provisioning to fetch the FL participant kit (see the
+# NVFLARE/Flower kit-download tasks in deploy/providers/AWS/site.yml).
+# Cognito, SES and the FLIP application bucket are deliberately *not*
+# granted here.
+#
+# Future directions — both would let us drop the trust_ec2_s3 policy below
+# and leave the Trust role with only SSM + CloudWatch:
+#
+#   1. Presigned URLs. flip-api already mints short-lived presigned URLs for
+#      user-facing S3 ops (see flip_api/utils/s3_client.py::get_presigned_url
+#      and ::get_put_presigned_url). Ansible could pull the kit over plain
+#      HTTPS via ansible.builtin.get_url against a URL minted by an
+#      authenticated trust-api → flip-api call — no AWS credentials on the
+#      Trust host at all.
+#
+#   2. Out-of-band kit delivery. The on-prem (hybrid) trust playbook
+#      (deploy/providers/local/site_local_trust.yml) already works this way:
+#      the operator stages the kit on their workstation via
+#      `make add-local-trust` and rsyncs it onto the host. Applying the same
+#      pattern to AWS-hosted trusts would remove S3 entirely from the Trust
+#      role's blast radius.
 module "trust_ec2_role" {
   source                = "terraform-aws-modules/iam/aws//modules/iam-assumable-role"
   version               = "~> 5.0"
