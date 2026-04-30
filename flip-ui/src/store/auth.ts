@@ -252,7 +252,7 @@ export const useAuthStore = defineStore("auth", {
                 password: details.password,
                 options: { authFlowType: "USER_PASSWORD_AUTH" as const }
             };
-            // Amplify v6 throws UserAlreadyAuthenticatedException if storage
+            // Amplify throws UserAlreadyAuthenticatedException when storage
             // already holds tokens — e.g. credentials typed at /login while
             // another tab still has a live session. Sign the stale session
             // out and retry once so the user isn't stuck behind a generic

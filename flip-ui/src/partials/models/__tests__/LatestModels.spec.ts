@@ -133,9 +133,8 @@ describe("LatestModels — defensive data access", () => {
         // Axios resolves that as `data: ""` or `{}` depending on parsing,
         // both of which leave `data.data` undefined. The component's
         // `data?.data?.length` chain has to short-circuit before reaching
-        // the unsafe `.length` access — a regression here was the actual
-        // unhandled rejection that broke create_project.spec.ts's
-        // navigation flow.
+        // the unsafe `.length` access — without it, an unstubbed response
+        // surfaces as an unhandled rejection at first paint.
         setData({});
         const wrapper = mountLatestModels();
         await flushPromises();

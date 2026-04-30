@@ -60,8 +60,8 @@ describe("Ai ConfirmModal", () => {
             await flushPromises();
 
             const schema = (wrapper.vm as unknown as { schema: { validate: (v: unknown) => Promise<unknown> } }).schema;
-            // The earlier crash happened here — undefined.toUpperCase().
-            // Now coalesced to "" inside confirmsTypedValue.
+            // Yup runs the validator before the user types; the schema
+            // must tolerate `confirmation: undefined` without throwing.
             await expect(schema.validate({ confirmation: undefined })).rejects.toThrow();
             wrapper.unmount();
         });
@@ -101,15 +101,12 @@ describe("Ai ConfirmModal", () => {
     });
 
     describe("typing-confirmation validator (no-throw guarantee)", () => {
-        // The form's yup schema reads `this.parent.confirmation` and
-        // uppercase-compares it to the prop. Before the user has typed
-        // anything, `this.parent.confirmation` is undefined; the previous
-        // version called `.toUpperCase()` on it directly, raising a Vue /
-        // vee-validate unhandled rejection that surfaced in Cypress as a
-        // TypeError. These tests pin the guarded behaviour so it doesn't
-        // regress — the headless DOM here can't fully simulate HeadlessUI's
-        // teleport so we rely on mount + validation-pass to reach the
-        // schema's test() callback without crashing.
+        // Invariant: mounting the component with a non-empty
+        // `typingConfirmation` must not throw, even though
+        // `this.parent.confirmation` is undefined on the first yup pass.
+        // The headless DOM here can't fully simulate HeadlessUI's teleport,
+        // so we rely on mount + validation-pass to reach the schema's
+        // test() callback without crashing.
 
         function mountWithTyping(typingConfirmation: string) {
             return mount(AiConfirmModal, {
@@ -127,8 +124,8 @@ describe("Ai ConfirmModal", () => {
             await flushPromises();
 
             // Asserting the wrapper exists also guarantees the synchronous
-            // setup() didn't throw — the previous code crashed on first
-            // validation pass before this check would have run.
+            // setup() didn't throw — without the undefined guard, the
+            // first validation pass would crash before this check runs.
             expect(wrapper.exists()).toBe(true);
 
             wrapper.unmount();
@@ -186,9 +183,7 @@ describe("Ai ConfirmModal", () => {
                 dialog: true,
                 continueAction: () => {}
             },
-            slots: {
-                confirmation: "<strong data-test=\"slot-marker\">slot content</strong>"
-            }
+            slots: { confirmation: "<strong data-test=\"slot-marker\">slot content</strong>" }
         });
 
         const html = comp.html();

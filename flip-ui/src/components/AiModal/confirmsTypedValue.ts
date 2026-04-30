@@ -12,8 +12,6 @@
  */
 
 /**
- * Yup validator helper used by AiConfirmModal's confirmation-match rule.
- *
  * Returns true when the user-typed value matches the expected confirmation
  * word (case-insensitive), or when no confirmation is required at all.
  *

@@ -68,9 +68,9 @@ jobs:
     # is independent of cloud infra.
     name: Cypress (${{ matrix.group }})
     runs-on: ubuntu-latest
-    # Cap each shard well below the 360-min default. The full suite has run
-    # in <10 min historically; 30 leaves headroom for `runMode: 3` retries
-    # without burning a runner-day on a hung browser.
+    # Cap each shard well below the 360-min default. 30 leaves headroom
+    # for `runMode: 3` retries without burning a runner-day on a hung
+    # browser.
     timeout-minutes: 30
     # Export Cognito + API config to every step. flip-ui/scripts/generate-
     # window-js.sh (run via the `pretest:start` npm hook before vite boots)
