@@ -79,17 +79,17 @@ build:
 		--build-arg XNAT_ROOT=${XNAT_ROOT} \
 		--build-arg XNAT_HOME=${XNAT_HOME} \
 		--build-arg XNAT_EMAIL=${XNAT_EMAIL} \
-		-t ${DOCKER_REGISTRY}xnat-web:dev \
+		-t ${DOCKER_REGISTRY}xnat-web:${DOCKER_TAG} \
 		xnat/
 	@echo "🐳 Building xnat-db image..."
 	docker build \
 		--build-arg PG_VERSION=${PG_VERSION} \
-		-t ${DOCKER_REGISTRY}xnat-db:dev \
+		-t ${DOCKER_REGISTRY}xnat-db:${DOCKER_TAG} \
 		postgres/
 	@echo "🐳 Building xnat-nginx image..."
 	docker build \
 		--build-arg NGINX_VERSION=${NGINX_VERSION} \
-		-t ${DOCKER_REGISTRY}xnat-nginx:dev \
+		-t ${DOCKER_REGISTRY}xnat-nginx:${DOCKER_TAG} \
 		nginx/
 	@echo "✅ XNAT Docker images built successfully!"
 
@@ -130,10 +130,10 @@ down-xnat-1:
 down-xnat-2:
 	docker stack rm ${project2}
 
+down: down-xnat-1 down-xnat-2
+
 down-xnat-local:
 	docker stack rm ${project_local}
-
-down: down-xnat-1 down-xnat-2
 
 # Stop and clean up images
 clean: down

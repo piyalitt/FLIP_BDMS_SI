@@ -20,10 +20,12 @@ XNAT is the medical imaging archive used by each FLIP trust site. It stores DICO
 XNAT is deployed using Docker Swarm (both locally and on EC2). This is because Swarm provides overlay networking, resource constraints, and restart policies needed for XNAT services.
 
 **Prerequisites:**
+
 - Docker Swarm must be initialized before running XNAT: `docker swarm init`
 - Overlay networks are created automatically by Make targets
 
 **How it works:**
+
 - `make up` / `make down` use `docker stack deploy` / `docker stack rm` under the hood
 - The stack definition uses layered compose files, selected by the `PROD` variable:
 
@@ -47,14 +49,14 @@ Build the XNAT Docker images locally (requires AWS CLI access for S3 artifacts):
 make build
 ```
 
-This downloads the XNAT WAR and plugins from S3, then builds all three images (`xnat-web`, `xnat-db`, `xnat-nginx`) tagged as `${DOCKER_REGISTRY}xnat-<service>:dev`.
+This downloads the XNAT WAR and plugins from S3, then builds all three images (`xnat-web`, `xnat-db`, `xnat-nginx`) tagged as `${DOCKER_REGISTRY}xnat-<service>:${DOCKER_TAG}`.
 
 ### Run XNAT
 
-After building, run with the `dev` tag:
+After building, run with the tag you just built:
 
 ```sh
-DOCKER_TAG=dev make up
+make up
 ```
 
 `make up` will create the required data directories, deploy the XNAT stack via Docker Swarm, and automatically configure both XNAT instances (service account, admin password, SCP receiver, PACS registration, dcm2niix command).
@@ -95,11 +97,11 @@ Use the Imaging API to import data from Orthanc to XNAT.
 
 This can also be done manually from XNAT:
 
-* At the top of the homepage, select the **Browse > All Projects** tab.
-* Open your project.
-* Click on **Import from PACS** on the right-hand sidebar.
-* Select **Orthanc** as your **Source PACS** (the selected SCP Receiver should default to **XNAT:8104**).
-* [Query PACS](https://wiki.xnat.org/xnat-tools/using-dqr-searching-the-pacs-and-importing-data#UsingDQR:SearchingthePACSandImportingData-Querying/SearchingforImageSessions).
+- At the top of the homepage, select the **Browse > All Projects** tab.
+- Open your project.
+- Click on **Import from PACS** on the right-hand sidebar.
+- Select **Orthanc** as your **Source PACS** (the selected SCP Receiver should default to **XNAT:8104**).
+- [Query PACS](https://wiki.xnat.org/xnat-tools/using-dqr-searching-the-pacs-and-importing-data#UsingDQR:SearchingthePACSandImportingData-Querying/SearchingforImageSessions).
 
 ## DICOM Anonymization
 
@@ -139,6 +141,6 @@ All issues below have been resolved and are documented here for reference.
 This directory contains Docker configuration derived from the XNAT docker-compose
 project maintained by Washington University School of Medicine.
 
-Original source: https://github.com/NrgXnat/xnat-docker-compose
+Original source: <https://github.com/NrgXnat/xnat-docker-compose>
 
 Modifications were made to integrate with the FLIP Trust Services layer.
