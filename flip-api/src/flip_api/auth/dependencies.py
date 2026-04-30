@@ -19,75 +19,72 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
 
 from flip_api.config import get_settings
+from flip_api.utils.cognito_helpers import is_mfa_enabled
 from flip_api.utils.logger import logger
 
 security = HTTPBearer()
-AWS_REGION = get_settings().AWS_REGION
-USER_POOL_ID = get_settings().AWS_COGNITO_USER_POOL_ID
 
 
-def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> UUID:
+def _decode_cognito_jwt(token: str) -> dict[str, Any]:
     """
-    Uses PyJWT and PyJWKClient to verify credential token with AWS Cognito
+    Verify a Cognito-issued JWT and return its claims.
+
+    Performs the verification steps documented by AWS for Cognito user pool tokens:
+    signature, expiry, issuer, token_use, and audience binding to this app client.
+
+    Raises ``jwt.InvalidTokenError`` (or a subclass) on any validation failure.
+    """
+    settings = get_settings()
+    aws_region = settings.AWS_REGION
+    user_pool_id = settings.AWS_COGNITO_USER_POOL_ID
+    app_client_id = settings.AWS_COGNITO_APP_CLIENT_ID
+    issuer = f"https://cognito-idp.{aws_region}.amazonaws.com/{user_pool_id}"
+
+    jwks_url = f"{issuer}/.well-known/jwks.json"
+    jwks_client = PyJWKClient(jwks_url)
+    signing_key = jwks_client.get_signing_key_from_jwt(token)
+
+    payload: dict[str, Any] = jwt.decode(
+        token,
+        signing_key.key,
+        algorithms=["RS256"],
+        issuer=issuer,
+        options={
+            # aud is validated manually below so we can also handle access tokens (which use client_id).
+            # TODO(#344): drop ID-token support and validate aud directly via PyJWT once flip-ui sends access tokens.
+            "verify_aud": False,
+            "require": ["exp", "iss", "sub", "token_use"],
+        },
+    )
+
+    token_use = payload.get("token_use")
+    if token_use == "id":
+        if payload.get("aud") != app_client_id:
+            raise jwt.InvalidTokenError("Invalid audience")
+    elif token_use == "access":
+        if payload.get("client_id") != app_client_id:
+            raise jwt.InvalidTokenError("Invalid client_id")
+    else:
+        raise jwt.InvalidTokenError(f"Unsupported token_use: {token_use!r}")
+
+    return payload
+
+
+def _decode_verified_claims(token: str) -> dict[str, Any]:
+    """
+    Validate a Cognito JWT and return its verified claims.
 
     Args:
-        credentials (HTTPAuthorizationCredentials): The HTTP authorization credentials in the result of using
-        `HTTPBearer` or `HTTPDigest` in a dependency.
+        token (str): The raw bearer token.
 
     Returns:
-        UUID: The user ID (sub claim) from the verified token.
+        dict[str, Any]: The decoded JWT payload.
 
     Raises:
-        HTTPException: If token is invalid, expired, or verification fails.
+        HTTPException: If token is invalid, expired, or wrong type.
     """
-    token = credentials.credentials
-
     try:
-        # Get the JWK (JSON Web Key) from Cognito
-        jwks_url = f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json"
-        jwks_client = PyJWKClient(jwks_url)
-
-        # Get the signing key from the JWT header
-        signing_key = jwks_client.get_signing_key_from_jwt(token)
-
-        # Decode and verify the token
-        payload = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256"],
-            audience=None,  # Cognito tokens don't typically have audience validation
-            options={"verify_aud": False},  # Disable audience verification for Cognito
-        )
-
-        # Verify token type and usage
-        if payload.get("token_use") not in ["id", "access"]:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token type. Expected ID token.",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        # Extract user ID from the 'sub' claim
-        user_id_str = payload.get("sub")
-        if not user_id_str:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token missing user identifier",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        # Convert to UUID
-        try:
-            user_id = UUID(user_id_str)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid user identifier format",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        logger.info(f"Token verified successfully for user: {user_id}")
-        return user_id
+        return _decode_cognito_jwt(token)
 
     except jwt.ExpiredSignatureError:
         raise HTTPException(
@@ -102,6 +99,8 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Unexpected error during token verification: {str(e)}")
         raise HTTPException(
@@ -110,40 +109,105 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
         )
 
 
-def get_token_payload(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict[str, Any]:
-    """
-    Alternative function to get the full token payload if needed elsewhere.
-
-    Args:
-        credentials (HTTPAuthorizationCredentials): The HTTP authorization credentials from the Bearer token.
-
-    Returns:
-        dict[str, Any]: The decoded JWT payload.
-
-    Raises:
-        HTTPException: If the credentials are invalid or if there is an error during decoding.
-    """
-    token = credentials.credentials
-
-    try:
-        jwks_url = f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json"
-        jwks_client = PyJWKClient(jwks_url)
-        signing_key = jwks_client.get_signing_key_from_jwt(token)
-
-        # TODO Review -- see above call with argument 'audience=None'
-        payload = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256"],
-            options={"verify_aud": False},
-        )
-
-        return payload
-
-    except Exception as e:
-        logger.error(f"Failed to decode token payload: {str(e)}")
+def _extract_user_id(payload: dict[str, Any]) -> UUID:
+    """Return the ``sub`` claim as a UUID, raising 401 on failure."""
+    user_id_str = payload.get("sub")
+    if not user_id_str:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail="Token missing user identifier",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    try:
+        return UUID(user_id_str)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user identifier format",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def _extract_username(payload: dict[str, Any]) -> str:
+    """
+    Return the Cognito Username claim (email in our pool).
+
+    Access tokens carry it as ``username``; ID tokens as ``cognito:username``.
+
+    Raises:
+        HTTPException: If neither claim is present (401).
+    """
+    username = payload.get("username") or payload.get("cognito:username")
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token missing username claim",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return str(username)
+
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> UUID:
+    """
+    Verify a Cognito JWT and enforce that the caller has TOTP MFA enabled.
+
+    The MFA requirement is checked at the application boundary (rather than
+    at the Cognito pool) so admin resets take effect immediately — see the
+    comment on ``aws_cognito_user_pool.flip_user_pool`` in the cognito
+    module for the full rationale. MFA-bootstrap endpoints use
+    :func:`verify_token_no_mfa` instead.
+
+    Args:
+        credentials (HTTPAuthorizationCredentials): Bearer credentials from
+            the incoming request.
+
+    Returns:
+        UUID: The user ID (``sub`` claim) from the verified token.
+
+    Raises:
+        HTTPException: 401 if the token is invalid, expired, or missing
+            claims; 403 if the caller has not enrolled TOTP.
+    """
+    payload = _decode_verified_claims(credentials.credentials)
+    user_id = _extract_user_id(payload)
+    username = _extract_username(payload)
+
+    # ENFORCE_MFA=False is dev-only opt-out set in compose.development.yml;
+    # stag/prod inherit the Settings default (True) and keep the gate.
+    if not get_settings().ENFORCE_MFA:
+        logger.debug(f"ENFORCE_MFA disabled — skipping MFA gate for user: {user_id}")
+        return user_id
+
+    if not is_mfa_enabled(username, get_settings().AWS_COGNITO_USER_POOL_ID):
+        logger.warning(f"User {user_id} hit MFA-gated route without active TOTP")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="MFA enrolment required",
+        )
+
+    logger.info(f"Token verified successfully for user: {user_id}")
+    return user_id
+
+
+def verify_token_no_mfa(credentials: HTTPAuthorizationCredentials = Depends(security)) -> UUID:
+    """
+    Verify a Cognito JWT without requiring TOTP MFA.
+
+    Reserved for the MFA bootstrap endpoints (status check, enrolment
+    helpers) that a freshly-reset or newly-invited user needs to reach
+    before they have an active authenticator. Every other route must use
+    :func:`verify_token`.
+
+    Args:
+        credentials (HTTPAuthorizationCredentials): Bearer credentials from
+            the incoming request.
+
+    Returns:
+        UUID: The user ID (``sub`` claim) from the verified token.
+
+    Raises:
+        HTTPException: 401 if the token is invalid, expired, or missing
+            claims.
+    """
+    payload = _decode_verified_claims(credentials.credentials)
+    return _extract_user_id(payload)

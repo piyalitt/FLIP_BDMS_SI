@@ -15,7 +15,7 @@
 
 Cypress.Commands.add("login", (username = "HasAdminRole@gmail.com", password = "NewPassword!1") => {
 
-    const clientId = Cypress.env("VITE_AWS_CLIENT_ID");
+    const clientId = Cypress.env("AWS_COGNITO_APP_CLIENT_ID");
 
     cy.fixture("auth/cognitoAuth")
         .then((cognitoResponse) => {

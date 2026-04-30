@@ -93,12 +93,16 @@
     </section>
     <AiConfirmModal
         :dialog="confirmFileDeletion"
-        :confirmation-text="deleteFileConfirmationText"
         continue-button-text="Delete File"
         :continue-action="deleteFile"
         :submitting="deletingFile"
         @close-modal="closeFileDeletion"
-    />
+    >
+        <template #confirmation>
+            Are you sure you wish to delete <code class="font-black">{{ fileToDelete }}</code>?
+            This file will not be available as part of model training.
+        </template>
+    </AiConfirmModal>
 </template>
 
 <script lang="ts" setup>
@@ -112,11 +116,10 @@ import AiConfirmModal from "@/components/AiModal/AiConfirmModal.vue";
 import { FileInfo, FileUploadStatus } from "@/interfaces/model/types";
 import { deleteModelFile, downloadModelFile, processScannedFile } from "@/services/file-service";
 import { JobTypes } from "@/services/model-service";
+import { useAuthStore } from "@/store/auth";
 import { createPreSignedUrl, uploadFile as uploadFileService } from "@/utils/file";
 import { formatBytes, getRandomId } from "@/utils/helpers";
 import { Snackbar } from "@/utils/snackbar";
-
-import { useAuthStore } from "@/store/auth";
 
 import FileUpload from "./FileUpload.vue";
 
@@ -143,11 +146,6 @@ const confirmFileDeletion = ref<boolean>(false);
 const deletingFile = ref<boolean>(false);
 const downloadingFile = ref<string>();
 const fileToDelete = ref<string>();
-
-const deleteFileConfirmationText = computed(() =>
-    `Are you sure you wish to delete <code class='font-black'>${fileToDelete.value}</code>?
-This file will not be available as part of model training.`
-);
 
 watch(props, () => {
     handleFiles();
@@ -187,15 +185,13 @@ const uploadFile = async (fileList: FileList) => {
         uploadingFiles.value.push(fileInfo);
     });
 
-    const devMode = process.env.NODE_ENV === "development";
-
-    const blacklistedEnvVar = devMode ? process.env.VITE_BLACKLISTED_MODEL_FILES : window.BLACKLISTED_MODEL_FILES;
+    const blacklistedEnvVar = window.BLACKLISTED_MODEL_FILES;
 
     let blacklistedModelFiles: string[] = [];
 
     if (blacklistedEnvVar) {
-        // Handling model files: before, this was using JSON parsing. Now it takes a simple string of files.
-        blacklistedModelFiles = blacklistedEnvVar.split(',').map(file => file.trim());
+        // Simple comma-separated list from BLACKLISTED_MODEL_FILES — see generate-window-js.sh.
+        blacklistedModelFiles = blacklistedEnvVar.split(",").map(file => file.trim());
     }
 
     for (const file of fileList) {
@@ -296,24 +292,24 @@ const closeFileDeletion = () => {
 };
 
 const downloadFile = async (fileName: string) => {
-  downloadingFile.value = fileName;
+    downloadingFile.value = fileName;
 
-  try {
-    const path = `/files/model/${props.modelId}/${encodeURIComponent(fileName)}`;
-    const blob = await downloadModelFile(path);
+    try {
+        const path = `/files/model/${props.modelId}/${encodeURIComponent(fileName)}`;
+        const blob = await downloadModelFile(path);
 
-    const blobUrl = URL.createObjectURL(blob);
+        const blobUrl = URL.createObjectURL(blob);
 
-    const a = document.createElement("a");
-    a.href = blobUrl;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
 
-    URL.revokeObjectURL(blobUrl);
-  } finally {
-    downloadingFile.value = undefined;
-  }
+        URL.revokeObjectURL(blobUrl);
+    } finally {
+        downloadingFile.value = undefined;
+    }
 };
 </script>

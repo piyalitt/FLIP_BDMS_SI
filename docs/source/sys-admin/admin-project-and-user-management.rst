@@ -24,7 +24,6 @@ If a project or a project's model needs to be amended i.e., at the request of a 
 3. Click the 'Unstage Project' button
 
 .. figure:: ../assets/flip/unstage-project.gif
-   :width: 600
    :align: center
 
    Un-staging a project.
@@ -49,7 +48,6 @@ Approving a project allows the next stage of model training to commence and trig
 For example, the below reflects a case where only one Trust is marked as approved:
 
 .. figure:: ../assets/flip/approve-project.gif
-   :width: 600
    :align: center
 
    Approving a project.
@@ -79,7 +77,6 @@ Register User
 4. The user will be emailed a one-time password to use on their :ref:`initial-login`
 
 .. figure:: ../assets/admin/create-user.gif
-   :width: 600
    :align: center
 
    Registering a new user.
@@ -98,7 +95,6 @@ FLIP does not facilitate the deletion of user accounts, but rather enables accou
    Disabled accounts may be re-enabled in a similar fashion.
 
 .. figure:: ../assets/admin/user-enable-disable.gif
-   :width: 600
    :align: center
 
    Enabling a user.
@@ -115,7 +111,6 @@ Manage Roles
 3. Click the 'Save User' button
 
 .. figure:: ../assets/admin/role-assignment.gif
-   :width: 600
    :align: center
 
    Re-assigning roles to a user.
@@ -132,10 +127,29 @@ Reset Password
 3. Click the 'Reset Password' button
 
 .. figure:: ../assets/admin/reset-password.gif
-   :width: 600
    :align: center
 
    Resetting a user's password.
+
+Reset User MFA
+^^^^^^^^^^^^^^
+
+.. note::
+
+  Use this when a user has lost their authenticator device and needs to enrol a new one. The reset clears the user's TOTP preference and revokes any active sessions, so on the next sign-in they are routed through the MFA enrolment page to register a new authenticator.
+
+1. Select the user from the user list
+2. Click the '...' button
+3. Click the 'Reset MFA' button and confirm
+
+.. figure:: ../assets/admin/reset-mfa.gif
+   :align: center
+
+   Resetting a user's MFA.
+
+.. warning::
+
+  You cannot use this flow to recover **your own** MFA — the Admin Area requires an authenticated session, which you cannot obtain without your authenticator. If you are an administrator who has lost access to your TOTP device, see the "Cognito MFA Administration" section in ``deploy/README.md`` for the AWS CLI self-recovery runbook.
 
 Site Banner
 ===========
@@ -151,7 +165,6 @@ The site banner allows:
 
 
 .. figure:: ../assets/admin/site-banner.gif
-   :width: 600
    :align: center
 
    Editing the site banner.
@@ -166,7 +179,6 @@ Deployment Mode
 Deployment Mode will disable all core functions of the FLIP Platform, and is intended for use while deployment or maintenance is occurring.
 
 .. figure:: ../assets/admin/deployment-mode.gif
-   :width: 600
    :align: center
 
    Enabling deployment mode.

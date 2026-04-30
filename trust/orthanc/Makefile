@@ -33,14 +33,14 @@ network2 = deploy_trust-network-2
 
 TRUST_1_VARS = \
 	PACS_UI_PORT=${PACS_UI_PORT_TRUST_1} \
-	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_1} \
+	ORTHANC_STORAGE_DIR=${ORTHANC_STORAGE_DIR_TRUST_1} \
 	ORTHANC_USERNAME=${ORTHANC_USERNAME} \
 	ORTHANC_PASSWORD=${ORTHANC_PASSWORD} \
 	XNAT_PORT=${XNAT_PORT_TRUST_1} \
 	TRUST_NETWORK_NAME=${network1}
 TRUST_2_VARS = \
 	PACS_UI_PORT=${PACS_UI_PORT_TRUST_2} \
-	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_2} \
+	ORTHANC_STORAGE_DIR=${ORTHANC_STORAGE_DIR_TRUST_2} \
 	ORTHANC_USERNAME=${ORTHANC_USERNAME} \
 	ORTHANC_PASSWORD=${ORTHANC_PASSWORD} \
 	XNAT_PORT=${XNAT_PORT_TRUST_2} \
@@ -57,13 +57,11 @@ down:
 shell:
 	$(TRUST_1_VARS) $(docker_command) $(run_clean) $(service_name) /bin/bash
 
-# Sync data from S3 bucket (mainly used temporarily in production)
-# Needs AWS account credentials configured
-sync-data-from-s3:
-	aws s3 sync s3://$(AICENTRE_BUCKET_NAME)/orthanc/ ./volumes
-
-extract-data:
-	mkdir -p ./${ORTHANC_STORAGE_TRUST_1} ./${ORTHANC_STORAGE_TRUST_2}
-	tar -xzf ./volumes/trust1_orthanc_data_20260106.tar.gz -C ./${ORTHANC_STORAGE_TRUST_1}
-	tar -xzf ./volumes/trust2_orthanc_data_20260106.tar.gz -C ./${ORTHANC_STORAGE_TRUST_2}
-	rm ./volumes/trust1_orthanc_data_20260106.tar.gz ./volumes/trust2_orthanc_data_20260106.tar.gz
+# Sync mock orthanc DICOM data (used in development / staging environments where real data is not available)
+# Needs AWS account credentials configured to run S3 commands
+update-orthanc-data:
+	CLEAN_AFTER_UPDATE=True \
+	AICENTRE_BUCKET_NAME=$(AICENTRE_BUCKET_NAME) \
+	ORTHANC_STORAGE_DIR_TRUST_1=$(ORTHANC_STORAGE_DIR_TRUST_1) \
+	ORTHANC_STORAGE_DIR_TRUST_2=$(ORTHANC_STORAGE_DIR_TRUST_2) \
+	./update_orthanc_data.sh

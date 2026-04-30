@@ -34,7 +34,7 @@ app.use(pinia);
 
 Amplify.configure(authConfig);
 
-if (process.env.VITE_LOCAL === "true") {
+if (import.meta.env.VITE_LOCAL === "true") {
     console.info("Running locally, will use mocked API.");
     makeServer();
 }
