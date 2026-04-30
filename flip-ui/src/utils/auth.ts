@@ -89,14 +89,14 @@ export const authCheck = async (
         // fixture; the `cypress.auth.user` localStorage key is the
         // documented contract (see test/cypress/support/cognito.ts).
         if (isCypressMode()) {
-            if (auth.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
-                return to.path === '/auth/new-password' ? next() : next('/auth/new-password');
+            if (auth.signInStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
+                return to.path === "/auth/new-password" ? next() : next("/auth/new-password");
             }
-            if (auth.signInStep === 'CONTINUE_SIGN_IN_WITH_TOTP_SETUP') {
-                return to.path === '/auth/mfa-setup' ? next() : next('/auth/mfa-setup');
+            if (auth.signInStep === "CONTINUE_SIGN_IN_WITH_TOTP_SETUP") {
+                return to.path === "/auth/mfa-setup" ? next() : next("/auth/mfa-setup");
             }
-            if (auth.signInStep === 'CONFIRM_SIGN_IN_WITH_TOTP_CODE') {
-                return to.path === '/auth/mfa-verify' ? next() : next('/auth/mfa-verify');
+            if (auth.signInStep === "CONFIRM_SIGN_IN_WITH_TOTP_CODE") {
+                return to.path === "/auth/mfa-verify" ? next() : next("/auth/mfa-verify");
             }
 
             const stored = window.localStorage.getItem("cypress.auth.user");
@@ -117,6 +117,7 @@ export const authCheck = async (
             if (!auth.user) {
                 return next("/auth/login");
             }
+
             return next();
         }
 
