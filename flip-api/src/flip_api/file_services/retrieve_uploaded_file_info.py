@@ -123,7 +123,7 @@ def get_uploaded_files_info(
         accessible_files = _filter_files_by_access(list(files), user_id, db)
 
         if not accessible_files:
-            logger.error(f"No files accessible to user {user_id} for the requested IDs.")
+            logger.warning(f"No files accessible to user {user_id} for the requested IDs.")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="No files found",
@@ -191,7 +191,7 @@ def get_uploaded_files_info_post(
         accessible_files = _filter_files_by_access(list(files), user_id, db)
 
         if not accessible_files:
-            logger.error(f"No files accessible to user {user_id} for the requested IDs.")
+            logger.warning(f"No files accessible to user {user_id} for the requested IDs.")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="No files found",
