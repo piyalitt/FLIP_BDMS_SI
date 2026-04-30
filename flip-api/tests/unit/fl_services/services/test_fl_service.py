@@ -102,9 +102,7 @@ def test_get_fl_backend_job_id_by_model_id(model_id, fake_session):
 
 def test_add_fl_backend_job_id_updates_db(fl_job_id, fake_session):
     job = MagicMock()
-    result_proxy = MagicMock()
-    result_proxy.scalar_one_or_none.return_value = job
-    fake_session.execute.return_value = result_proxy
+    fake_session.get.return_value = job
 
     fl_service.add_fl_backend_job_id(fl_job_id, str(uuid4()), fake_session)
 

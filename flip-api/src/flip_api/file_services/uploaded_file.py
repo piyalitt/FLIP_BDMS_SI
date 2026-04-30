@@ -15,6 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
+from flip_api.auth.access_manager import can_modify_model
 from flip_api.auth.dependencies import verify_token
 from flip_api.config import get_settings
 from flip_api.db.database import get_session
@@ -44,7 +45,7 @@ router = APIRouter(prefix="/files", tags=["file_services"])
 # TODO [#114] This endpoint was not defined in the old repo.
 @router.post("/process-scanned-file/{model_id}/{file}", response_model=dict[str, str])
 def process_scanned_file(
-    model_id: str,
+    model_id: UUID,
     file: str,
     db: Session = Depends(get_session),
     user_id: UUID = Depends(verify_token),
@@ -65,9 +66,17 @@ def process_scanned_file(
         dict[str, str]: A message indicating the result of the file processing
 
     Raises:
-        HTTPException: If the file cannot be processed.
+        HTTPException: 403 if the caller is not allowed to modify the model, or 500 if
+            the file cannot be processed.
     """
     try:
+        if not can_modify_model(user_id, model_id, db):
+            logger.error(f"User ID: {user_id} is not allowed to modify model {model_id}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"User with ID: {user_id} is not allowed to modify files for this model",
+            )
+
         s3 = S3Client()
 
         file_status = FileUploadStatus.COMPLETED
@@ -107,14 +116,6 @@ def process_scanned_file(
         # model_id = key_parts[0]
         file_name = file
         logger.debug(f"Extracted model ID: {model_id}, file name: {file_name} from the file's key: {file}")
-
-        # Validate model ID (simplified validation)
-        if not model_id:
-            logger.error("Invalid model ID")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File does not belong to a model with a valid model ID",
-            )
 
         logger.info(f"Extracted the model ID from the file's key successfully. Model ID: {model_id}")
 

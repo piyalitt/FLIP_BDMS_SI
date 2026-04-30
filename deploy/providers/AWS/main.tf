@@ -207,10 +207,12 @@ resource "aws_iam_role_policy" "ec2_secret" {
   })
 }
 
-# Cognito user-pool admin actions used by flip-api (see
-# flip_api/utils/cognito_helpers.py). Scoped to the FLIP user pool ARN.
-resource "aws_iam_role_policy" "ec2_cognito" {
-  name = "cognito-user-admin"
+# Scoped S3 access — limited to FLIP application buckets only.
+# - flip_bucket: model files / FL results / FL app destination (flip-api).
+# - aicentre_bucket: FL participant kits, fetched via `aws s3 cp` during
+#   Ansible provisioning on the Central Hub host.
+resource "aws_iam_role_policy" "s3_access" {
+  name = "flip-s3-scoped"
   role = module.ec2_role.iam_role_name
 
   policy = jsonencode({
@@ -218,11 +220,47 @@ resource "aws_iam_role_policy" "ec2_cognito" {
     Statement = [{
       Effect = "Allow"
       Action = [
-        "cognito-idp:ListUsers",
+        "s3:CopyObject",
+        "s3:DeleteObject",
+        "s3:GetBucketLocation",
+        "s3:GetObject",
+        "s3:HeadObject",
+        "s3:ListBucket",
+        "s3:PutObject",
+      ]
+      Resource = [
+        aws_s3_bucket.flip_bucket.arn,
+        "${aws_s3_bucket.flip_bucket.arn}/*",
+        aws_s3_bucket.aicentre_bucket.arn,
+        "${aws_s3_bucket.aicentre_bucket.arn}/*",
+      ]
+    }]
+  })
+}
+
+# Scoped Cognito access — limited to FLIP user pool operations used by
+# flip-api (see flip_api/utils/cognito_helpers.py and the auth/MFA flows).
+resource "aws_iam_role_policy" "cognito_access" {
+  name = "flip-cognito-scoped"
+  role = module.ec2_role.iam_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
         "cognito-idp:AdminCreateUser",
         "cognito-idp:AdminDeleteUser",
-        "cognito-idp:AdminEnableUser",
         "cognito-idp:AdminDisableUser",
+        "cognito-idp:AdminEnableUser",
+        "cognito-idp:AdminGetUser",
+        "cognito-idp:AdminInitiateAuth",
+        "cognito-idp:AdminRespondToAuthChallenge",
+        "cognito-idp:AdminSetUserPassword",
+        "cognito-idp:AdminUserGlobalSignOut",
+        "cognito-idp:DescribeUserPool",
+        "cognito-idp:DescribeUserPoolClient",
+        "cognito-idp:ListUsers",
         "cognito-idp:RevokeToken",
       ]
       Resource = [module.cognito.user_pool_arn]
@@ -230,55 +268,16 @@ resource "aws_iam_role_policy" "ec2_cognito" {
   })
 }
 
-# S3 access for the Central Hub:
-# - flip_bucket: model files / FL results / FL app destination (flip-api).
-# - aicentre_bucket: FL participant kits, fetched via `aws s3 cp` during
-#   Ansible provisioning on the Central Hub host.
-resource "aws_iam_role_policy" "ec2_s3" {
-  name = "s3-bucket-access"
-  role = module.ec2_role.iam_role_name
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:ListBucket",
-          "s3:GetBucketLocation",
-        ]
-        Resource = [
-          aws_s3_bucket.flip_bucket.arn,
-          aws_s3_bucket.aicentre_bucket.arn,
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject",
-        ]
-        Resource = [
-          "${aws_s3_bucket.flip_bucket.arn}/*",
-          "${aws_s3_bucket.aicentre_bucket.arn}/*",
-        ]
-      },
-    ]
-  })
-}
-
-# SES SendEmail (used by flip-api access requests and imaging notifications).
-# Scoped to the verified sender identity provisioned by module.ses.
-resource "aws_iam_role_policy" "ec2_ses" {
-  name = "ses-send-email"
+# Scoped SES access — send-only from the verified sender identity
+resource "aws_iam_role_policy" "ses_access" {
+  name = "flip-ses-scoped"
   role = module.ec2_role.iam_role_name
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect   = "Allow"
-      Action   = ["ses:SendEmail"]
+      Action   = ["ses:SendEmail", "ses:SendRawEmail", "ses:SendTemplatedEmail"]
       Resource = [module.ses.sender_identity_arn]
     }]
   })
@@ -680,6 +679,10 @@ output "FlServerRawNlbDns" {
 ############################
 # SES Email Templates
 ############################
+#
+# Resource definitions now live in ./modules/ses. The existing four
+# resources are migrated automatically by the `moved` blocks below on the
+# next plan/apply — no manual `terraform state mv` step is required.
 
 module "ses" {
   source = "./modules/ses"

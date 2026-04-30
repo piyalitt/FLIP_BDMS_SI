@@ -154,7 +154,7 @@ variable "FL_SERVER_PORT" {
 
 
 variable "flip_alb_subdomain" {
-  description = "Subdomain for the FLIP ALB"
+  description = "Public canonical subdomain for FLIP. Aliased via Route53 to the CloudFront distribution; CloudFront fronts both the SPA (from S3) and the API (/api/* -> ALB). Name is retained for Terraform-state backwards compatibility - see main.tf:492-494."
   type        = string
   default     = "dev.flip.aicentre.co.uk"
 }

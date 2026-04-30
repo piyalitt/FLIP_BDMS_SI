@@ -75,7 +75,7 @@ export async function getOMOPResults(url: string): Promise<IResults | null> {
     const response = await _http.get<IResults>(url, {
         // Accept 202 (pending) as a non-error response so SWRV keeps polling
         // on its refresh interval instead of logging an axios error in the console.
-        validateStatus: (status) => (status >= 200 && status < 300) || status === 202,
+        validateStatus: (status) => (status >= 200 && status < 300) || status === 202
     });
 
     if (response.status === 202) {

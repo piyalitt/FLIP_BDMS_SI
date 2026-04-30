@@ -11,7 +11,7 @@
     limitations under the License.
 -->
 
-﻿<template>
+<template>
     <TransitionRoot as="template" :show="dialog">
         <Dialog as="div" class="fixed inset-0 z-10" @close.capture="close">
             <div class="flex items-end justify-center h-screen min-h-screen px-4 pt-4 text-center sm:block sm:p-0">

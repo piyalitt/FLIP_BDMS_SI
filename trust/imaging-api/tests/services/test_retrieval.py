@@ -13,7 +13,6 @@
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pandas as pd
 import pytest
 from fastapi import HTTPException
 
@@ -64,17 +63,16 @@ def _make_import_response(accession_number: str = "ACC1", status: str = "QUEUED"
 @pytest.mark.asyncio
 @patch("imaging_api.services.retrieval.queue_image_import_request")
 @patch("imaging_api.services.retrieval.query_by_accession_number")
-@patch("imaging_api.services.retrieval.get_dataframe", new_callable=AsyncMock)
+@patch("imaging_api.services.retrieval.get_accession_ids", new_callable=AsyncMock)
 @patch("imaging_api.services.retrieval.encrypt")
 @patch("imaging_api.services.retrieval.get_project")
 async def test_retrieve_images_success(
-    mock_get_project, mock_encrypt, mock_get_dataframe,
-    mock_query, mock_queue, headers, tmp_path, monkeypatch,
+    mock_get_project, mock_encrypt, mock_get_accession_ids,
+    mock_query, mock_queue, headers,
 ):
-    monkeypatch.chdir(tmp_path)
     mock_get_project.return_value = MagicMock()
     mock_encrypt.return_value = "encrypted_id"
-    mock_get_dataframe.return_value = pd.DataFrame({"accession_id": ["ACC1", "ACC2"]})
+    mock_get_accession_ids.return_value = ["ACC1", "ACC2"]
     mock_query.side_effect = [
         [_make_study("ACC1", "1.2.3.1")],
         [_make_study("ACC2", "1.2.3.2")],
@@ -110,36 +108,16 @@ async def test_retrieve_images_project_generic_error(mock_get_project, headers):
 
 
 @pytest.mark.asyncio
-@patch("imaging_api.services.retrieval.get_dataframe", new_callable=AsyncMock)
-@patch("imaging_api.services.retrieval.encrypt")
-@patch("imaging_api.services.retrieval.get_project")
-async def test_retrieve_images_missing_accession_column(
-    mock_get_project, mock_encrypt, mock_get_dataframe, headers, tmp_path, monkeypatch,
-):
-    monkeypatch.chdir(tmp_path)
-    mock_get_project.return_value = MagicMock()
-    mock_encrypt.return_value = "encrypted_id"
-    mock_get_dataframe.return_value = pd.DataFrame({"patient_id": ["P1"]})
-
-    with pytest.raises(HTTPException) as exc_info:
-        await retrieve_images_for_project("proj1", "SELECT *", headers)
-    assert exc_info.value.status_code == 400
-    assert "accession_id" in exc_info.value.detail
-
-
-@pytest.mark.asyncio
 @patch("imaging_api.services.retrieval.query_by_accession_number")
-@patch("imaging_api.services.retrieval.get_dataframe", new_callable=AsyncMock)
+@patch("imaging_api.services.retrieval.get_accession_ids", new_callable=AsyncMock)
 @patch("imaging_api.services.retrieval.encrypt")
 @patch("imaging_api.services.retrieval.get_project")
 async def test_retrieve_images_no_studies_found(
-    mock_get_project, mock_encrypt, mock_get_dataframe, mock_query,
-    headers, tmp_path, monkeypatch,
+    mock_get_project, mock_encrypt, mock_get_accession_ids, mock_query, headers,
 ):
-    monkeypatch.chdir(tmp_path)
     mock_get_project.return_value = MagicMock()
     mock_encrypt.return_value = "encrypted_id"
-    mock_get_dataframe.return_value = pd.DataFrame({"accession_id": ["ACC1"]})
+    mock_get_accession_ids.return_value = ["ACC1"]
     mock_query.return_value = []
 
     result = await retrieve_images_for_project("proj1", "SELECT *", headers)
@@ -148,17 +126,15 @@ async def test_retrieve_images_no_studies_found(
 
 @pytest.mark.asyncio
 @patch("imaging_api.services.retrieval.query_by_accession_number")
-@patch("imaging_api.services.retrieval.get_dataframe", new_callable=AsyncMock)
+@patch("imaging_api.services.retrieval.get_accession_ids", new_callable=AsyncMock)
 @patch("imaging_api.services.retrieval.encrypt")
 @patch("imaging_api.services.retrieval.get_project")
 async def test_retrieve_images_query_exception_skips_study(
-    mock_get_project, mock_encrypt, mock_get_dataframe, mock_query,
-    headers, tmp_path, monkeypatch,
+    mock_get_project, mock_encrypt, mock_get_accession_ids, mock_query, headers,
 ):
-    monkeypatch.chdir(tmp_path)
     mock_get_project.return_value = MagicMock()
     mock_encrypt.return_value = "encrypted_id"
-    mock_get_dataframe.return_value = pd.DataFrame({"accession_id": ["ACC1"]})
+    mock_get_accession_ids.return_value = ["ACC1"]
     mock_query.side_effect = Exception("PACS timeout")
 
     result = await retrieve_images_for_project("proj1", "SELECT *", headers)
@@ -168,17 +144,16 @@ async def test_retrieve_images_query_exception_skips_study(
 @pytest.mark.asyncio
 @patch("imaging_api.services.retrieval.queue_image_import_request")
 @patch("imaging_api.services.retrieval.query_by_accession_number")
-@patch("imaging_api.services.retrieval.get_dataframe", new_callable=AsyncMock)
+@patch("imaging_api.services.retrieval.get_accession_ids", new_callable=AsyncMock)
 @patch("imaging_api.services.retrieval.encrypt")
 @patch("imaging_api.services.retrieval.get_project")
 async def test_retrieve_images_partial_queue_failure(
-    mock_get_project, mock_encrypt, mock_get_dataframe,
-    mock_query, mock_queue, headers, tmp_path, monkeypatch,
+    mock_get_project, mock_encrypt, mock_get_accession_ids,
+    mock_query, mock_queue, headers,
 ):
-    monkeypatch.chdir(tmp_path)
     mock_get_project.return_value = MagicMock()
     mock_encrypt.return_value = "encrypted_id"
-    mock_get_dataframe.return_value = pd.DataFrame({"accession_id": ["ACC1"]})
+    mock_get_accession_ids.return_value = ["ACC1"]
     mock_query.return_value = [_make_study("ACC1")]
     mock_queue.return_value = [_make_import_response("ACC1", status="FAILED")]
 
@@ -189,18 +164,17 @@ async def test_retrieve_images_partial_queue_failure(
 @pytest.mark.asyncio
 @patch("imaging_api.services.retrieval.queue_image_import_request")
 @patch("imaging_api.services.retrieval.query_by_accession_number")
-@patch("imaging_api.services.retrieval.get_dataframe", new_callable=AsyncMock)
+@patch("imaging_api.services.retrieval.get_accession_ids", new_callable=AsyncMock)
 @patch("imaging_api.services.retrieval.encrypt")
 @patch("imaging_api.services.retrieval.get_project")
 async def test_retrieve_images_multiple_studies_for_accession(
-    mock_get_project, mock_encrypt, mock_get_dataframe,
-    mock_query, mock_queue, headers, tmp_path, monkeypatch,
+    mock_get_project, mock_encrypt, mock_get_accession_ids,
+    mock_query, mock_queue, headers,
 ):
     """When multiple studies match an accession number, only the first is used."""
-    monkeypatch.chdir(tmp_path)
     mock_get_project.return_value = MagicMock()
     mock_encrypt.return_value = "encrypted_id"
-    mock_get_dataframe.return_value = pd.DataFrame({"accession_id": ["ACC1"]})
+    mock_get_accession_ids.return_value = ["ACC1"]
     mock_query.return_value = [_make_study("ACC1", "1.2.3.1"), _make_study("ACC1", "1.2.3.2")]
     mock_queue.return_value = [_make_import_response("ACC1")]
 
@@ -242,14 +216,13 @@ def _mock_get_session(direct_archive=None, executed=None, queued=None):
 
 @pytest.mark.asyncio
 @patch("imaging_api.services.retrieval.get_experiments")
-@patch("imaging_api.services.retrieval.get_dataframe", new_callable=AsyncMock)
+@patch("imaging_api.services.retrieval.get_accession_ids", new_callable=AsyncMock)
 @patch("imaging_api.services.retrieval.encrypt")
 async def test_get_import_status_all_successful(
-    mock_encrypt, mock_get_dataframe, mock_get_experiments, headers, tmp_path, monkeypatch,
+    mock_encrypt, mock_get_accession_ids, mock_get_experiments, headers,
 ):
-    monkeypatch.chdir(tmp_path)
     mock_encrypt.return_value = "encrypted_id"
-    mock_get_dataframe.return_value = pd.DataFrame({"accession_id": ["ACC1", "ACC2"]})
+    mock_get_accession_ids.return_value = ["ACC1", "ACC2"]
     mock_get_experiments.return_value = [
         Experiment(ID="e1", label="ACC1", date="2023-01-01", project="proj1",
                    insert_date="2023-01-01", xsiType="xnat:ctScanData", URI="/exp/e1"),
@@ -269,16 +242,13 @@ async def test_get_import_status_all_successful(
 
 @pytest.mark.asyncio
 @patch("imaging_api.services.retrieval.get_experiments")
-@patch("imaging_api.services.retrieval.get_dataframe", new_callable=AsyncMock)
+@patch("imaging_api.services.retrieval.get_accession_ids", new_callable=AsyncMock)
 @patch("imaging_api.services.retrieval.encrypt")
 async def test_get_import_status_mixed(
-    mock_encrypt, mock_get_dataframe, mock_get_experiments, headers, tmp_path, monkeypatch,
+    mock_encrypt, mock_get_accession_ids, mock_get_experiments, headers,
 ):
-    monkeypatch.chdir(tmp_path)
     mock_encrypt.return_value = "encrypted_id"
-    mock_get_dataframe.return_value = pd.DataFrame({
-        "accession_id": ["ACC_OK", "ACC_EXEC", "ACC_QUEUED", "ACC_UNKNOWN"],
-    })
+    mock_get_accession_ids.return_value = ["ACC_OK", "ACC_EXEC", "ACC_QUEUED", "ACC_UNKNOWN"]
     mock_get_experiments.return_value = [
         Experiment(ID="e1", label="ACC_OK", date="2023-01-01", project="proj1",
                    insert_date="2023-01-01", xsiType="xnat:ctScanData", URI="/exp/e1"),
@@ -302,30 +272,14 @@ async def test_get_import_status_mixed(
 
 
 @pytest.mark.asyncio
-@patch("imaging_api.services.retrieval.get_dataframe", new_callable=AsyncMock)
-@patch("imaging_api.services.retrieval.encrypt")
-async def test_get_import_status_missing_accession_column(
-    mock_encrypt, mock_get_dataframe, headers, tmp_path, monkeypatch,
-):
-    monkeypatch.chdir(tmp_path)
-    mock_encrypt.return_value = "encrypted_id"
-    mock_get_dataframe.return_value = pd.DataFrame({"patient_id": ["P1"]})
-
-    with pytest.raises(HTTPException) as exc_info:
-        await get_import_status("proj1", "SELECT *", headers)
-    assert exc_info.value.status_code == 400
-
-
-@pytest.mark.asyncio
 @patch("imaging_api.services.retrieval.get_experiments")
-@patch("imaging_api.services.retrieval.get_dataframe", new_callable=AsyncMock)
+@patch("imaging_api.services.retrieval.get_accession_ids", new_callable=AsyncMock)
 @patch("imaging_api.services.retrieval.encrypt")
 async def test_get_import_status_no_experiments(
-    mock_encrypt, mock_get_dataframe, mock_get_experiments, headers, tmp_path, monkeypatch,
+    mock_encrypt, mock_get_accession_ids, mock_get_experiments, headers,
 ):
-    monkeypatch.chdir(tmp_path)
     mock_encrypt.return_value = "encrypted_id"
-    mock_get_dataframe.return_value = pd.DataFrame({"accession_id": ["ACC1"]})
+    mock_get_accession_ids.return_value = ["ACC1"]
     mock_get_experiments.return_value = []
 
     p_session, p_direct, p_executed, p_queued = _mock_get_session()

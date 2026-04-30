@@ -23,13 +23,40 @@ resource "aws_s3_bucket" "flip_bucket" {
   }
 }
 
+resource "aws_s3_bucket_public_access_block" "flip_bucket" {
+  bucket                  = aws_s3_bucket.flip_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "flip_bucket" {
+  bucket = aws_s3_bucket.flip_bucket.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "aws:kms"
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_versioning" "flip_bucket" {
+  bucket = aws_s3_bucket.flip_bucket.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
 resource "aws_s3_bucket_cors_configuration" "flip_bucket_cors" {
   bucket = aws_s3_bucket.flip_bucket.id
 
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["PUT"]
-    allowed_origins = ["*"]
+    allowed_origins = ["https://${var.flip_alb_subdomain}"]
     expose_headers  = []
   }
 }
@@ -75,13 +102,40 @@ resource "aws_s3_bucket" "aicentre_bucket" {
   }
 }
 
+resource "aws_s3_bucket_public_access_block" "aicentre_bucket" {
+  bucket                  = aws_s3_bucket.aicentre_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "aicentre_bucket" {
+  bucket = aws_s3_bucket.aicentre_bucket.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "aws:kms"
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_versioning" "aicentre_bucket" {
+  bucket = aws_s3_bucket.aicentre_bucket.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
 resource "aws_s3_bucket_cors_configuration" "aicentre_bucket_cors" {
   bucket = aws_s3_bucket.aicentre_bucket.id
 
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["PUT", "GET"]
-    allowed_origins = ["*"]
+    allowed_origins = ["https://${var.flip_alb_subdomain}"]
     expose_headers  = []
   }
 }
@@ -89,6 +143,11 @@ resource "aws_s3_bucket_cors_configuration" "aicentre_bucket_cors" {
 ############################
 # Cognito
 ############################
+#
+# Resource definitions now live in ./modules/cognito. Existing state is
+# migrated automatically by the `moved` blocks below on the next plan/apply
+# — no manual `terraform state mv` step is required. See the module's
+# header comment for the mapping from old root addresses to module paths.
 
 module "cognito" {
   source = "./modules/cognito"

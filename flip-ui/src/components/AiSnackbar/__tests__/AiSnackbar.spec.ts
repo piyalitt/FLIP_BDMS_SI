@@ -12,6 +12,7 @@
  */
 
 import { mount } from "@vue/test-utils";
+
 import AiSnackbar from "../AiSnackbar.vue";
 
 describe("Ai Snackbar", () => {
@@ -19,15 +20,15 @@ describe("Ai Snackbar", () => {
     test("handles empty message list", () => {
         const wrapper = mount(AiSnackbar);
 
-        expect(wrapper.findAll('[data-testid="snackbar-item"]')).toHaveLength(0);
+        expect(wrapper.findAll("[data-testid=\"snackbar-item\"]")).toHaveLength(0);
     });
 
     test("renders component structure", () => {
         const wrapper = mount(AiSnackbar);
 
         // Check basic structure exists
-        expect(wrapper.find('.fixed.inset-0.z-10')).toBeTruthy();
-        expect(wrapper.find('.w-full.max-w-md')).toBeTruthy();
+        expect(wrapper.find(".fixed.inset-0.z-10")).toBeTruthy();
+        expect(wrapper.find(".w-full.max-w-md")).toBeTruthy();
     });
 
 });
