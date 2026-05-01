@@ -9,12 +9,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Direct ``/cohort`` endpoint tests against data-access-api + a real Postgres OMOP.
+"""Direct ``/cohort`` endpoint tests against data-access-api + a real MI-CDM Postgres.
 
 Complements the trust-api integration suite — that one goes through trust-api's
 handler; this one drives data-access-api directly to keep coverage focused on the
-SQL template + schema layer. Same compose stack, same seed, asserts on counts that
-match the seed comments (omop_seed.sql).
+SQL template + MI-CDM schema layer. Same compose stack, same seed (``image_occurrence``
+joined to ``concept`` for modality lookups), asserts on counts that match the seed
+comments (omop_seed.sql).
 """
 
 import httpx
@@ -40,12 +41,12 @@ def _cohort_payload(query: str) -> dict:
     }
 
 
-def test_cohort_endpoint_returns_aggregates_for_radiology(http_client):
-    """All 24 radiology rows clear the threshold and come back with the full aggregate set."""
+def test_cohort_endpoint_returns_aggregates_for_image_occurrences(http_client):
+    """All 24 image_occurrence rows clear the threshold and come back with the full aggregate set."""
     response = http_client.post(
         "/cohort",
         json=_cohort_payload(
-            "SELECT person_id, modality, manufacturer, accession_id FROM omop.radiology_occurrence"
+            "SELECT person_id, modality_concept_id, accession_id FROM omop.image_occurrence"
         ),
     )
     assert response.status_code == 200, response.text
@@ -61,7 +62,7 @@ def test_cohort_endpoint_rejects_below_threshold(http_client):
     response = http_client.post(
         "/cohort",
         json=_cohort_payload(
-            "SELECT * FROM omop.radiology_occurrence WHERE manufacturer = 'NoSuchVendor'"
+            "SELECT * FROM omop.image_occurrence WHERE accession_id = 'NONEXISTENT'"
         ),
     )
     assert response.status_code == 400
@@ -73,7 +74,7 @@ def test_cohort_endpoint_rejects_unsafe_sql(http_client):
     response = http_client.post(
         "/cohort",
         json=_cohort_payload(
-            "SELECT * FROM omop.radiology_occurrence; DROP TABLE omop.person"
+            "SELECT * FROM omop.image_occurrence; DROP TABLE omop.person"
         ),
     )
     assert response.status_code == 400
@@ -84,7 +85,7 @@ def test_cohort_endpoint_requires_auth_header(data_access_api_url):
     """The ``/cohort`` router is gated by the trust-internal service key."""
     with httpx.Client(base_url=data_access_api_url, timeout=30.0) as client:
         response = client.post(
-            "/cohort", json=_cohort_payload("SELECT * FROM omop.radiology_occurrence")
+            "/cohort", json=_cohort_payload("SELECT * FROM omop.image_occurrence")
         )
     assert response.status_code == 401
 
@@ -100,16 +101,21 @@ def test_dataframe_endpoint_returns_seeded_columns(http_client):
 
     payload = {
         "encrypted_project_id": encrypt("integration-project-1"),
-        "query": "SELECT modality, manufacturer FROM omop.radiology_occurrence",
+        "query": (
+            "SELECT c.concept_code AS modality, io.accession_id "
+            "FROM omop.image_occurrence io "
+            "LEFT JOIN omop.concept c ON c.concept_id = io.modality_concept_id"
+        ),
     }
     response = http_client.post("/cohort/dataframe", json=payload)
     assert response.status_code == 200, response.text
 
     body = response.json()
-    assert set(body.keys()) == {"modality", "manufacturer"}
+    assert set(body.keys()) == {"modality", "accession_id"}
     assert len(body["modality"]) == 24
     # Sanity: counts in the dataframe should match the seed totals.
     assert body["modality"].count("CT") == 12
     assert body["modality"].count("MR") == 8
     assert body["modality"].count("XR") == 4
-    assert body["manufacturer"].count("GE") == 10
+    # accession_id is unique per row in the seed.
+    assert len(set(body["accession_id"])) == 24

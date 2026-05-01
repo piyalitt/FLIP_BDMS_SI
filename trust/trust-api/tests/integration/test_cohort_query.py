@@ -12,9 +12,10 @@
 """End-to-end cohort query tests across trust-api → data-access-api → omop-db.
 
 The chain runs without any ``httpx`` / ``make_request`` mocks: data-access-api is a real
-process talking to a real Postgres seeded from ``fixtures/omop_seed.sql``. Counts in the
-seed are stable, so assertions read like SQL: "12 CT scans in the dataset, expect modality
-counts to add up to 12". When a count assertion drifts you should update the seed and the
+process talking to a real Postgres seeded from ``fixtures/omop_seed.sql`` (MI-CDM shape —
+``image_occurrence`` joined to ``concept`` for modality lookups). Counts in the seed are
+stable, so assertions read like SQL: "12 CT scans in the dataset, expect modality counts
+to add up to 12". When a count assertion drifts you should update the seed and the
 test together — the comments at the top of the seed call out the expected totals.
 """
 
@@ -56,10 +57,10 @@ def _aggregate(stats: dict[str, Any], name: str) -> dict[str, int]:
 
 
 @pytest.mark.asyncio
-async def test_happy_path_radiology_counts_and_age_sex(stub_hub_received):
-    """Full cohort query over the radiology table returns deterministic aggregates."""
+async def test_happy_path_image_counts_and_age_sex(stub_hub_received):
+    """Full cohort query over the image_occurrence table returns deterministic aggregates."""
     result = await handle_cohort_query(
-        _payload("SELECT person_id, modality, manufacturer, accession_id FROM omop.radiology_occurrence")
+        _payload("SELECT person_id, modality_concept_id, accession_id FROM omop.image_occurrence")
     )
 
     assert result == {"success": True}
@@ -75,12 +76,13 @@ async def test_happy_path_radiology_counts_and_age_sex(stub_hub_received):
     assert body["record_count"] == 24
 
     # Counts aggregate: every column counted once per non-null row. All 24 rows have
-    # values for the four projected columns, so each entry is 24.
+    # values for the three projected columns, so each entry is 24. cohort.py replaces
+    # underscores in column names with newlines for plot rendering.
     counts = _aggregate(body, "Counts")
-    assert counts == {"person\nid": 24, "modality": 24, "manufacturer": 24, "accession\nid": 24}
+    assert counts == {"person\nid": 24, "modality\nconcept\nid": 24, "accession\nid": 24}
 
-    # Sex Distribution: persons 1-12 appear in radiology_occurrence; 6 M, 6 F. The
-    # SQL groups by gender_source_value of distinct person_id. Both groups clear the
+    # Sex Distribution: persons 1-12 appear in image_occurrence; 6 M, 6 F. The SQL
+    # groups by gender_source_value of distinct person_id. Both groups clear the
     # COHORT_QUERY_THRESHOLD (10), so neither rolls into "Other".
     sex = _aggregate(body, "Sex Distribution")
     assert sex == {"M": 6, "F": 6}
@@ -88,30 +90,33 @@ async def test_happy_path_radiology_counts_and_age_sex(stub_hub_received):
     # Age Distribution: 12 distinct person_ids, decade-bucketed. Each bucket count
     # below the threshold rolls into "Other"; only the rolled-up value survives.
     age = _aggregate(body, "Age Distribution")
-    # All twelve buckets are individually below threshold, so the whole 12 lands in "Other".
+    # All buckets are individually below threshold, so the whole 12 lands in "Other".
     assert age == {"Other": 12}
 
 
 @pytest.mark.asyncio
 async def test_multiple_aggregates_join_returns_all_groups(stub_hub_received):
-    """Joining person + radiology and projecting multiple columns still produces every aggregate."""
+    """Joining person + image_occurrence + concept still produces every aggregate."""
     query = (
-        "SELECT p.person_id, p.gender_source_value, r.modality, r.accession_id "
+        "SELECT p.person_id, p.gender_source_value, c.concept_name AS modality, io.accession_id "
         "FROM omop.person p "
-        "INNER JOIN omop.radiology_occurrence r ON r.person_id = p.person_id"
+        "INNER JOIN omop.image_occurrence io ON io.person_id = p.person_id "
+        "LEFT JOIN omop.concept c ON c.concept_id = io.modality_concept_id"
     )
     result = await handle_cohort_query(_payload(query, query_id="qid-join"))
 
     assert result == {"success": True}
     body = json.loads(stub_hub_received[0]["body"])
     assert body["query_id"] == "qid-join"
-    assert body["record_count"] == 24  # one row per radiology occurrence
+    assert body["record_count"] == 24  # one row per image_occurrence
 
     # Both Counts and Nulls groups should be present.
     aggregate_names = {g["name"] for g in body["data"]}
     assert {"Counts", "Nulls", "Sex Distribution", "Age Distribution"}.issubset(aggregate_names)
 
-    # No nulls in any of the projected columns — the join is INNER and seed data is dense.
+    # No nulls in any of the projected columns — the join is INNER on person and the
+    # LEFT JOIN on concept always finds a hit because every modality_concept_id in the
+    # seed has a matching concept row.
     nulls = _aggregate(body, "Nulls")
     assert all(count == 0 for count in nulls.values())
 
@@ -126,7 +131,7 @@ async def test_multiple_aggregates_join_returns_all_groups(stub_hub_received):
 async def test_empty_result_below_threshold_returns_failure(stub_hub_received):
     """A query that matches no rows trips the cohort-size threshold and surfaces as failure."""
     result = await handle_cohort_query(
-        _payload("SELECT * FROM omop.radiology_occurrence WHERE manufacturer = 'NoSuchVendor'")
+        _payload("SELECT * FROM omop.image_occurrence WHERE accession_id = 'NONEXISTENT'")
     )
 
     assert result["success"] is False
@@ -156,7 +161,7 @@ async def test_data_access_api_unreachable_returns_failure(monkeypatch, stub_hub
     # 127.0.0.1:1 — port 1 is privileged and effectively guaranteed to refuse.
     monkeypatch.setattr(task_handlers, "DATA_ACCESS_API_URL", "http://127.0.0.1:1")
 
-    result = await handle_cohort_query(_payload("SELECT * FROM omop.radiology_occurrence"))
+    result = await handle_cohort_query(_payload("SELECT * FROM omop.image_occurrence"))
 
     assert result["success"] is False
     # ``make_request`` maps connection errors to HTTPException(502, "Failed to connect ...").
@@ -168,7 +173,7 @@ async def test_data_access_api_unreachable_returns_failure(monkeypatch, stub_hub
 async def test_sql_injection_attempt_rejected(stub_hub_received):
     """``DROP TABLE`` and friends are filtered by data-access-api's validate_query."""
     result = await handle_cohort_query(
-        _payload("SELECT * FROM omop.radiology_occurrence; DROP TABLE omop.person")
+        _payload("SELECT * FROM omop.image_occurrence; DROP TABLE omop.person")
     )
 
     assert result["success"] is False
