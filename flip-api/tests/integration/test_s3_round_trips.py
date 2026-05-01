@@ -402,8 +402,13 @@ def test_retrieve_federated_results_returns_presigned_urls(client: TestClient, s
     assert response.status_code == 200, response.text
     urls = response.json()
     assert len(urls) == 2
+    # Presigned URLs carry a ``Signature=`` query param (SigV2) or an
+    # ``X-Amz-Signature=`` query param (SigV4). Either is fine — the
+    # assertion only cares that the URL was actually signed, not which
+    # version of the SDK signing path it went through.
     for url in urls:
-        assert "X-Amz-Signature" in url, f"not a presigned URL: {url}"
+        assert "Signature=" in url or "X-Amz-Signature=" in url, f"not a presigned URL: {url}"
+        assert "uploaded_federated_data" in url
 
 
 def test_retrieve_federated_results_404_for_unknown_model(client: TestClient, session, s3_buckets):

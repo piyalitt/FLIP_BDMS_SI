@@ -98,10 +98,22 @@ def aws_mock() -> Generator[None, None, None]:
     os.environ["AWS_SECURITY_TOKEN"] = "testing"  # pragma: allowlist secret
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
     os.environ.pop("AWS_PROFILE", None)
+
+    # Production code reads ``AWS_REGION`` off ``Settings`` and threads it into
+    # ``boto3.client(region_name=...)``. moto's per-region backends mean a
+    # client built for region X cannot see a pool/bucket created in region Y.
+    # Pin ``Settings.AWS_REGION`` to the same region the env vars above
+    # advertise so both the test setup and the code-under-test land in the
+    # same moto backend.
+    settings = get_settings()
+    prior_region = settings.AWS_REGION
+    settings.AWS_REGION = "us-east-1"
+
     with mock_aws():
         try:
             yield
         finally:
+            settings.AWS_REGION = prior_region
             for k, v in prior.items():
                 if v is None:
                     os.environ.pop(k, None)
@@ -264,3 +276,39 @@ def s3_buckets(aws_mock) -> dict[str, str]:
         except s3.exceptions.BucketAlreadyOwnedByYou:
             pass
     return bucket_names
+
+
+@pytest.fixture
+def cognito_user_pool(aws_mock, monkeypatch) -> Generator[dict[str, str], None, None]:
+    """Create a moto user pool + app client and rebind ``Settings`` at them.
+
+    Cognito IDs in ``Settings`` are environment-specific (a real prod pool
+    ID); production-code helpers in ``utils/cognito_helpers.py`` read those
+    IDs at call time via ``get_settings()``. Patching the module-level
+    ``_settings`` singleton is sufficient — pydantic-settings doesn't
+    re-read the env, so a ``monkeypatch.setattr`` sticks for the test and
+    is rolled back automatically afterwards.
+
+    The ``_cognito_client`` lru_cache is also cleared so the next call
+    reaches into moto with the freshly-pinned pool ID rather than serving
+    a stale client built before the override.
+    """
+    from flip_api.utils.cognito_helpers import _cognito_client
+
+    cognito = boto3.client("cognito-idp")
+    pool = cognito.create_user_pool(PoolName="b2-pool")
+    pool_id = pool["UserPool"]["Id"]
+    client_resp = cognito.create_user_pool_client(
+        UserPoolId=pool_id,
+        ClientName="b2-client",
+        CallbackURLs=["https://app.example.com/cb"],
+        GenerateSecret=False,
+    )
+    client_id = client_resp["UserPoolClient"]["ClientId"]
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "AWS_COGNITO_USER_POOL_ID", pool_id)
+    monkeypatch.setattr(settings, "AWS_COGNITO_APP_CLIENT_ID", client_id)
+    _cognito_client.cache_clear()
+    yield {"pool_id": pool_id, "client_id": client_id}
+    _cognito_client.cache_clear()
