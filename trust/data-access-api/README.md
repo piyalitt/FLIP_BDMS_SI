@@ -97,6 +97,10 @@ deploy time as `TRUST_INTERNAL_SERVICE_KEY`.
 For the threat model, see the **Trust-internal Service Authentication** section in
 [`CLAUDE.md`](../../CLAUDE.md).
 
+## Testing
+
+Tests are split into `tests/unit/` (no real backing services) and `tests/integration/` (real OMOP database / sibling APIs). See [Where does my test go?](../../CONTRIBUTING.md#where-does-my-test-go) in `CONTRIBUTING.md` for the placement rule.
+
 ## Further Reading
 
 - [OMOP Database setup](../omop-db/README.md)

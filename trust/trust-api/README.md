@@ -77,6 +77,10 @@ If horizontal scaling is needed, the hub endpoint (`GET /tasks/{trust_name}/pend
 updated to use `SELECT ... FOR UPDATE SKIP LOCKED` to ensure each task is claimed by exactly
 one replica.
 
+## Testing
+
+Tests are split into `tests/unit/` (no real backing services) and `tests/integration/` (real backing services such as the OMOP DB, Orthanc, sibling APIs). See [Where does my test go?](../../CONTRIBUTING.md#where-does-my-test-go) in `CONTRIBUTING.md` for the placement rule.
+
 ## Further Reading
 
 - [Full FLIP Documentation](https://londonaicentreflip.readthedocs.io/en/latest/)

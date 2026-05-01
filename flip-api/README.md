@@ -86,6 +86,22 @@ The flip-api is configured via environment variables. In development these are s
 
 See [`.env.development.example`](../.env.development.example) for the full list of required variables.
 
+## Testing
+
+Tests are split into `tests/unit/` (no real backing services) and `tests/integration/` (real Postgres / Cognito / S3 / sibling APIs). See [Where does my test go?](../CONTRIBUTING.md#where-does-my-test-go) in `CONTRIBUTING.md` for the placement rule.
+
+Run unit tests (no Docker / DB / network needed):
+
+```bash
+make unit_test
+```
+
+Run the full suite (lint + mypy + pytest, requires the dockerised dependencies):
+
+```bash
+make test
+```
+
 ## Further Reading
 
 - [Full FLIP Documentation](https://londonaicentreflip.readthedocs.io/en/latest/)
