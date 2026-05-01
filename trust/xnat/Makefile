@@ -14,7 +14,8 @@
 	xnat-reset xnat-configure xnat-configure-trust-1 xnat-configure-trust-2 xnat-configure-local \
 	create-network-trust-1 create-network-trust-2 create-network-trust-local \
 	up-xnat-1 up-xnat-2 up-xnat-local \
-	down-xnat-1 down-xnat-2 down-xnat-local
+	down-xnat-1 down-xnat-2 down-xnat-local \
+	test unit_test local_test
 
 # if tag PROD=true is passed, set PROD=true
 ifeq ($(PROD),true)
@@ -78,17 +79,17 @@ build:
 		--build-arg XNAT_ROOT=${XNAT_ROOT} \
 		--build-arg XNAT_HOME=${XNAT_HOME} \
 		--build-arg XNAT_EMAIL=${XNAT_EMAIL} \
-		-t ${DOCKER_REGISTRY}xnat-web:dev \
+		-t ${DOCKER_REGISTRY}xnat-web:${DOCKER_TAG} \
 		xnat/
 	@echo "🐳 Building xnat-db image..."
 	docker build \
 		--build-arg PG_VERSION=${PG_VERSION} \
-		-t ${DOCKER_REGISTRY}xnat-db:dev \
+		-t ${DOCKER_REGISTRY}xnat-db:${DOCKER_TAG} \
 		postgres/
 	@echo "🐳 Building xnat-nginx image..."
 	docker build \
 		--build-arg NGINX_VERSION=${NGINX_VERSION} \
-		-t ${DOCKER_REGISTRY}xnat-nginx:dev \
+		-t ${DOCKER_REGISTRY}xnat-nginx:${DOCKER_TAG} \
 		nginx/
 	@echo "✅ XNAT Docker images built successfully!"
 
@@ -98,7 +99,6 @@ up-xnat-1: create-network-trust-1
 	XNAT_PATH=${XNAT_PATH} \
 	XNAT_PORT=${XNAT_PORT_TRUST_1} \
 	PACS_UI_PORT=${PACS_UI_PORT_TRUST_1} \
-	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_1} \
 	DOCKER_NETWORK_NAME=${network1} \
 	docker stack deploy --with-registry-auth --detach=false ${STACK_FILES} ${project1}
 	$(MAKE) xnat-configure-trust-1
@@ -107,7 +107,6 @@ up-xnat-2: create-network-trust-2
 	XNAT_PATH=${XNAT_PATH} \
 	XNAT_PORT=${XNAT_PORT_TRUST_2} \
 	PACS_UI_PORT=${PACS_UI_PORT_TRUST_2} \
-	ORTHANC_STORAGE=${ORTHANC_STORAGE_TRUST_2} \
 	DOCKER_NETWORK_NAME=${network2} \
 	docker stack deploy --with-registry-auth --detach=false ${STACK_FILES} ${project2}
 	$(MAKE) xnat-configure-trust-2
@@ -121,7 +120,6 @@ up-xnat-local: create-network-trust-local
 	XNAT_PATH=${XNAT_PATH} \
 	XNAT_PORT=8108 \
 	PACS_UI_PORT=8046 \
-	ORTHANC_STORAGE=$(ORTHANC_STORAGE_TRUST_$(subst Trust_,,$(LOCAL_TRUST_NAME))) \
 	DOCKER_NETWORK_NAME=${network_local} \
 	docker stack deploy --with-registry-auth --detach=false ${STACK_FILES} ${project_local}
 	$(MAKE) xnat-configure-local
@@ -132,10 +130,10 @@ down-xnat-1:
 down-xnat-2:
 	docker stack rm ${project2}
 
+down: down-xnat-1 down-xnat-2
+
 down-xnat-local:
 	docker stack rm ${project_local}
-
-down: down-xnat-1 down-xnat-2
 
 # Stop and clean up images
 clean: down
@@ -231,3 +229,7 @@ create-network-trust-local:
 	@echo "🔧 Ensuring external Docker networks exist..."
 	@docker network inspect ${network_local} >/dev/null 2>&1 || \
 		docker network create --driver overlay --attachable ${network_local}
+
+# Anonymization-script tests (pure Python; no XNAT or Docker required)
+test unit_test local_test:
+	$(MAKE) -C tests $@

@@ -37,23 +37,122 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set Node.js version
-        uses: actions/setup-node@v4 #
+        uses: actions/setup-node@v5 #
         with:
           node-version: "22" # Specify the Node.js version you need
       - name: Install dependencies
         run: npm install
 
+      - name: Run lint
+        run: npm run lint
+
       - name: Run tests with npm
         run: npm run test:unit
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: flip-ui/coverage/cobertura-coverage.xml
           flags: flip-ui
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  cypress-e2e:
+    # Runs the Cypress E2E suite against a stubbed API (network-level
+    # intercepts in test/cypress/support/globalIntercepts.ts). No real
+    # backend or Cognito user pool is needed — the fixture-driven flow
+    # is independent of cloud infra.
+    name: Cypress (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    # Cap each shard well below the 360-min default. 30 leaves headroom
+    # for `runMode: 3` retries without burning a runner-day on a hung
+    # browser.
+    timeout-minutes: 30
+    # Export Cognito + API config to every step. flip-ui/scripts/generate-
+    # window-js.sh (run via the `pretest:start` npm hook before vite boots)
+    # reads these from the shell env and emits `public/js/window.js`. Without
+    # them, it falls back to its production defaults — including `/api` on
+    # the base URL — and the spec intercepts (path-only, no `/api` prefix)
+    # silently miss every request.
+    #
+    # CENTRAL_HUB_API_URL deliberately omits the `/api` segment used in
+    # production: the specs use path-only intercepts (e.g. "/projects/*")
+    # which never cross slashes, so they wouldn't match `/api/projects/foo`.
+    # Production traffic still uses the real `/api` URL.
+    env:
+      VITE_LOCAL: "false"
+      # Build-time gate for the Cypress test seams in src/utils/auth.ts
+      # and src/main.ts. Vite inlines this and dead-code-eliminates the
+      # surrounding branches in any non-E2E build, so the test seams
+      # cannot ship in a production bundle.
+      VITE_E2E: "true"
+      CENTRAL_HUB_API_URL: "http://localhost:8080"
+      AWS_COGNITO_USER_POOL_ID: "eu-west-2_DUMMY1234"
+      AWS_COGNITO_APP_CLIENT_ID: "dummyclientid1234567890ab"
+      AWS_REGION: "eu-west-2"
+      # Drives the blacklist check in src/partials/models/ModelUpload.vue
+      # exercised by upload_model.spec.ts.
+      BLACKLISTED_MODEL_FILES: "flip.py,server_app.py"
+    strategy:
+      # Don't cancel sibling groups when one fails — surface every broken
+      # group in a single CI run so triage is one pass instead of N.
+      fail-fast: false
+      matrix:
+        group: [group-1, group-2, group-3, group-4, group-5, group-6]
+    defaults:
+      run:
+        working-directory: ./flip-ui
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set Node.js version
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: flip-ui/package-lock.json
+
+      - name: Stub flip-ui/.env.development for Cypress
+        # Vite's `loadEnv` and the cypress plugin (dotenv) both read this
+        # file at process start. The values mirror the job-level `env:`
+        # block above — they're stubs because the suite mocks Cognito and
+        # the API at the network layer, so nothing here ever hits AWS.
+        run: |
+          cat > .env.development <<'EOF'
+          VITE_LOCAL=false
+          VITE_E2E=true
+          CENTRAL_HUB_API_URL=http://localhost:8080
+          AWS_COGNITO_USER_POOL_ID=eu-west-2_DUMMY1234
+          AWS_COGNITO_APP_CLIENT_ID=dummyclientid1234567890ab
+          AWS_REGION=eu-west-2
+          BLACKLISTED_MODEL_FILES=flip.py,server_app.py
+          EOF
+
+      - name: Cypress run
+        uses: cypress-io/github-action@v6
+        # install-command defaults to `npm ci` when package-lock.json exists,
+        # which is what we want here — reproducible installs in CI.
+        with:
+          working-directory: flip-ui
+          browser: chrome
+          start: npm run test:start
+          # Plain http:// (not http-get://) — cypress-io/github-action v6 passes
+          # this directly to its runner, which rejects the start-server-and-test
+          # `http-get://` prefix and tries to exec it as a binary.
+          wait-on: "http://localhost:4173"
+          wait-on-timeout: 120
+          spec: test/cypress/integration/${{ matrix.group }}/**/*.spec.ts
+
+      - name: Upload Cypress screenshots
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: cypress-screenshots-${{ matrix.group }}
+          path: flip-ui/test/cypress/screenshots
+          if-no-files-found: ignore
+          retention-days: 7

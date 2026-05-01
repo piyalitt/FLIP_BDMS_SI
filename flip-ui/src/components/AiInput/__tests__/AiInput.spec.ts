@@ -37,6 +37,6 @@ describe("Ai Input", () => {
 
         // Test functionality instead of snapshots
         expect(comp.exists()).toBe(true);
-        expect(comp.find('input').attributes('name')).toBe('something');
+        expect(comp.find("input").attributes("name")).toBe("something");
     });
 });

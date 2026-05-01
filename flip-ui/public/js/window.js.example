@@ -22,7 +22,9 @@
 // using the env vars from .env.stag / .env.production, and uploaded to S3
 // alongside the built bundle.
 //
-// See .env.development.example for the env vars involved.
+// See .env.development.example for the env vars involved. The generator
+// aborts with a non-zero exit if AWS_COGNITO_USER_POOL_ID or
+// AWS_COGNITO_APP_CLIENT_ID (or their VITE_* equivalents) are unset.
 
 window.AWS_BASE_URL            = "https://<host>/api";
 window.AWS_USER_POOL_ID        = "<region>_<pool-id>";
@@ -30,4 +32,3 @@ window.AWS_CLIENT_ID           = "<app-client-id>";
 window.AWS_REGION              = "eu-west-2";
 window.BLACKLISTED_MODEL_FILES = "";
 window.RELEASE_VERSION         = "";
-window.MAX_REIMPORT_COUNT      = 10;

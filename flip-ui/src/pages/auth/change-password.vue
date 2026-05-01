@@ -128,11 +128,11 @@ import { object, string } from "yup";
 
 import AiButton from "@/components/AiButton/AiButton.vue";
 import AiInput from "@/components/AiInput/AiInput.vue";
-import { IChangePassword,ICodeRequest } from "@/interfaces/auth/interfaces";
+import { IChangePassword, ICodeRequest } from "@/interfaces/auth/interfaces";
 import { routeChange } from "@/router";
 import { useAuthStore } from "@/store/auth";
 import { useErrorStore } from "@/store/error";
-import { emailValidation,passwordValidation } from "@/utils/forms/validation";
+import { emailValidation, passwordValidation } from "@/utils/forms/validation";
 import { Snackbar } from "@/utils/snackbar";
 import AccountOutline from "~icons/mdi/account-outline";
 import CodeIcon from "~icons/mdi/key-outline";

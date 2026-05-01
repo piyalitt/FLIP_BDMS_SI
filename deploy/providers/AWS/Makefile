@@ -53,6 +53,9 @@ endif
 endif
 
 ## SETTING VARIABLES FOR TERRAFORM
+# Map the Make-level PROD flag (true|stag) onto a Terraform-friendly environment name.
+# Used in main.tf to gate prod-only RDS hardening (deletion protection, final snapshot).
+export TF_VAR_environment=$(if $(filter true,$(PROD)),prod,stag)
 export TF_VAR_max_azs=2
 export TF_VAR_vpc_cidr=10.0.0.0/16
 export TF_VAR_public_subnets=["10.0.1.0/24", "10.0.2.0/24"]
@@ -498,50 +501,58 @@ generate-internal-service-key: ## Generate a new internal service key (fl-server
 	@echo "🔑 Generating internal service key..."
 	@$(MAKE) -C ../../../flip-api generate-internal-service-key ENV_FILE=$(abspath $(MAIN_ENV_FILE))
 
+.PHONY: generate-trust-internal-service-keys
+generate-trust-internal-service-keys: ## Generate per-trust internal service keys (trust-api / fl-client → imaging-api auth)
+	@echo "🔑 Generating per-trust internal service keys (skipping already-generated)..."
+	@$(MAKE) -C ../../../flip-api generate-trust-internal-service-keys ENV_FILE=$(abspath $(MAIN_ENV_FILE)) $(if $(FORCE),FORCE=true)
+
 .PHONY: full-deploy
 full-deploy: ## Full AWS deployment: provision infrastructure, deploy cloud Trust + Central Hub
 	## Step order:
 	## 1. login + init + import: auth, Terraform init, import any pre-existing resources
-	## 2. generate-keys + generate-internal-service-key: generate all API keys
+	## 2. generate-keys + generate-internal-service-key + generate-trust-internal-service-keys: generate all API keys
 	## 3. plan+apply: provision all AWS infrastructure (EC2, RDS, VPC, secrets)
 	## 4. update-env: refresh .env with Terraform outputs (EC2 IPs, DB endpoint, Cognito IDs)
 	## 5. ssh-config + ansible-init: configure SSH aliases and provision EC2s with Docker
 	## 6. deploy-centralhub + deploy-trust + status: deploy containers and verify
-full-deploy: github-login aws-login init import-persistent generate-keys generate-internal-service-key plan apply update-env ssh-config ansible-init deploy-centralhub deploy-trust status
+full-deploy: github-login aws-login init import-persistent generate-keys generate-internal-service-key generate-trust-internal-service-keys plan apply update-env ssh-config ansible-init deploy-centralhub deploy-trust status
 
-.PHONY: full-deploy-stag
-full-deploy-stag: ## Full staging deployment with on-prem local trust (requires LOCAL_TRUST_IP=<public-ip>)
+.PHONY: full-deploy-with-local-trust
+full-deploy-with-local-trust: ## Full AWS deployment (honours PROD) plus on-prem local trust (requires LOCAL_TRUST_IP=<public-ip>)
+	## Works against either PROD=true or PROD=stag — PROD is inherited from the environment.
 	## Step order:
 	## 1. login + init + import: auth, Terraform init, import pre-existing persistent resources
-	## 2. generate-keys + generate-internal-service-key: generate all API keys
-	## 3. plan+apply (PROD=stag): provision all AWS infrastructure (EC2, RDS, VPC, ALB, secrets)
-	## 4. update-env: refresh .env.stag with Terraform outputs (EC2 IPs, DB endpoint, Cognito IDs)
+	## 2. generate-keys + generate-internal-service-key + generate-trust-internal-service-keys: generate all API keys
+	## 3. plan+apply: provision all AWS infrastructure (EC2, RDS, VPC, ALB, secrets)
+	## 4. update-env: refresh .env.{PROD} with Terraform outputs (EC2 IPs, DB endpoint, Cognito IDs)
 	## 5. ssh-config + ansible-init: configure SSH aliases, provision EC2s with Docker + FL kit
 	## 6. deploy-centralhub + deploy-trust: deploy Central Hub and cloud Trust containers
 	## 7. add-local-trust LOCAL_TRUST_IP=<ip>: provision local trust host,
 	##    deploy local $(LOCAL_TRUST_NAME) FL kit, and update AWS security groups
 	## 8. status: verify all services healthy
 	## NOTE: After this completes you must manually:
-	##   - Start local trust stack: cd ../../../trust && env PROD=stag make up-local-trust
-	@[ -n "$(LOCAL_TRUST_IP)" ] || (echo ""; echo "❌  ERROR: LOCAL_TRUST_IP is required."; echo "   Usage: make full-deploy-stag LOCAL_TRUST_IP=<public-ip>"; echo ""; exit 1)
-full-deploy-stag: github-login aws-login init import-persistent generate-keys generate-internal-service-key plan apply update-env ssh-config ansible-init deploy-centralhub deploy-trust add-local-trust status
+	##   - Start local trust stack: cd ../../../trust && env PROD=$(PROD) make up-local-trust
+	@[ -n "$(LOCAL_TRUST_IP)" ] || (echo ""; echo "❌  ERROR: LOCAL_TRUST_IP is required."; echo "   Usage: make full-deploy-with-local-trust LOCAL_TRUST_IP=<public-ip>"; echo ""; exit 1)
+full-deploy-with-local-trust: github-login aws-login init import-persistent generate-keys generate-internal-service-key generate-trust-internal-service-keys plan apply update-env ssh-config ansible-init deploy-centralhub deploy-trust add-local-trust status
 
-.PHONY: full-deploy-stag-hybrid
-full-deploy-stag-hybrid: ## Full staging hybrid deployment including local trust provisioning
-	## This wraps full-deploy-stag and then redeploys the Central Hub.
+.PHONY: full-deploy-hybrid
+full-deploy-hybrid: ## Full hybrid deployment including local trust provisioning + hub redeploy (honours PROD)
+	## This wraps full-deploy-with-local-trust and then redeploys the Central Hub so the hub
+	## picks up any env/secret changes made while registering the local trust.
+	## Works against either PROD=true or PROD=stag — PROD is inherited from the environment.
 	## You still need to start the local trust stack on the trust host.
-	## If LOCAL_TRUST_IP is not provided, it will be auto-detected using curl.
+	## If LOCAL_TRUST_IP is not provided, it will be auto-detected using curl (operator machine is the trust host).
 	@if [ -z "$(LOCAL_TRUST_IP)" ]; then \
 		echo "🔍 Detecting public IP for LOCAL_TRUST_IP..."; \
 		LOCAL_TRUST_IP=$$(curl -s https://api.ipify.org) && \
-		echo "✅ Detected LOCAL_TRUST_IP: $$LOCAL_TRUST_IP" || (echo "❌  Failed to detect IP. Provide LOCAL_TRUST_IP manually."; echo "   Usage: make full-deploy-stag-hybrid LOCAL_TRUST_IP=<public-ip>"; exit 1); \
+		echo "✅ Detected LOCAL_TRUST_IP: $$LOCAL_TRUST_IP" || (echo "❌  Failed to detect IP. Provide LOCAL_TRUST_IP manually."; echo "   Usage: make full-deploy-hybrid LOCAL_TRUST_IP=<public-ip>"; exit 1); \
 	else \
 		LOCAL_TRUST_IP="$(LOCAL_TRUST_IP)"; \
 	fi && \
-	$(MAKE) full-deploy-stag LOCAL_TRUST_IP=$$LOCAL_TRUST_IP LOCAL_TRUST_SSH_KEY="$(LOCAL_TRUST_SSH_KEY)" LOCAL_TRUST_SSH_USER="$(LOCAL_TRUST_SSH_USER)" LOCAL_TRUST_NAME="$(LOCAL_TRUST_NAME)" && \
-	$(MAKE) deploy-centralhub PROD=stag && \
+	$(MAKE) full-deploy-with-local-trust LOCAL_TRUST_IP=$$LOCAL_TRUST_IP LOCAL_TRUST_SSH_KEY="$(LOCAL_TRUST_SSH_KEY)" LOCAL_TRUST_SSH_USER="$(LOCAL_TRUST_SSH_USER)" LOCAL_TRUST_NAME="$(LOCAL_TRUST_NAME)" && \
+	$(MAKE) deploy-centralhub PROD=$(PROD) && \
 	echo "" && \
-	echo "✅ Hybrid staging deployment complete." && \
+	echo "✅ Hybrid deployment complete (PROD=$(PROD))." && \
 	echo "➡️  Final manual step: start the local trust stack on the trust host:" && \
-	echo "   cd ../../../trust && env PROD=stag make up-local-trust"
+	echo "   cd ../../../trust && env PROD=$(PROD) make up-local-trust"
 

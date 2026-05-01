@@ -55,6 +55,33 @@ resource "aws_cognito_user_pool" "flip_user_pool" {
     email_message_by_link = file("${var.templates_dir}/password_reset_link.html")
   }
 
+  # MFA is enforced at the application layer, not at the pool. The pool
+  # is OPTIONAL because Cognito has no admin API to delete a user's
+  # verified TOTP secret — with the pool set to ON, an admin reset
+  # (AdminSetUserMFAPreference Enabled=False) leaves the old secret
+  # registered and Cognito keeps challenging SOFTWARE_TOKEN_MFA on the
+  # next sign-in, so the user is asked for a code they no longer have.
+  # With OPTIONAL, disabling the preference actually takes effect:
+  # Cognito signs the user in without a challenge, and the app layer
+  # (flip-api verify_token + flip-ui router guard) catches any user
+  # whose UserMFASettingList lacks SOFTWARE_TOKEN_MFA and funnels them
+  # through the post-auth enrolment page. First-time users follow the
+  # same path — they sign in, mfaEnabled=false, and are routed to
+  # mfa-setup before any protected route lets them through.
+  # SMS MFA is intentionally disabled (no SNS dependency, no SIM-swap risk).
+  mfa_configuration = var.mfa_configuration
+
+  # Cognito's UpdateUserPool API rejects a software_token_mfa_configuration block
+  # when mfa_configuration = "OFF" ("Software token MFA is not enabled for this
+  # User Pool"), so omit the block entirely in that case.
+  dynamic "software_token_mfa_configuration" {
+    for_each = var.mfa_configuration == "OFF" ? [] : [1]
+    content {
+      enabled = true
+    }
+  }
+
+
   deletion_protection = "ACTIVE"
   lifecycle {
     prevent_destroy = true

@@ -46,7 +46,8 @@ def set_user_roles(
         IRoles: The updated roles data for the user.
 
     Raises:
-        HTTPException: If the user does not have permission to update roles or if any role does not exist.
+        HTTPException: If the user does not have permission to update roles, if the target user does
+            not exist, or if any role does not exist.
     """
     try:
         # Check permissions
@@ -55,6 +56,12 @@ def set_user_roles(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"User with ID: {token_id} was unable to update a user's roles",
+            )
+
+        if db.get(User, user_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with ID {user_id} not found",
             )
 
         user_roles_ids = roles_data.roles
@@ -71,10 +78,6 @@ def set_user_roles(
 
         if hasattr(deleted, "rowcount") and deleted.rowcount == 0:
             logger.info("No changes made to the database. The user did not have any roles.")
-
-        # List current users in the database
-        existing_users = db.exec(select(User)).all()
-        logger.info(f"Current users in the database: {[user.id for user in existing_users]}")
 
         # Insert new roles
         logger.info(f"Setting roles for user {user_id}: {user_roles_ids}")
@@ -104,5 +107,5 @@ def set_user_roles(
     except Exception as e:
         logger.error(f"Error setting user roles: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error"
         )

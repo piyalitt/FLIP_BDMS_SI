@@ -22,5 +22,10 @@ JOB_TYPES_REQUIRED_FILES_FILE = "job_types_and_required_files.json"
 
 # Testing constants
 BASE_URL = "http://localhost:8080/api"
-ADMIN_EMAIL = "aicentreflip@gmail.com"
+
+# Main user emails - these should match the users created in Cognito and seeded in DB
+ADMIN_EMAIL_1 = "aicentreflip@gmail.com"
+ADMIN_EMAIL_2 = "alexandre.triay_bagur@kcl.ac.uk"
+ADMIN_EMAIL_3 = "rafael.dias@kcl.ac.uk"
 RESEARCHER_EMAIL = "rafaelagd@gmail.com"
+OBSERVER_EMAIL = "triayalex@gmail.com"

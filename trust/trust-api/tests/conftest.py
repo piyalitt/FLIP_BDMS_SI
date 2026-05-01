@@ -23,7 +23,14 @@ _TEST_ENV_DEFAULTS = {
     "TRUST_API_KEY_HEADER": "Authorization",
     "TRUST_NAME": "Test_Trust",
     "AES_KEY_BASE64": "dGVzdGtleXRlc3RrZXl0ZXN0a2V5dGVzdGtleTA9PQ==",
+    "TRUST_INTERNAL_SERVICE_KEY": "test-trust-internal-service-key",
+    "TRUST_INTERNAL_SERVICE_KEY_HEADER": "X-Trust-Internal-Service-Key",
 }
 
 for key, value in _TEST_ENV_DEFAULTS.items():
-    os.environ.setdefault(key, value)
+    # Treat unset *and* unreplaced `<placeholder>` values from .env.development.example
+    # as missing — otherwise the placeholder leaks through and base64-decoding the
+    # AES key fails with "Incorrect padding" mid-test.
+    current = os.environ.get(key, "")
+    if not current or (current.startswith("<") and current.endswith(">")):
+        os.environ[key] = value

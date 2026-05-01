@@ -26,6 +26,7 @@ from flip_api.db.models.main_models import (
     XNATProjectStatus,
 )
 from flip_api.domain.interfaces.project import (
+    IApprovedTrust,
     IProjectApproval,
     IProjectDetails,
     IProjectQuery,
@@ -48,6 +49,7 @@ from flip_api.project_services.services.project_services import (
     get_project_models_service,
     get_project_query,
     get_reimport_queries_service,
+    get_trusts_approval_status_for_project,
     get_users_with_access,
     stage_project_service,
     unstage_project_service,
@@ -440,11 +442,11 @@ class TestGetApprovedTrustsForProject:
     def test_get_approved_trusts_for_project_success(self, mock_db_session: MagicMock):
         project_id = uuid4()
         mock_results = [
-            MagicMock(id=uuid4(), name="Trust 1"),
-            MagicMock(id=uuid4(), name="Trust 2"),
+            (uuid4(), "Trust 1"),
+            (uuid4(), "Trust 2"),
         ]
 
-        mock_db_session.execute.return_value.all.return_value = mock_results
+        mock_db_session.exec.return_value.all.return_value = mock_results
 
         result = get_approved_trusts_for_project(project_id, mock_db_session)
 
@@ -454,9 +456,40 @@ class TestGetApprovedTrustsForProject:
     def test_get_approved_trusts_for_project_empty(self, mock_db_session: MagicMock):
         project_id = uuid4()
 
-        mock_db_session.execute.return_value.all.return_value = []
+        mock_db_session.exec.return_value.all.return_value = []
 
         result = get_approved_trusts_for_project(project_id, mock_db_session)
+
+        assert result == []
+
+
+class TestGetTrustsApprovalStatusForProject:
+    def test_get_trusts_approval_status_unpacks_three_columns(self, mock_db_session: MagicMock):
+        project_id = uuid4()
+        trust_a, trust_b, trust_c = uuid4(), uuid4(), uuid4()
+        mock_results = [
+            (trust_a, "Trust A", True),
+            (trust_b, "Trust B", False),
+            # `approved` may come back as None for unstaged trusts; should normalise to False.
+            (trust_c, "Trust C", None),
+        ]
+
+        mock_db_session.exec.return_value.all.return_value = mock_results
+
+        result = get_trusts_approval_status_for_project(project_id, mock_db_session)
+
+        assert len(result) == 3
+        assert all(isinstance(t, IApprovedTrust) for t in result)
+        assert (result[0].id, result[0].name, result[0].approved) == (trust_a, "Trust A", True)
+        assert (result[1].id, result[1].name, result[1].approved) == (trust_b, "Trust B", False)
+        assert (result[2].id, result[2].name, result[2].approved) == (trust_c, "Trust C", False)
+
+    def test_get_trusts_approval_status_empty(self, mock_db_session: MagicMock):
+        project_id = uuid4()
+
+        mock_db_session.exec.return_value.all.return_value = []
+
+        result = get_trusts_approval_status_for_project(project_id, mock_db_session)
 
         assert result == []
 
@@ -465,12 +498,18 @@ class TestGetProjectModelsService:
     def test_get_project_models_service_with_search(self, mock_db_session: MagicMock):
         project_id = uuid4()
 
-        mock_db_session.execute.return_value.all.return_value = []
-        mock_db_session.execute.return_value.scalar_one_or_none.return_value = 0
+        # The function makes two `exec` calls in order: count_stmt then query_stmt.
+        count_result = MagicMock()
+        count_result.first.return_value = 0
+        query_result = MagicMock()
+        query_result.all.return_value = []
+        mock_db_session.exec.side_effect = [count_result, query_result]
 
         models, total = get_project_models_service(project_id, mock_db_session)
 
         assert models.data == []
+        assert models.total_rows == 0
+        assert mock_db_session.exec.call_count == 2
 
 
 class TestUpdateProjectStatus:

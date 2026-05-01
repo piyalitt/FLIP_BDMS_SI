@@ -12,17 +12,23 @@
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 
 from data_access_api.config import get_settings
-from data_access_api.routers.schema import CohortQueryInput, DataframeQuery, StatisticsResponse
+from data_access_api.routers.schema import (
+    AccessionIdsResponse,
+    CohortQueryInput,
+    DataframeQuery,
+    StatisticsResponse,
+)
 from data_access_api.services.cohort import get_records, get_statistics, validate_query
 from data_access_api.utils.encryption import decrypt
+from data_access_api.utils.internal_auth import authenticate_internal_service
 from data_access_api.utils.logger import logger
 
 # Create Router
-router = APIRouter(prefix="/cohort", tags=["Cohort"])
+router = APIRouter(prefix="/cohort", tags=["Cohort"], dependencies=[Depends(authenticate_internal_service)])
 
 
 @router.post("/", response_model=StatisticsResponse)
@@ -120,3 +126,58 @@ def get_dataframe(query_input: DataframeQuery) -> dict[str, list[Any]]:
         raise HTTPException(status_code=500, detail=str(e))
 
     return df.to_dict(orient="list")
+
+
+@router.post("/accession-ids", response_model=AccessionIdsResponse)
+def get_accession_ids(query_input: DataframeQuery) -> AccessionIdsResponse:
+    """
+    Returns only the ``accession_id`` column of the cohort, projected server-side.
+
+    The caller's query is wrapped as ``SELECT accession_id FROM (<query>) sub`` so
+    no other columns ever cross the trust boundary. This is the minimal-disclosure
+    endpoint used by imaging-api to fetch the accession numbers it needs to import
+    studies from PACS — it does not expose row-level patient attributes.
+
+    Args:
+        query_input (DataframeQuery): The cohort query.
+
+    Returns:
+        AccessionIdsResponse: The accession IDs returned by the cohort query.
+
+    Raises:
+        HTTPException: If the query is invalid, does not select an ``accession_id``
+            column, or fails during execution.
+    """
+    project_id = decrypt(query_input.encrypted_project_id)
+
+    logger.info(f"Received accession-ids query for project {project_id}")
+
+    try:
+        validate_query(query_input.query)
+    except ValueError as e:
+        logger.error(f"Invalid query: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Strip trailing whitespace and a single optional trailing semicolon so the
+    # caller's SQL composes cleanly inside a SELECT subquery.
+    inner_query = query_input.query.rstrip().rstrip(";").rstrip()
+    wrapped_query = f"SELECT accession_id FROM ({inner_query}) AS cohort_subquery"
+
+    try:
+        df = get_records(wrapped_query)
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if "accession_id" not in df.columns:
+        raise HTTPException(
+            status_code=400,
+            detail="Cohort query did not return an 'accession_id' column.",
+        )
+
+    accession_ids = [str(value) for value in df["accession_id"].tolist()]
+    logger.info(f"accession-ids query for project {project_id} returned {len(accession_ids)} ids")
+    return AccessionIdsResponse(accession_ids=accession_ids)

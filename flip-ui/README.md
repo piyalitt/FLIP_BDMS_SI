@@ -70,15 +70,123 @@ variables by [`scripts/generate-window-js.sh`](scripts/generate-window-js.sh):
 
 No environment-specific Cognito IDs or API URLs live in the repo.
 
+The UI reads its config at runtime from `window.*` (generated into
+`dist/js/window.js` by `scripts/generate-window-js.sh` from the env
+at dev-start or deploy time). The same env vars drive the rest of the
+stack, so there is no VITE_-prefixed duplication to keep in sync.
+
 | Variable | Description |
 | --- | --- |
-| `VITE_AWS_USER_POOL_ID` | AWS Cognito User Pool ID for authentication |
-| `VITE_AWS_CLIENT_ID` | AWS Cognito App Client ID |
-| `VITE_AWS_BASE_URL` | Full base URL of the flip-api backend, including `/api` |
+| `AWS_COGNITO_USER_POOL_ID` | Cognito User Pool ID |
+| `AWS_COGNITO_APP_CLIENT_ID` | Cognito App Client ID |
+| `AWS_REGION` | AWS region hosting the pool (default `eu-west-2`) |
+| `CENTRAL_HUB_API_URL` | Full base URL of the flip-api backend, including `/api` |
+| `BLACKLISTED_MODEL_FILES` | Comma-separated file names to reject in model uploads |
 | `VITE_LOCAL` | Set to `true` for local mock mode (bypasses Cognito) |
 
 Authentication is handled through [AWS Cognito](https://docs.aws.amazon.com/cognito/). A valid Cognito User Pool and
 Client ID are required for a production deployment.
+
+## Testing
+
+### Unit tests (Vitest)
+
+```bash
+cd flip-ui
+npm install
+npm run test:unit          # one-off run with coverage
+npm run test:unit:watch    # watch mode while iterating
+```
+
+Unit tests live alongside source under `src/**/*.spec.ts` and run in jsdom with Pinia / Vue Router stubs.
+
+### End-to-end tests (Cypress)
+
+The Cypress suite under [`test/cypress/integration/`](test/cypress/integration) drives the UI in Chrome against a
+**stubbed API** — every backend call is intercepted at the network layer in
+[`test/cypress/support/globalIntercepts.ts`](test/cypress/support/globalIntercepts.ts) and Cognito auth is short-circuited
+in [`test/cypress/support/cognito.ts`](test/cypress/support/cognito.ts) by writing a fixture token straight into
+`localStorage`. The suite needs no real backend, no AWS account and no Cognito user pool.
+
+Specs are split into six groups (`group-1` … `group-6`) so CI can run them in parallel.
+The split is **by file**, not by feature — it's purely a sharding device for the matrix
+job, balanced so the slowest single shard (rather than the sum of all specs) sets the
+wall-clock time. There's no semantic difference between adding a new spec to one group
+versus another; pick the group with the fewest existing specs (or the shortest total
+runtime).
+
+#### Run the full suite locally
+
+```bash
+cd flip-ui
+npm install
+# One-shot env file. Values are dummies — the suite mocks Cognito + the API,
+# so nothing here ever leaves the box. Match the values used in CI.
+cat > .env.development <<'EOF'
+VITE_LOCAL=false
+VITE_E2E=true
+CENTRAL_HUB_API_URL=http://localhost:8080
+AWS_COGNITO_USER_POOL_ID=eu-west-2_DUMMY1234
+AWS_COGNITO_APP_CLIENT_ID=dummyclientid1234567890ab
+AWS_REGION=eu-west-2
+BLACKLISTED_MODEL_FILES=flip.py,server_app.py
+EOF
+npm run test:ci            # boots the dev server on :4173 and runs cypress
+```
+
+`test:ci` uses `start-server-and-test` to start the Vite dev server (`npm run test:start`, plain HTTP on
+`http://localhost:4173`) and then runs `cypress run --browser chrome` against it. The non-privileged port `4173`
+avoids the need to run with `sudo` on Linux/macOS and matches the port used in CI.
+
+To open the Cypress GUI for interactive debugging:
+
+```bash
+npm run test:start &       # in one shell — leave running
+npx cypress open           # in another — pick a spec
+```
+
+#### Run a single group
+
+```bash
+# with the dev server running (npm run test:start &), then in another shell:
+npx cypress run --browser chrome --spec 'test/cypress/integration/group-3/**/*.spec.ts'
+```
+
+#### Run via Docker (no host Chrome / Xvfb required)
+
+On Linux without `xvfb` installed, or anywhere you'd rather not install
+Chrome locally, run Cypress out of the official `cypress/included` image. The
+dev server stays on the host (so hot-reload still picks up your edits); the
+container reaches it via `--network host`.
+
+```bash
+cd flip-ui
+make e2e_test_docker        # full suite, end-to-end (boots Vite, runs cypress in docker)
+
+# Or, if you already have npm run test:start running in another shell:
+docker run --rm --network host \
+    -v "$PWD":/e2e -w /e2e --entrypoint cypress \
+    cypress/included:14.5.2 \
+    run --browser electron \
+    --spec 'test/cypress/integration/group-3/**/*.spec.ts'
+```
+
+The image (`cypress/included:14.5.2`) is ~3 GB on first pull and cached
+afterwards. Pin the tag to whatever `cypress` version is in `package.json` so
+the binary in the image matches the project config.
+
+#### CI
+
+The Cypress suite runs on every PR and on push to `develop` / `main` via the `cypress-e2e` job in
+[`.github/workflows/test_flip_ui.yml`](../.github/workflows/test_flip_ui.yml). The job:
+
+- Uses `cypress-io/github-action@v6`, which caches the Cypress binary and `node_modules` between runs.
+- Fans out across the six spec groups via a `strategy.matrix.group` so wall-clock time stays short.
+- Boots the Vite dev server with the same `.env.development` stub shown above.
+- On failure, uploads `test/cypress/screenshots` as an artefact (`cypress-screenshots-<group>`, retained 7 days).
+
+Running the suite against the **real** backend stack is out of scope for the in-repo CI — that's the nightly E2E job
+tracked separately. Anything in this suite must be runnable purely from fixtures.
 
 ## Further Reading
 

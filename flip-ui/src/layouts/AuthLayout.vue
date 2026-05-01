@@ -11,7 +11,7 @@
     limitations under the License.
 -->
 
-﻿<template>
+<template>
     <AiErrorAlert v-if="errorStore.hasError" class="absolute z-10" />
     <div class="bg-body dark:bg-gray-900">
         <div class="flex items-center justify-center h-screen">
@@ -31,12 +31,16 @@
                 <div class="flex flex-grow p-2 md:pl-4">
                     <div class="flex flex-col flex-grow">
                         <div class="flex pb-1">
-                            <template v-if="routeName !== 'auth-Login'">
-                                <router-link to="/auth/login" class="inline-flex items-center text-sm">
-                                    <icon-mdi-chevron-left class="mr-1" />
-                                    Back to log in
-                                </router-link>
-                            </template>
+                            <button
+                                v-if="showBackToLogin"
+                                type="button"
+                                data-test="back-to-login"
+                                class="inline-flex items-center text-sm"
+                                @click="backToLogin"
+                            >
+                                <icon-mdi-chevron-left class="mr-1" />
+                                Back to log in
+                            </button>
                             <div class="flex-grow" />
                             <img src="/images/nhs-logo.png" alt="NHS logo" class="h-[40px] rounded">
                         </div>
@@ -49,15 +53,35 @@
 </template>
 
 <script setup lang="ts">
+import { signOut as amplifySignOut } from "aws-amplify/auth";
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 
 import AiErrorAlert from "@/components/AiAlert/AiErrorAlert.vue";
 import LoginBranding from "@/partials/auth/LoginBranding.vue";
+import { useAuthStore } from "@/store/auth";
 import { useErrorStore } from "@/store/error";
 
 const errorStore = useErrorStore();
+const authStore = useAuthStore();
 const route = useRoute();
 
 const routeName = computed(() => route?.name);
+
+const showBackToLogin = computed(() => routeName.value !== "auth-Login");
+
+// Leave the current auth flow and land on /auth/login, whatever the
+// current state is. A soft Vue Router push is not safe here: after a
+// failed MFA attempt Amplify can leave in-memory state (and Pinia can
+// leave `signInStep`) that the router guard or Login.vue's onBeforeMount
+// will use to bounce the user straight back to the challenge page. A
+// hard navigation (window.location.assign) tears the whole SPA down and
+// brings it back up against the freshly-cleared localStorage, so there
+// is nothing left to resurrect.
+const backToLogin = (): void => {
+    amplifySignOut().catch(() => { /* no-op: nothing to sign out of is fine */ });
+    authStore.$reset();
+    localStorage.clear();
+    window.location.assign("/auth/login");
+};
 </script>

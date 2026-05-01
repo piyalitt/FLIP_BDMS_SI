@@ -14,79 +14,174 @@
 
 
 
-import type { AxiosResponse } from "axios";
+import { type AxiosResponse, isAxiosError } from "axios";
+
+import { FileUploadStatus } from "@/interfaces/model/types";
+
 import { _http } from "./api";
-import { DEFAULT_JOB_TYPE, fetchJobTypes, isValidJobType, type JobType, type JobTypesResponse } from "./model-service";
+import { DEFAULT_JOB_TYPE,
+    fetchJobTypes,
+    getRequiredFilesForJobType,
+    isValidJobType,
+    type JobType,
+    type JobTypesResponse } from "./model-service";
 
 /**
- * Interface for the config.json file structure.
- * Only includes fields relevant for determining required files.
+ * Typed view of `config.json`. Only `job_type` is consumed by the UI; other
+ * fields are passed through as `unknown`.
  */
 export interface IModelConfig {
-    job_type?: string;
+    job_type?: JobType;
     [key: string]: unknown;
 }
 
 export const downloadModelFile = async (url: string): Promise<Blob> => {
-  const response: AxiosResponse<Blob> = await _http.get(url, { responseType: "blob" });
+    const response: AxiosResponse<Blob> = await _http.get(url, { responseType: "blob" });
 
-  return response.data;
+    return response.data;
 };
 
 /**
- * Fetches and parses the config.json file for a model.
- * @param modelId - The model ID
- * @returns The parsed config object, or null if not found/invalid
+ * Fetches and parses the `config.json` file for a model.
+ *
+ * Returns `null` for legitimate "no usable config" cases — a 404 (file not
+ * yet uploaded) or unparseable JSON. Transient network/server errors
+ * (5xx, CORS, timeout) are re-thrown so the caller can distinguish "config
+ * genuinely missing" from "we couldn't reach S3 right now" and retry on the
+ * next poll instead of silently locking in a default.
  */
 export const getModelConfig = async (modelId: string): Promise<IModelConfig | null> => {
+    const path = `/files/model/${modelId}/${encodeURIComponent("config.json")}`;
+    let blob: Blob;
     try {
-        const path = `/files/model/${modelId}/${encodeURIComponent("config.json")}`;
-        const blob = await downloadModelFile(path);
+        blob = await downloadModelFile(path);
+    } catch (error) {
+        if (isAxiosError(error) && error.response?.status === 404) {
+            return null;
+        }
+        throw error;
+    }
+    try {
         const text = await blob.text();
+
         return JSON.parse(text) as IModelConfig;
-    } catch {
-        // Config file doesn't exist or is invalid JSON
+    } catch (error) {
+        console.warn(
+            `[getModelConfig] config.json for model ${modelId} could not be parsed; treating as missing:`,
+            error
+        );
+
         return null;
     }
 };
 
 /**
- * Extracts the job_type from config.json, validating against available job types from the API.
- * Defaults to 'standard' if not found, missing, or invalid.
- * @param modelId - The model ID
- * @param jobTypes - Optional pre-fetched job types. If not provided, will fetch from API.
- * @returns The job type from config.json or 'standard' as default
+ * Extracts the job_type from `config.json`, validating against available job
+ * types from the API. Returns the default for "no usable config" cases (file
+ * missing, unparseable, missing/invalid `job_type` field). Transient fetch
+ * failures from `getModelConfig` propagate so the caller can decide retry
+ * policy.
  */
 export const getJobTypeFromConfig = async (
     modelId: string,
     jobTypes?: JobTypesResponse
 ): Promise<JobType> => {
-    try {
-        // Fetch job types if not provided
-        const availableJobTypes = jobTypes ?? await fetchJobTypes();
-        const config = await getModelConfig(modelId);
+    const availableJobTypes = jobTypes ?? await fetchJobTypes();
+    const config = await getModelConfig(modelId);
 
-        console.log("[getJobTypeFromConfig] Fetched config:", config);
-        console.log("[getJobTypeFromConfig] job_type value:", config?.job_type);
-        console.log("[getJobTypeFromConfig] Available job types:", Object.keys(availableJobTypes));
-
-        // If config exists and has a valid job_type, use it
-        if (config && config.job_type && isValidJobType(availableJobTypes, config.job_type)) {
-            console.log("[getJobTypeFromConfig] Using job_type from config:", config.job_type);
-            return config.job_type;
-        }
-
-        // Default to standard if:
-        // - config.json couldn't be fetched
-        // - config.json doesn't have job_type field
-        // - job_type has an invalid/unknown value
-        console.log("[getJobTypeFromConfig] Defaulting to standard");
-        return DEFAULT_JOB_TYPE;
-    } catch (error) {
-        // If anything goes wrong, default to standard
-        console.error("[getJobTypeFromConfig] Error:", error);
-        return DEFAULT_JOB_TYPE;
+    if (config && config.job_type && isValidJobType(availableJobTypes, config.job_type)) {
+        return config.job_type;
     }
+
+    // Default to standard if:
+    // - config.json hasn't been uploaded (404)
+    // - config.json doesn't have job_type field
+    // - job_type has an invalid/unknown value
+    return DEFAULT_JOB_TYPE;
+};
+
+/**
+ * Result of resolving the model's `config.json` state for a poll tick.
+ *
+ * `{ changed: false }` — caller does nothing this tick. Encompasses both the
+ * steady state (status hasn't moved) and a transient fetch failure (the next
+ * poll will retry because `previousStatus` was not advanced).
+ *
+ * `{ changed: true, ... }` — caller updates its tracker and downstream refs
+ * (`currentJobType`, `requiredFiles`) from the returned values.
+ *
+ * Only the `changed: true` arm exposes `configStatus`/`jobType`/`requiredFiles`,
+ * so a caller cannot accidentally read filler values from a no-op result.
+ */
+export type IResolvedConfigState =
+    | { changed: false }
+    | {
+        changed: true;
+        configStatus: FileUploadStatus | null;
+        jobType: JobType;
+        requiredFiles: string[];
+    };
+
+/**
+ * Decides whether `config.json` needs re-reading for a poll tick and — if so —
+ * resolves the job type and the required files that follow from it.
+ *
+ * The model detail page polls on a fixed interval. `config.json` is immutable
+ * once uploaded, so we only re-download it when its upload status transitions
+ * (e.g. `null` → `SCANNING` → `COMPLETED`, or reset on delete).
+ *
+ * On a transient fetch failure during the `→ COMPLETED` transition, returns
+ * `{ changed: false }` so the caller leaves `previousStatus` intact and the
+ * next poll re-attempts the fetch — preventing "stuck on DEFAULT_JOB_TYPE"
+ * for the rest of the session.
+ *
+ * @param files - Files currently reported by the model API
+ * @param previousStatus - Status observed on the previous tick (`null` if none)
+ * @param jobTypes - Cached job type → required files map
+ * @param modelId - Model ID, used to fetch `config.json` when status becomes COMPLETED
+ */
+export const resolveModelConfigState = async (
+    files: { name: string; status: FileUploadStatus }[],
+    previousStatus: FileUploadStatus | null,
+    jobTypes: JobTypesResponse,
+    modelId: string
+): Promise<IResolvedConfigState> => {
+    const configFile = files.find(f => f.name === "config.json");
+    const configStatus: FileUploadStatus | null = configFile?.status ?? null;
+
+    if (configStatus === previousStatus) {
+        return { changed: false };
+    }
+
+    let jobType: JobType = DEFAULT_JOB_TYPE;
+    if (configFile && configStatus === FileUploadStatus.COMPLETED) {
+        try {
+            jobType = await getJobTypeFromConfig(modelId, jobTypes);
+        } catch (error) {
+            // Transient fetch failure (5xx, network, CORS). Reporting "no
+            // change" leaves previousStatus intact so the next poll re-attempts
+            // the fetch instead of locking in DEFAULT_JOB_TYPE for the session.
+            console.warn(
+                `[resolveModelConfigState] Failed to fetch config.json for model ${modelId}; will retry on next poll:`,
+                error
+            );
+
+            return { changed: false };
+        }
+    }
+
+    if (process.env.NODE_ENV === "development") {
+        console.debug(
+            `config.json status changed: ${previousStatus} -> ${configStatus}; jobType=${jobType}`
+        );
+    }
+
+    return {
+        changed: true,
+        configStatus,
+        jobType,
+        requiredFiles: getRequiredFilesForJobType(jobTypes, jobType)
+    };
 };
 
 export const deleteModelFile = async (url: string): Promise<string> => {
