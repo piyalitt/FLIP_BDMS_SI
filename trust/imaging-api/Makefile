@@ -27,7 +27,6 @@ endif
 service_name = imaging-api
 lint_command = uv run ruff check . --fix
 test_coverage_html_command = uv run pytest --tb=short --disable-warnings --cov=imaging_api/ --cov-report=html --cov-report=term-missing --cov-report=xml:coverage.xml
-test_coverage_html_command_integration = uv run pytest ./tests/integration --tb=short --disable-warnings --cov=imaging_api/ --cov-report=html:htmlcov-integration --cov-report=term-missing --cov-report=xml:coverage-integration.xml
 docker_command = docker compose -f ../compose_trust.development.yml
 run_clean = run --rm --remove-orphans
 mypy_command = uv run mypy . --ignore-missing-imports
@@ -65,8 +64,3 @@ local_test:
 	export BASE_IMAGES_DOWNLOAD_DIR=/tmp/images; \
 	$(lint_command) && $(mypy_command) && $(test_coverage_html_command)
 unit_test: local_test
-integration_test:
-# 	Just set the XNAT_PORT to a dummy value for the tests to run
-	@export XNAT_PORT=1111; \
-	export BASE_IMAGES_DOWNLOAD_DIR=/tmp/images; \
-	$(lint_command) && $(mypy_command) && $(test_coverage_html_command_integration)

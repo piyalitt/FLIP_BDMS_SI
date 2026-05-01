@@ -170,10 +170,6 @@ This populates `TRUST_INTERNAL_SERVICE_KEYS` (a JSON dict keyed by trust name) i
 
 For more on the threat model, see the **Trust-internal Service Authentication** section in [`CLAUDE.md`](../../CLAUDE.md).
 
-## Testing
-
-Tests are split into `tests/unit/` (no real backing services) and `tests/integration/` (real Orthanc / XNAT / sibling APIs). See [Where does my test go?](../../CONTRIBUTING.md#where-does-my-test-go) in `CONTRIBUTING.md` for the placement rule.
-
 ## Further Reading
 
 - [XNAT setup](../xnat/README.md)

@@ -264,7 +264,6 @@ unit_test:
 
 integration_test:
 	$(MAKE) -C flip-api integration_test
-	$(MAKE) -C trust integration_test
 
 generate-trust-api-keys:
 	$(MAKE) -C flip-api generate-trust-api-keys $(if $(ENV_FILE),ENV_FILE=$(ENV_FILE))
