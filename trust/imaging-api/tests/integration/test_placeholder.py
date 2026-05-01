@@ -14,5 +14,5 @@ import pytest
 
 def test_integration_scaffold_placeholder():
     pytest.skip(
-        "Integration test scaffold for #63; replace with B4 trust-api + imaging-api + Orthanc imaging tests coverage."
+        "Integration scaffold for #63; replace with B4 trust-api + imaging-api + DICOM/PACS tests coverage."
     )

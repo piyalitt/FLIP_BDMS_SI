@@ -27,7 +27,7 @@ endif
 service_name = data-access-api
 lint_command = uv run ruff check . --fix
 test_coverage_html_command = uv run pytest --tb=short --disable-warnings --cov=data_access_api/ --cov-report=html --cov-report=term-missing --cov-report=xml:coverage.xml
-test_coverage_html_command_integration = uv run pytest ./tests/integration --tb=short --disable-warnings --cov=data_access_api/ --cov-report=html --cov-report=term-missing --cov-report=xml:coverage.xml
+test_coverage_html_command_integration = uv run pytest ./tests/integration --tb=short --disable-warnings --cov=data_access_api/ --cov-report=html:htmlcov-integration --cov-report=term-missing --cov-report=xml:coverage-integration.xml
 docker_command = docker compose -f ../compose_trust.development.yml
 run_clean = run --rm --remove-orphans
 mypy_command = uv run mypy . --ignore-missing-imports
@@ -60,5 +60,5 @@ local_test:
 	$(lint_command) && $(mypy_command) && $(test_coverage_html_command)
 unit_test: local_test
 integration_test:
-	BASE_IMAGES_DOWNLOAD_DIR="/tmp/images" \
+	@export BASE_IMAGES_DOWNLOAD_DIR="/tmp/images"; \
 	$(lint_command) && $(mypy_command) && $(test_coverage_html_command_integration)

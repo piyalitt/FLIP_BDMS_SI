@@ -14,5 +14,5 @@ import pytest
 
 def test_integration_scaffold_placeholder():
     pytest.skip(
-        "Integration test scaffold for #63; replace with B3 trust-api + data-access-api + omop-db cohort tests coverage."
+        "Integration scaffold for #63; replace with B3 trust-api + data-access-api + omop-db cohort tests coverage."
     )
