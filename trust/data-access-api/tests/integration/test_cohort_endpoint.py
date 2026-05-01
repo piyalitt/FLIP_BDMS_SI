@@ -26,8 +26,18 @@ from tests.integration.conftest import AUTH_HEADERS
 
 @pytest.fixture
 def http_client(data_access_api_url: str):
-    """Plain httpx client with auth pre-baked. Per-test scope so timeouts stay tight."""
-    with httpx.Client(base_url=data_access_api_url, headers=AUTH_HEADERS, timeout=30.0) as client:
+    """Plain httpx client with auth pre-baked. Per-test scope so timeouts stay tight.
+
+    ``follow_redirects=True`` matches trust-api's ``make_request`` defaults — without
+    it, posts to ``/cohort`` (no trailing slash) hit FastAPI's slash-redirect and the
+    test reads a 307 instead of the real handler response.
+    """
+    with httpx.Client(
+        base_url=data_access_api_url,
+        headers=AUTH_HEADERS,
+        timeout=30.0,
+        follow_redirects=True,
+    ) as client:
         yield client
 
 
@@ -83,7 +93,9 @@ def test_cohort_endpoint_rejects_unsafe_sql(http_client):
 
 def test_cohort_endpoint_requires_auth_header(data_access_api_url):
     """The ``/cohort`` router is gated by the trust-internal service key."""
-    with httpx.Client(base_url=data_access_api_url, timeout=30.0) as client:
+    with httpx.Client(
+        base_url=data_access_api_url, timeout=30.0, follow_redirects=True
+    ) as client:
         response = client.post(
             "/cohort", json=_cohort_payload("SELECT * FROM omop.image_occurrence")
         )
