@@ -57,6 +57,11 @@ services:
     depends_on:
       omop-db-test:
         condition: service_healthy
+    # Override the entrypoint script — it forks based on $ENV and adds either
+    # ``fastapi dev --reload`` or ``fastapi run`` (multi-worker). For a hermetic
+    # test stack we want the simplest possible single-worker uvicorn process so
+    # the healthcheck and fixture wait deterministically.
+    command: ["uv", "run", "uvicorn", "data_access_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       OMOP_DB_SERVICE_NAME: omop-db-test
       OMOP_DB_PORT: "5432"
@@ -64,9 +69,6 @@ services:
       DATA_ACCESS_POSTGRES_PASSWORD: test_password
       OMOP_POSTGRES_DB: test_omop_db
       AES_KEY_BASE64: "QgZ+TBA0lUxcuCiRPLneFe/JjMaUEUJWHACHHGz2gGA="  # pragma: allowlist secret
-      # Use the production entrypoint branch (`fastapi run`) so the test stack
-      # doesn't pay the dev/--reload startup cost or trip on file-watcher quirks
-      # under Docker — the integration suite never edits source between requests.
       ENV: production
       DEBUG: "false"
       LOG_LEVEL: INFO
@@ -75,7 +77,11 @@ services:
       # in-process trust-api side and the containerised data-access-api use the
       # same per-trust shared secret on every /cohort call.
       TRUST_INTERNAL_SERVICE_KEY: "test-trust-internal-service-key"  # pragma: allowlist secret
-      COHORT_QUERY_THRESHOLD: "10"
+      # 5 instead of the prod default of 10 so the seed's 6 M + 6 F image-bearing
+      # patients each clear the bucket-rollup threshold individually, letting the
+      # sex/age distribution assertions test the real per-bucket counts rather
+      # than always rolling into the "Other" bucket.
+      COHORT_QUERY_THRESHOLD: "5"
     ports:
       - "8000"
     volumes:
@@ -88,3 +94,7 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+      # Grace window before failed probes count against the retry budget — uvicorn
+      # cold start can take a few seconds on the first request even after the
+      # process binds the port.
+      start_period: 10s

@@ -82,15 +82,16 @@ async def test_happy_path_image_counts_and_age_sex(stub_hub_received):
     assert counts == {"person\nid": 24, "modality\nconcept\nid": 24, "accession\nid": 24}
 
     # Sex Distribution: persons 1-12 appear in image_occurrence; 6 M, 6 F. The SQL
-    # groups by gender_source_value of distinct person_id. Both groups clear the
-    # COHORT_QUERY_THRESHOLD (10), so neither rolls into "Other".
+    # groups by gender_source_value of distinct person_id. The compose stack runs
+    # with COHORT_QUERY_THRESHOLD=5 (see trust/compose.test.yml), so 6 clears the
+    # bucket-rollup threshold and neither value collapses into "Other".
     sex = _aggregate(body, "Sex Distribution")
     assert sex == {"M": 6, "F": 6}
 
-    # Age Distribution: 12 distinct person_ids, decade-bucketed. Each bucket count
-    # below the threshold rolls into "Other"; only the rolled-up value survives.
+    # Age Distribution: 12 distinct person_ids, decade-bucketed. The largest bucket
+    # holds 3 patients, all below the threshold of 5, so every bucket rolls into
+    # the single "Other" row.
     age = _aggregate(body, "Age Distribution")
-    # All buckets are individually below threshold, so the whole 12 lands in "Other".
     assert age == {"Other": 12}
 
 
