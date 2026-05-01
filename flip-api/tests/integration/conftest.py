@@ -30,7 +30,9 @@ assertions.
 import os
 from collections.abc import Generator
 from unittest.mock import patch
+from urllib.parse import urlparse
 
+import boto3
 import pytest
 from moto import mock_aws
 from sqlalchemy import text
@@ -45,6 +47,7 @@ import flip_api.db.database as db_module
 import flip_api.db.models.main_models  # noqa: F401
 import flip_api.db.models.user_models  # noqa: F401
 import tests.fixtures.main_fixtures as main_fixtures
+from flip_api.config import get_settings
 from flip_api.db.database import get_session
 from flip_api.db.seed.permissions import seed_permissions
 from flip_api.db.seed.role_permissions import seed_role_permissions
@@ -222,3 +225,42 @@ def session(integration_engine) -> Generator[Session, None, None]:
     """
     with Session(integration_engine) as s:
         yield s
+
+
+def _bucket_name_from_setting(value: str) -> str:
+    """Extract the S3 bucket name from a ``Settings`` bucket value.
+
+    Production env files set bucket settings as ``s3://bucket/some/prefix``,
+    so the netloc is the real bucket name. Tests that want to seed objects
+    in moto need just the bucket part.
+    """
+    parsed = urlparse(value)
+    return parsed.netloc or parsed.path.lstrip("/").split("/", 1)[0]
+
+
+@pytest.fixture
+def s3_buckets(aws_mock) -> dict[str, str]:
+    """Create the buckets named in ``Settings`` inside the moto fake.
+
+    Returns the mapping of setting-name → bucket-name so individual tests
+    can address objects without re-parsing the setting value. Idempotent
+    creation: ``BucketAlreadyOwnedByYou`` is swallowed so re-running the
+    fixture across tests in the same session doesn't error.
+    """
+    settings = get_settings()
+    bucket_settings = {
+        "UPLOADED_MODEL_FILES_BUCKET": settings.UPLOADED_MODEL_FILES_BUCKET,
+        "SCANNED_MODEL_FILES_BUCKET": settings.SCANNED_MODEL_FILES_BUCKET,
+        "UPLOADED_FEDERATED_DATA_BUCKET": settings.UPLOADED_FEDERATED_DATA_BUCKET,
+        "FL_APP_BASE_BUCKET": settings.FL_APP_BASE_BUCKET,
+        "FL_APP_DESTINATION_BUCKET": settings.FL_APP_DESTINATION_BUCKET,
+    }
+    bucket_names = {key: _bucket_name_from_setting(value) for key, value in bucket_settings.items()}
+
+    s3 = boto3.client("s3")
+    for bucket in set(bucket_names.values()):
+        try:
+            s3.create_bucket(Bucket=bucket)
+        except s3.exceptions.BucketAlreadyOwnedByYou:
+            pass
+    return bucket_names
