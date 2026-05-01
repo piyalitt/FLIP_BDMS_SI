@@ -73,11 +73,12 @@ make debug-off-all         # Remove all debug modes
 
 ```bash
 make unit_test             # All unit tests across all services (from root)
+make integration_test      # flip-api + trust integration tests (from root)
 make tests                 # flip-ui + flip-api tests (from root)
 # From a service directory (e.g., flip-api/):
 make test                  # ruff + mypy + pytest (unit + integration)
 make unit_test             # Unit tests only
-make integration_test      # Integration tests only
+make integration_test      # Integration tests only (also available from root and trust/)
 make local_test            # Tests without Docker
 ```
 

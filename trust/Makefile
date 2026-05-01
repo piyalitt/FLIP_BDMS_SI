@@ -10,7 +10,7 @@
 # limitations under the License.
 #
 
-.PHONY: build dev prod clean stop up down up-trust-1 up-trust-2 down-trust-1 down-trust-2 up-local-trust down-local-trust create-networks create-networks-local-trust remove-networks recreate-networks tests update-omop-data update-orthanc-data
+.PHONY: build dev prod clean stop up down up-trust-1 up-trust-2 down-trust-1 down-trust-2 up-local-trust down-local-trust create-networks create-networks-local-trust remove-networks recreate-networks tests update-omop-data update-orthanc-data integration_test
 # if tag PROD=true is passed, set PROD=true
 ifeq ($(PROD),true)
 MAIN_ENV_FILE=../.env.production
@@ -273,3 +273,9 @@ debug-imaging-api-off:
 debug-trust-api-off:
 	DEBUG=false $(TRUST_1_VARS) ${DEBUG_OVERRIDE_COMPOSE_COMMAND} -p ${trust1} up --remove-orphans -d trust-api
 
+
+
+integration_test:
+	$(MAKE) -C data-access-api integration_test
+	$(MAKE) -C imaging-api integration_test
+	$(MAKE) -C trust-api integration_test
