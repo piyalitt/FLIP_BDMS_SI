@@ -158,16 +158,33 @@ def test_has_role_false_when_user_has_no_roles(session, user_factory):
     assert has_role(user.id, session) is False
 
 
-def test_role_permission_seed_contract_matches_PermissionRef(session):
-    """Sanity check on the seed contract itself.
+def test_role_permission_seed_contract(session):
+    """Full seed-contract check across every role in ``RoleRef``.
 
-    If ``PermissionRef`` ever drifts ahead of the seed (i.e. a new perm enum value is added
-    but ``seed_role_permissions`` isn't updated to grant it to Admin), every Admin auth
-    check on that perm starts silently failing in prod. Catch the drift here.
+    Three failure modes are caught here:
+
+    * a new ``PermissionRef`` value is added but ``seed_role_permissions`` is not updated to
+      grant it to Admin (Admin auth on that perm silently fails in prod);
+    * a perm is pulled from a role's grant list (the role loses access without anyone noticing);
+    * a perm leaks onto Observer (read-only role escalates).
+
+    Expected map mirrors the docstring on ``seed_role_permissions``. If you change the seed,
+    update this map in the same commit — that's the point of the contract.
     """
-    admin_perm_ids = session.exec(
-        RolePermission.__table__.select().where(RolePermission.role_id == RoleRef.ADMIN.value)
-    ).all()
-    granted = {row.permission_id for row in admin_perm_ids}
-    expected = {p.value for p in PermissionRef}
-    assert granted == expected, f"Admin role-perm seed drift: missing {expected - granted}, extra {granted - expected}"
+    expected_by_role = {
+        RoleRef.ADMIN.value: {p.value for p in PermissionRef},
+        RoleRef.RESEARCHER.value: {PermissionRef.CAN_CREATE_PROJECTS.value},
+        RoleRef.OBSERVER.value: set(),
+    }
+
+    rows = session.exec(RolePermission.__table__.select()).all()
+    granted_by_role: dict = {}
+    for row in rows:
+        granted_by_role.setdefault(row.role_id, set()).add(row.permission_id)
+
+    for role_id, expected in expected_by_role.items():
+        granted = granted_by_role.get(role_id, set())
+        assert granted == expected, (
+            f"role-perm seed drift for role {role_id}: "
+            f"missing {expected - granted}, extra {granted - expected}"
+        )

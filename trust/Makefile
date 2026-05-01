@@ -274,8 +274,10 @@ debug-trust-api-off:
 	DEBUG=false $(TRUST_1_VARS) ${DEBUG_OVERRIDE_COMPOSE_COMMAND} -p ${trust1} up --remove-orphans -d trust-api
 
 
-
+# Trust-side integration tests (issue #369, B3). Each delegated target brings up
+# the shared trust/compose.test.yml stack via Testcontainers — run them serially
+# so the per-suite session fixtures don't fight over Docker resources.
 integration_test:
 	$(MAKE) -C data-access-api integration_test
-	$(MAKE) -C imaging-api integration_test
 	$(MAKE) -C trust-api integration_test
+

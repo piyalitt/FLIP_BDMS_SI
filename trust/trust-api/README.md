@@ -79,7 +79,12 @@ one replica.
 
 ## Testing
 
-Tests are split into `tests/unit/` (no real backing services) and `tests/integration/` (real backing services such as the OMOP DB, Orthanc, sibling APIs). See [Where does my test go?](../../CONTRIBUTING.md#where-does-my-test-go) in `CONTRIBUTING.md` for the placement rule.
+Tests are split into `tests/unit/` (no real backing services) and `tests/integration/` (real OMOP database via the shared `trust/compose.test.yml` stack). See [Where does my test go?](../../CONTRIBUTING.md#where-does-my-test-go) in `CONTRIBUTING.md` for the placement rule, and [`trust/README.md`](../README.md#integration-tests-cohort-query-end-to-end) for how the cohort-query end-to-end suite is wired.
+
+```bash
+make local_test         # ruff + mypy + unit suite (no Docker required)
+make integration_test   # ruff + mypy + cohort-query end-to-end suite (Docker required)
+```
 
 ## Further Reading
 

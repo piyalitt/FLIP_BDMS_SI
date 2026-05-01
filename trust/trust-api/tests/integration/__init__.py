@@ -9,4 +9,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Integration test scaffolding for trust-api."""
+"""Integration tests for trust-api against a real Compose-managed stack."""
