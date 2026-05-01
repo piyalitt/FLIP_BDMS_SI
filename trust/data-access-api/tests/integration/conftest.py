@@ -15,13 +15,26 @@ Mirrors ``trust/trust-api/tests/integration/conftest.py`` — same Compose stack
 seed file, same key — but the tests here drive the data-access-api ``/cohort`` routes
 directly without going through trust-api. This catches schema / SQL-template / auth
 regressions that only show up with a real Postgres backend.
+
+The AES key has to be aligned end-to-end: ``test_dataframe_endpoint_returns_seeded_columns``
+encrypts a project id in the test process and the container decrypts it, so a mismatch
+silently produces a 500. The unit conftest (``tests/conftest.py``) only sets defaults
+when the key is unset, but in CI ``.env.development`` is populated from a GitHub Secret
+that overrides the test value — pin the env var here unconditionally so the test
+process and the container always agree on the key the compose stack uses.
 """
 
-from collections.abc import Generator
-from pathlib import Path
+import os
 
-import pytest
-from testcontainers.compose import DockerCompose
+# Pin the AES key BEFORE any data_access_api module loads its Settings singleton.
+# Same value as trust/compose.test.yml so encrypt/decrypt round-trip works.
+os.environ["AES_KEY_BASE64"] = "QgZ+TBA0lUxcuCiRPLneFe/JjMaUEUJWHACHHGz2gGA="  # pragma: allowlist secret
+
+from collections.abc import Generator  # noqa: E402  — must come after the env override
+from pathlib import Path  # noqa: E402
+
+import pytest  # noqa: E402
+from testcontainers.compose import DockerCompose  # noqa: E402
 
 # Resolve the path to ``trust/`` from this file
 # (``trust/data-access-api/tests/integration/conftest.py``).
