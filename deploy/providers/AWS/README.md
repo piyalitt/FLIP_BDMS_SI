@@ -161,6 +161,8 @@ The `PROD` variable determines which environment files are loaded:
 
 If `PROD` is omitted when running the AWS provider Makefile, it defaults to staging.
 
+The Makefile maps `PROD` onto `TF_VAR_environment` (`prod` when `PROD=true`, otherwise `stag`). Terraform branches on this variable to gate prod-only RDS hardening — see [RDS lifecycle](#rds-lifecycle-stag-vs-prod).
+
 #### AWS profile aliases
 
 The Makefile guards refuse to apply unless `AWS_PROFILE` matches the expected profile for the chosen environment. Defaults are the short logical names `prod`, `stag`, and `dev` — add these aliases to `~/.aws/config` so commands like `AWS_PROFILE=stag make plan` work without thinking about account numbers:
@@ -236,7 +238,7 @@ make destroy
 - Trust EC2 instance
 - Central Hub EC2 instance
 - Application Load Balancer
-- RDS database (with skip-final-snapshot)
+- RDS database (in `stag` only — `prod` is protected, see [RDS lifecycle](#rds-lifecycle-stag-vs-prod))
 - VPC, subnets, security groups, NAT gateway
 - IAM roles and policies
 - Elastic IPs
@@ -246,6 +248,18 @@ make destroy
 - Cognito User Pool and users (authentication data)
 - Secrets Manager secret (FLIP_API configuration)
 - S3 bucket (application data)
+
+#### RDS lifecycle (stag vs prod)
+
+The RDS instance behaves differently per environment, driven by `TF_VAR_environment`:
+
+| Setting                            | `stag` (default) | `prod` (`PROD=true`)              |
+|------------------------------------|------------------|-----------------------------------|
+| `skip_final_snapshot`              | `true`           | `false`                           |
+| `deletion_protection`              | `false`          | `true`                            |
+| `final_snapshot_identifier_prefix` | `flip-database-final` | `flip-database-final`        |
+
+In production, `terraform destroy` (or any `make destroy` against the prod account) will refuse to delete the RDS instance until deletion protection is removed manually, and a final snapshot named `flip-database-final-<suffix>` is taken before deletion. Staging stays disposable so trees can be torn down and rebuilt without snapshot cleanup.
 
 ### Status Checking
 

@@ -53,6 +53,9 @@ endif
 endif
 
 ## SETTING VARIABLES FOR TERRAFORM
+# Map the Make-level PROD flag (true|stag) onto a Terraform-friendly environment name.
+# Used in main.tf to gate prod-only RDS hardening (deletion protection, final snapshot).
+export TF_VAR_environment=$(if $(filter true,$(PROD)),prod,stag)
 export TF_VAR_max_azs=2
 export TF_VAR_vpc_cidr=10.0.0.0/16
 export TF_VAR_public_subnets=["10.0.1.0/24", "10.0.2.0/24"]
