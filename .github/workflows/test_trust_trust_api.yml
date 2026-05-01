@@ -17,6 +17,9 @@ on:
     branches: [main, develop]
     paths:
       - "trust/trust-api/**"
+      - "trust/compose.test.yml"
+      - "trust/data-access-api/**"
+      - "trust/observability/**"
       - ".github/workflows/test_trust_trust_api.yml"
   pull_request:
     branches: [main, develop]
@@ -65,6 +68,57 @@ jobs:
         with:
           files: trust/trust-api/coverage.xml
           flags: trust-api
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  trust-api-integration:
+    # Brings up the omop-db + data-access-api Compose stack and exercises
+    # ``handle_cohort_query`` end-to-end (issue #369, B3). Runs alongside the
+    # unit job rather than on its `needs:` so a unit-suite regression doesn't
+    # mask integration-only signal.
+    runs-on: ubuntu-latest
+    environment: flip
+    defaults:
+      run:
+        working-directory: ./trust/trust-api
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ github.event.inputs.python-version || '3.12' }}
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Setup environment file
+        run: | # pragma: allowlist secret
+          cp ../../.env.development.example ../../.env.development
+          echo "TRUST_API_KEY=${{ secrets.TRUST_API_KEY || 'test-trust-api-key-for-ci' }}" >> ../../.env.development
+          echo "AES_KEY_BASE64=${{ secrets.AES_KEY_BASE64 || 'QgZ+TBA0lUxcuCiRPLneFe/JjMaUEUJWHACHHGz2gGA=' }}" >> ../../.env.development  # pragma: allowlist secret
+          echo "DATA_ACCESS_POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'test_password' }}" >> ../../.env.development
+          echo "OMOP_POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'test_password' }}" >> ../../.env.development
+          echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'test_password' }}" >> ../../.env.development
+
+      - name: Pre-pull base images
+        # Pulled up-front so the compose-up timing isn't dominated by the first registry
+        # round-trip; --quiet keeps the workflow log readable.
+        run: |
+          docker pull --quiet postgres:16-alpine
+          docker pull --quiet python:3.12-slim-bookworm
+
+      - name: Run integration tests
+        run: make integration_test
+
+      - name: Upload integration coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: trust/trust-api/coverage-integration.xml
+          flags: trust-api-integration
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

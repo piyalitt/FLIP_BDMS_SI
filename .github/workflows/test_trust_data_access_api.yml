@@ -17,6 +17,9 @@ on:
     branches: [main, develop]
     paths:
       - "trust/data-access-api/**"
+      - "trust/compose.test.yml"
+      - "trust/trust-api/tests/integration/fixtures/**"
+      - "trust/observability/**"
       - ".github/workflows/test_trust_data_access_api.yml"
   pull_request:
     branches: [main, develop]
@@ -64,6 +67,54 @@ jobs:
         with:
           files: trust/data-access-api/coverage.xml
           flags: data-access-api
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  data-access-api-integration:
+    # Drives the data-access-api ``/cohort`` endpoints against a real seeded Postgres
+    # via the shared trust/compose.test.yml stack. Catches SQL-template / OMOP-schema
+    # / auth regressions that the mocked unit suite cannot. See issue #369 (B3).
+    runs-on: ubuntu-latest
+    environment: flip
+    defaults:
+      run:
+        working-directory: ./trust/data-access-api
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ github.event.inputs.python-version || '3.12' }}
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Setup environment file
+        run: | # pragma: allowlist secret
+          cp ../../.env.development.example ../../.env.development
+          echo "AES_KEY_BASE64=${{ secrets.AES_KEY_BASE64 || 'QgZ+TBA0lUxcuCiRPLneFe/JjMaUEUJWHACHHGz2gGA=' }}" >> ../../.env.development  # pragma: allowlist secret
+          echo "TRUST_API_KEY=${{ secrets.TRUST_API_KEY || 'test-trust-api-key-for-ci' }}" >> ../../.env.development
+          echo "DATA_ACCESS_POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'test_password' }}" >> ../../.env.development
+          echo "OMOP_POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'test_password' }}" >> ../../.env.development
+          echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'test_password' }}" >> ../../.env.development
+
+      - name: Pre-pull base images
+        run: |
+          docker pull --quiet postgres:16-alpine
+          docker pull --quiet python:3.12-slim-bookworm
+
+      - name: Run integration tests
+        run: make integration_test
+
+      - name: Upload integration coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: trust/data-access-api/coverage-integration.xml
+          flags: data-access-api-integration
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

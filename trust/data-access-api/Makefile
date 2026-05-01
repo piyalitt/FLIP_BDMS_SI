@@ -26,7 +26,9 @@ endif
 
 service_name = data-access-api
 lint_command = uv run ruff check . --fix
-test_coverage_html_command = uv run pytest --tb=short --disable-warnings --cov=data_access_api/ --cov-report=html --cov-report=term-missing --cov-report=xml:coverage.xml
+# Integration tests live under ./tests/integration and bring up a Docker Compose stack
+# (omop-db + data-access-api) — they don't run as part of the default unit suite.
+test_coverage_html_command = uv run pytest --ignore=./tests/integration --tb=short --disable-warnings --cov=data_access_api/ --cov-report=html --cov-report=term-missing --cov-report=xml:coverage.xml
 test_coverage_html_command_integration = uv run pytest ./tests/integration --tb=short --disable-warnings --cov=data_access_api/ --cov-report=html:htmlcov-integration --cov-report=term-missing --cov-report=xml:coverage-integration.xml
 docker_command = docker compose -f ../compose_trust.development.yml
 run_clean = run --rm --remove-orphans
