@@ -75,6 +75,9 @@ jobs:
     # Drives the data-access-api ``/cohort`` endpoints against a real seeded Postgres
     # via the shared trust/compose.test.yml stack. Catches SQL-template / OMOP-schema
     # / auth regressions that the mocked unit suite cannot. See issue #369 (B3).
+    #
+    # Steps are split out (not bundled into ``make integration_test``) so a
+    # failure shows the actual offending phase in the GitHub Actions UI.
     runs-on: ubuntu-latest
     environment: flip
     defaults:
@@ -102,13 +105,47 @@ jobs:
           echo "OMOP_POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'test_password' }}" >> ../../.env.development
           echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'test_password' }}" >> ../../.env.development
 
+      - name: Sync data-access-api venv (incl. testcontainers)
+        run: uv sync --frozen
+
+      - name: Lint (ruff)
+        env:
+          BASE_IMAGES_DOWNLOAD_DIR: /tmp/images
+        run: uv run ruff check .
+
+      - name: Type check (mypy)
+        env:
+          BASE_IMAGES_DOWNLOAD_DIR: /tmp/images
+        run: uv run mypy . --ignore-missing-imports
+
+      - name: Validate compose file
+        working-directory: ./trust
+        run: docker compose -f compose.test.yml config --quiet
+
       - name: Pre-pull base images
         run: |
           docker pull --quiet postgres:16-alpine
           docker pull --quiet python:3.12-slim-bookworm
 
-      - name: Run integration tests
-        run: make integration_test
+      - name: Build compose stack (data-access-api image)
+        working-directory: ./trust
+        run: docker compose -f compose.test.yml build
+
+      - name: Run pytest integration suite
+        env:
+          BASE_IMAGES_DOWNLOAD_DIR: /tmp/images
+        run: uv run pytest ./tests/integration --tb=long --disable-warnings -v --cov=data_access_api/ --cov-report=xml:coverage-integration.xml
+
+      - name: Show data-access-api container logs on failure
+        if: failure()
+        working-directory: ./trust
+        run: |
+          echo "::group::data-access-api-test logs"
+          docker compose -f compose.test.yml logs data-access-api-test || true
+          echo "::endgroup::"
+          echo "::group::omop-db-test logs"
+          docker compose -f compose.test.yml logs omop-db-test || true
+          echo "::endgroup::"
 
       - name: Upload integration coverage to Codecov
         uses: codecov/codecov-action@v5

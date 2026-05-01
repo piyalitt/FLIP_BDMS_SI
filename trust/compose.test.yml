@@ -64,7 +64,10 @@ services:
       DATA_ACCESS_POSTGRES_PASSWORD: test_password
       OMOP_POSTGRES_DB: test_omop_db
       AES_KEY_BASE64: "QgZ+TBA0lUxcuCiRPLneFe/JjMaUEUJWHACHHGz2gGA="  # pragma: allowlist secret
-      ENV: development
+      # Use the production entrypoint branch (`fastapi run`) so the test stack
+      # doesn't pay the dev/--reload startup cost or trip on file-watcher quirks
+      # under Docker — the integration suite never edits source between requests.
+      ENV: production
       DEBUG: "false"
       LOG_LEVEL: INFO
       TRUST_INTERNAL_SERVICE_KEY_HEADER: X-Trust-Internal-Service-Key
