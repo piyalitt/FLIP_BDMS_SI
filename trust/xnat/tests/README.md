@@ -13,6 +13,10 @@ DICOM anonymization script.
   in-memory DICOM datasets populated with PHI in every tag the script
   references, run a Python interpreter for the `.das` rule subset used
   by FLIP, and assert each PHI tag is removed, replaced, or hashed.
+- **Negative parser checks** (`test_anon_engine_negative.py`) — feed the
+  parser known-bad `.das` snippets and assert each one raises
+  `UnsupportedRuleError`. Pins the "fail loud" contract so a future grammar
+  change cannot silently start accepting unknown directives.
 
 The tests do not stand up XNAT or DicomEdit. They validate the FLIP
 authored ruleset against synthetic studies so a regression in the
