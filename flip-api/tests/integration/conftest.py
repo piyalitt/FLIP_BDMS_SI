@@ -27,10 +27,12 @@ they just request ``session`` (and/or ``client``) and write SQL-shaped
 assertions.
 """
 
+import os
 from collections.abc import Generator
 from unittest.mock import patch
 
 import pytest
+from moto import mock_aws
 from sqlalchemy import text
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
@@ -49,6 +51,59 @@ from flip_api.db.seed.role_permissions import seed_role_permissions
 from flip_api.db.seed.roles import seed_roles
 from flip_api.db.seed.trusts import seed_trusts
 from flip_api.main import app
+
+
+@pytest.fixture(scope="session", autouse=True)
+def aws_mock() -> Generator[None, None, None]:
+    """In-process moto fake for S3, Cognito and SES (B2 — issue #368).
+
+    moto intercepts ``boto3.client(...)`` calls at the botocore layer, so the
+    flip-api production code paths in ``utils/s3_client.py``,
+    ``utils/cognito_helpers.py`` and the inline ``boto3.client("sesv2", ...)``
+    constructions in ``user_services/access_request.py`` and
+    ``private_services/imaging_notifications.py`` all hit the moto fake with no
+    test-only branches in source.
+
+    Why moto and not LocalStack: ``cognito-idp`` and ``sesv2`` are Pro-only on
+    LocalStack (the free tier rejects ``CreateUserPool`` /
+    ``CreateEmailIdentity`` outright). moto covers all three in OSS, runs
+    in-process so there's no container boot, and the per-region message lists
+    on the SES backend (``moto.ses.ses_backends``) make assertion-after-send
+    cheap.
+
+    Fake credentials and a stable region are pinned in the environment up
+    front: boto3 still demands creds before it'll sign a request, and a
+    stable region keeps moto's per-region backends predictable across tests.
+    Real-AWS env vars from a developer's shell are intentionally clobbered
+    here so a leak from a real account is impossible while the fixture is
+    active.
+    """
+    prior = {
+        k: os.environ.get(k)
+        for k in (
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_SESSION_TOKEN",
+            "AWS_SECURITY_TOKEN",
+            "AWS_DEFAULT_REGION",
+            "AWS_PROFILE",
+        )
+    }
+    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"  # pragma: allowlist secret
+    os.environ["AWS_SESSION_TOKEN"] = "testing"  # pragma: allowlist secret
+    os.environ["AWS_SECURITY_TOKEN"] = "testing"  # pragma: allowlist secret
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    os.environ.pop("AWS_PROFILE", None)
+    with mock_aws():
+        try:
+            yield
+        finally:
+            for k, v in prior.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
 
 
 @pytest.fixture(scope="session")
