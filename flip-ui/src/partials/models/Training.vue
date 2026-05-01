@@ -43,12 +43,26 @@
                     <span>
                         <AiAlert
                             v-if="!allFilesUploaded"
-                            :text="missingFilesMessage || 'All required model files must be uploaded before starting training.'"
                             variant="info"
                             :close="false"
                             :rounded="false"
                             :bordered="false"
-                        />
+                        >
+                            <template v-if="missingFiles.length">
+                                For job type <strong><code>{{ jobType }}</code></strong>, required files are:
+                                <template v-for="(f, i) in requiredFiles" :key="f">
+                                    <code>{{ f }}</code><template v-if="i < requiredFiles.length - 1">, </template>
+                                </template>.
+                                <br>
+                                Missing:
+                                <template v-for="(f, i) in missingFiles" :key="f">
+                                    <code>{{ f }}</code><template v-if="i < missingFiles.length - 1">, </template>
+                                </template>
+                            </template>
+                            <template v-else>
+                                All required model files must be uploaded before starting training.
+                            </template>
+                        </AiAlert>
                     </span>
 
                     <div class="flex flex-col h-full pt-4 overflow-y-auto grow">
@@ -94,12 +108,10 @@ import { useRoute } from "vue-router";
 import { array, lazy, object, string } from "yup";
 
 import AiAlert from "@/components/AiAlert/AiAlert.vue";
-import {
-    IInitTraining, initialiseTraining,
+import { IInitTraining, initialiseTraining,
     JobTypes,
     ModelStatus,
-    ModelStatusEnum
-} from "@/services/model-service";
+    ModelStatusEnum } from "@/services/model-service";
 import { useAuthStore } from "@/store/auth";
 import { Snackbar } from "@/utils/snackbar";
 
@@ -133,21 +145,6 @@ const showLogs = ref(true);
  */
 const missingFiles = computed(() => {
     return props.requiredFiles.filter(f => !props.uploadedFileNames.includes(f));
-});
-
-/**
- * Generates a human-readable message about required and missing files.
- */
-const missingFilesMessage = computed(() => {
-    const requiredList = props.requiredFiles.map(f => `<code>${f}</code>`).join(", ");
-
-    if (missingFiles.value.length === 0) {
-        return "";
-    }
-
-    const missingList = missingFiles.value.map(f => `<code>${f}</code>`).join(", ");
-
-    return `For job type <strong><code>${props.jobType}</code></strong>, required files are: ${requiredList}.<br/>Missing: ${missingList}`;
 });
 
 const schema = object().shape({

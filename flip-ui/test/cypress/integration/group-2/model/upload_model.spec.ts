@@ -39,11 +39,11 @@ describe("Upload Model Files", () => {
         cy.visit(`project/${projectId}/model/${modelId}`);
     });
 
-    it.only("displays an error message when an unsupported file name is uploaded", () => {
+    it("displays an error message when an unsupported file name is uploaded", () => {
         cy.getBySel("upload-file-btn").scrollIntoView();
         cy.getBySel("upload-file-btn").selectFile("test/cypress/fixtures/files/flip.py", { action: "drag-drop" });
 
-        cy.contains("This file name is not supported!").should("be.visible");
+        cy.contains("This file name is not supported as it's reserved by FLIP.").should("be.visible");
     });
 
     it("displays uploaded status when model file is uploaded successfully", () => {
@@ -82,12 +82,16 @@ describe("Upload Model Files", () => {
         cy.getBySel("file-upload-status-scanning").should("be.visible");
     });
 
+    // The two error-path tests below upload trainer.py rather than flip.py
+    // — flip.py is in the BLACKLISTED_MODEL_FILES list so the page rejects
+    // it client-side, before either the preSignedUrl POST or the /step/model
+    // POST has a chance to surface their error responses.
     it("handles error from preSignedUrl call and displays error status", () => {
         cy.intercept("POST", `/files/preSignedUrl/model/${modelId}`, { statusCode: 500 })
             .as("getUploadURL");
 
         cy.getBySel("upload-file-btn").scrollIntoView();
-        cy.getBySel("upload-file-btn").selectFile("test/cypress/fixtures/files/flip.py", { action: "drag-drop" });
+        cy.getBySel("upload-file-btn").selectFile("test/cypress/fixtures/files/trainer.py", { action: "drag-drop" });
 
         cy.getBySel("file-upload-status-error").should("be.visible");
     });
@@ -103,7 +107,7 @@ describe("Upload Model Files", () => {
         ).as("fileUpload");
 
         cy.getBySel("upload-file-btn").scrollIntoView();
-        cy.getBySel("upload-file-btn").selectFile("test/cypress/fixtures/files/flip.py", { action: "drag-drop" });
+        cy.getBySel("upload-file-btn").selectFile("test/cypress/fixtures/files/trainer.py", { action: "drag-drop" });
 
         cy.getBySel("file-upload-status-scanning").should("be.visible");
 

@@ -167,7 +167,7 @@ const runCohortQuery = async (v: unknown) => {
     catch(e) {
         Snackbar.error({
             title: "Error running cohort query",
-            text: "There was a problem running this cohort query:\n\n " + (e as Error).message,
+            text: "There was a problem running this cohort query:\n\n " + (e as Error).message
         });
 
         formSubmitting.value = false;

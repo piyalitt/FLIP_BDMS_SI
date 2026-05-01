@@ -115,6 +115,14 @@
                                             Reset Password
                                         </AiButton>
                                         <AiButton
+                                            data-test="reset-mfa-btn"
+                                            text-secondary
+                                            block
+                                            @click="dialogResetMfa = true;"
+                                        >
+                                            Reset MFA
+                                        </AiButton>
+                                        <AiButton
                                             v-if="!selectedUser.isDisabled"
                                             block
                                             data-test="disable-user-btn"
@@ -258,15 +266,21 @@
         :continue-action="resetPassword"
         @close-modal="dialogResetPassword = false;"
     />
+    <AiConfirmModal
+        :dialog="dialogResetMfa"
+        confirmation-text="Reset this user's MFA device? They will need to enrol a new authenticator on their next sign-in."
+        close-button-text="Cancel"
+        continue-button-text="Reset MFA"
+        :continue-action="resetMfa"
+        @close-modal="dialogResetMfa = false;"
+    />
 </template>
 
 <script setup lang="ts">
-import {
-    Popover,
+import { Popover,
     PopoverButton,
     PopoverGroup,
-    PopoverPanel
-} from "@headlessui/vue";
+    PopoverPanel } from "@headlessui/vue";
 import useSWRV from "swrv";
 import { onBeforeMount, ref } from "vue";
 
@@ -278,13 +292,12 @@ import AiPagination from "@/components/AiPagination/AiPagination.vue";
 import RegisterUserModal from "@/partials/users/RegisterUserModal.vue";
 import { routeChange } from "@/router";
 import { getRoles, IRole } from "@/services/role-service";
-import {
-    getUsers,
+import { getUsers,
     IUser,
     IUserDisabledStateDto,
+    resetUserMfa,
     updateUserDisabledState,
-    updateUserRoles
-} from "@/services/user-service";
+    updateUserRoles } from "@/services/user-service";
 import { useAuthStore } from "@/store/auth";
 import { useErrorStore } from "@/store/error";
 import { canAccessRoute } from "@/utils/route-validator";
@@ -304,6 +317,7 @@ const showRegisterUserModal = ref(false);
 const dialogDisable = ref(false);
 const dialogEnable = ref(false);
 const dialogResetPassword = ref(false);
+const dialogResetMfa = ref(false);
 
 onBeforeMount(async () => {
     if(!(await canAccessRoute(authStore, ["CanManageUsers"]))){
@@ -367,17 +381,23 @@ const remove = (role: IRole) => {
     }
 };
 
-const saveUser = () => {
-    if (selectedUser.value) {
-        try {
-            updateUserRoles(selectedUser.value?.id, selectedUser.value?.roles.map((role) => role.id));
-            selectedUser.value.dirty = false;
-        } catch (e) {
-            Snackbar.error({
-                text: "The user could not be updated, please try again.",
-                title: "Update failed"
-            });
-        }
+const saveUser = async () => {
+    if (!selectedUser.value) return;
+    try {
+        await updateUserRoles(
+            selectedUser.value.id,
+            selectedUser.value.roles.map((role) => role.id)
+        );
+        selectedUser.value.dirty = false;
+        Snackbar.success({
+            text: "The user's permissions have been updated.",
+            title: "User updated"
+        });
+    } catch (e) {
+        Snackbar.error({
+            text: "The user could not be updated, please try again.",
+            title: "Update failed"
+        });
     }
 };
 
@@ -423,6 +443,25 @@ const resetPassword = () => {
             text: "The user's password has been reset.",
             title: "Password reset"
         });
+    }
+};
+
+const resetMfa = async () => {
+    if (!selectedUser.value) return;
+    dialogResetMfa.value = false;
+
+    try {
+        await resetUserMfa(selectedUser.value.id);
+        Snackbar.success({
+            text: "The user's authenticator has been cleared. They will enrol a new one on next sign-in.",
+            title: "MFA reset"
+        });
+    } catch (e) {
+        Snackbar.error({
+            text: "There was an error resetting MFA, please try again.",
+            title: "MFA reset failed"
+        });
+        errorStore.setError();
     }
 };
 

@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlmodel import Session
 
 from flip_api.auth.dependencies import verify_token
+from flip_api.config import get_settings
 from flip_api.db.database import get_session
 from flip_api.domain.interfaces.fl import (
     IClientStatus,
@@ -58,6 +59,7 @@ def get_status_endpoint(
 
     try:
         nets = get_nets(db)
+        fl_backend = get_settings().FL_BACKEND
 
         net_statuses: list[INetStatus] = []
 
@@ -68,7 +70,14 @@ def get_status_endpoint(
             if not server_status:
                 logger.error(f"{net.name}: No response from FL API")
                 net_statuses.append(
-                    INetStatus(name=net.name, online=False, registered_clients=0, clients=[], net_in_use=False)
+                    INetStatus(
+                        name=net.name,
+                        fl_backend=fl_backend,
+                        online=False,
+                        registered_clients=0,
+                        clients=[],
+                        net_in_use=False,
+                    )
                 )
                 continue
 
@@ -84,7 +93,14 @@ def get_status_endpoint(
             if not clients:
                 logger.error(f"{net.name}: No clients connected")
                 net_statuses.append(
-                    INetStatus(name=net.name, online=False, registered_clients=0, clients=[], net_in_use=False)
+                    INetStatus(
+                        name=net.name,
+                        fl_backend=fl_backend,
+                        online=False,
+                        registered_clients=0,
+                        clients=[],
+                        net_in_use=False,
+                    )
                 )
                 continue
 
@@ -112,6 +128,7 @@ def get_status_endpoint(
             net_statuses.append(
                 INetStatus(
                     name=net.name,
+                    fl_backend=fl_backend,
                     online=online,
                     registered_clients=len(trust_client_statuses),
                     net_in_use=server_status.status in [ServerEngineStatus.STARTING, ServerEngineStatus.STARTED],

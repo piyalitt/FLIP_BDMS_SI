@@ -32,4 +32,35 @@ describe("Ai Alert", () => {
 
         expect(comp.element).toMatchSnapshot();
     });
+
+    it("escapes HTML in the text prop to prevent XSS", () => {
+        const payload = "<img src=x onerror=alert(1)>";
+
+        const comp = mount(AiAlert, {
+            global: { plugins: [createPinia()] },
+            props: {
+                variant: "info",
+                text: payload
+            }
+        });
+
+        expect(comp.html()).not.toContain("<img");
+        expect(comp.text()).toContain(payload);
+    });
+
+    it("renders the default slot when provided", () => {
+        const comp = mount(AiAlert, {
+            global: { plugins: [createPinia()] },
+            props: { variant: "info" },
+            slots: {
+                default: "<strong data-test=\"slot-marker\">authored content</strong>"
+            }
+        });
+
+        const html = comp.html();
+
+        expect(html).toContain("data-test=\"slot-marker\"");
+        expect(html).toContain("<strong");
+        expect(html).toContain("authored content");
+    });
 });

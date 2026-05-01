@@ -16,6 +16,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, col, select
 
+from flip_api.auth.access_manager import can_access_model
 from flip_api.auth.dependencies import verify_token
 from flip_api.db.database import get_session
 from flip_api.db.models.main_models import UploadedFiles
@@ -23,6 +24,60 @@ from flip_api.domain.schemas.file import IdList
 from flip_api.utils.logger import logger
 
 router = APIRouter(prefix="/files", tags=["file_services"])
+
+
+def _filter_files_by_access(
+    files: list[UploadedFiles],
+    user_id: UUID,
+    db: Session,
+) -> list[UploadedFiles]:
+    """Filter files to those whose owning model the user can access.
+
+    Files with no ``model_id`` are denied by default — they are not attached to
+    any model and therefore have no scope under which a caller can claim access.
+    Access decisions are memoised per ``model_id`` to avoid redundant DB lookups
+    when several files share the same model.
+
+    Args:
+        files: Files retrieved from the database.
+        user_id: Authenticated caller.
+        db: Database session.
+
+    Returns:
+        The subset of ``files`` the caller is allowed to see.
+    """
+    access_cache: dict[UUID, bool] = {}
+    accessible: list[UploadedFiles] = []
+    for file in files:
+        if file.model_id is None:
+            logger.warning(f"Denying access to file {file.id}: no associated model_id.")
+            continue
+        if file.model_id not in access_cache:
+            access_cache[file.model_id] = can_access_model(user_id, file.model_id, db)
+        if access_cache[file.model_id]:
+            accessible.append(file)
+        else:
+            logger.warning(
+                f"User {user_id} denied access to file {file.id} (model {file.model_id})."
+            )
+    return accessible
+
+
+def _serialize_files(files: list[UploadedFiles]) -> list[dict[str, Any]]:
+    """Serialize file records into the API response shape."""
+    return [
+        {
+            "id": str(file.id) if file.id else None,
+            "name": file.name,
+            "status": file.status,
+            "size": file.size,
+            "type": file.type,
+            "modelId": str(file.model_id) if file.model_id else None,
+            "created": file.created.isoformat() if hasattr(file, "created") and file.created else None,
+            "modified": file.modified.isoformat() if hasattr(file, "modified") and file.modified else None,
+        }
+        for file in files
+    ]
 
 
 # TODO Remove duplicate code in these endpoints
@@ -38,6 +93,11 @@ def get_uploaded_files_info(
     """
     Get information about uploaded files based on a list of IDs.
 
+    Only files belonging to a model the caller can access are returned. Files
+    outside the caller's scope are filtered out — the response does not
+    distinguish between "does not exist" and "not authorised", to avoid
+    leaking the existence of files via metadata enumeration.
+
     Args:
         file_ids (str): Comma-separated string of file IDs
         db (Session): Database session
@@ -47,7 +107,7 @@ def get_uploaded_files_info(
         list[dict[str, Any]]: A list of dictionaries containing file information
 
     Raises:
-        HTTPException: If no files are found or if there is an error during the operation.
+        HTTPException: If no accessible files are found or if there is an error during the operation.
     """
     try:
         # Parse and validate the ID list
@@ -59,34 +119,23 @@ def get_uploaded_files_info(
         # Query files by ID
         files = db.exec(select(UploadedFiles).where(col(UploadedFiles.id).in_(id_list))).all()
 
-        if not files:
-            logger.error("No files found")
+        # Filter to files the caller is authorised to see
+        accessible_files = _filter_files_by_access(list(files), user_id, db)
+
+        if not accessible_files:
+            logger.warning(f"No files accessible to user {user_id} for the requested IDs.")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="No files found",
             )
 
-        # Track which IDs were found and log missing IDs
-        retrieved_ids = [str(file.id) for file in files]
-
-        for id_str in [str(id) for id in id_list]:
+        # Track which IDs were returned and log the rest
+        retrieved_ids = {str(file.id) for file in accessible_files}
+        for id_str in (str(i) for i in id_list):
             if id_str not in retrieved_ids:
-                logger.error(f"File with ID: {id_str} not found")
+                logger.info(f"File with ID: {id_str} not returned (missing or access denied)")
 
-        # Format response
-        result = []
-        for file in files:
-            result.append({
-                "id": str(file.id) if file.id else None,
-                "name": file.name,
-                "status": file.status,
-                "size": file.size,
-                "type": file.type,
-                "modelId": str(file.model_id) if file.model_id else None,
-                "created": file.created.isoformat() if hasattr(file, "created") and file.created else None,
-                "modified": file.modified.isoformat() if hasattr(file, "modified") and file.modified else None,
-            })
-
+        result = _serialize_files(accessible_files)
         logger.info(f"Retrieved status for {len(result)} files")
         return result
 
@@ -118,6 +167,11 @@ def get_uploaded_files_info_post(
     """
     Get information about uploaded files based on a list of IDs (POST method).
 
+    Only files belonging to a model the caller can access are returned. Files
+    outside the caller's scope are filtered out — the response does not
+    distinguish between "does not exist" and "not authorised", to avoid
+    leaking the existence of files via metadata enumeration.
+
     Args:
         id_list (IdList): Pydantic model containing a list of file IDs
         db (Session): Database session
@@ -127,40 +181,29 @@ def get_uploaded_files_info_post(
         list[dict[str, Any]]: A list of dictionaries containing file information
 
     Raises:
-        HTTPException: If no files are found or if there is an error during the operation.
+        HTTPException: If no accessible files are found or if there is an error during the operation.
     """
     try:
         # Query files by ID
         files = db.exec(select(UploadedFiles).where(col(UploadedFiles.id).in_(id_list.ids))).all()
 
-        if not files:
-            logger.error("No files found")
+        # Filter to files the caller is authorised to see
+        accessible_files = _filter_files_by_access(list(files), user_id, db)
+
+        if not accessible_files:
+            logger.warning(f"No files accessible to user {user_id} for the requested IDs.")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="No files found",
             )
 
-        # Track which IDs were found and log missing IDs
-        retrieved_ids = [str(file.id) for file in files]
-
-        for id_str in [str(id) for id in id_list.ids]:
+        # Track which IDs were returned and log the rest
+        retrieved_ids = {str(file.id) for file in accessible_files}
+        for id_str in (str(i) for i in id_list.ids):
             if id_str not in retrieved_ids:
-                logger.error(f"File with ID: {id_str} not found")
+                logger.info(f"File with ID: {id_str} not returned (missing or access denied)")
 
-        # Format response
-        result = []
-        for file in files:
-            result.append({
-                "id": str(file.id) if file.id else None,
-                "name": file.name,
-                "status": file.status,
-                "size": file.size,
-                "type": file.type,
-                "modelId": str(file.model_id) if file.model_id else None,
-                "created": file.created.isoformat() if hasattr(file, "created") and file.created else None,
-                "modified": file.modified.isoformat() if hasattr(file, "modified") and file.modified else None,
-            })
-
+        result = _serialize_files(accessible_files)
         logger.info(f"Retrieved status for {len(result)} files")
         return result
 

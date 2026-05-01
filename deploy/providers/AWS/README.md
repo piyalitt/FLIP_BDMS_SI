@@ -59,7 +59,10 @@ Managed policies that cover these requirements:
 - `ElasticLoadBalancingFullAccess`
 - `AmazonSESFullAccess` (optional)
 
-**Note**: The deployed EC2 instances use minimal IAM permissions (SSM, CloudWatch, and a scoped inline policy for `secretsmanager:GetSecretValue` on specific secrets) following the principle of least privilege.
+**Note**: The deployed EC2 instances use separate, scoped IAM roles following the principle of least privilege:
+
+- **Central Hub** (`ec2-role`): SSM + CloudWatch managed policies, plus inline policies for `secretsmanager:GetSecretValue` on the FLIP API and DB secrets, Cognito user-pool admin actions on the FLIP user pool, S3 object access on the FLIP and AI Centre buckets, and `ses:SendEmail` on the verified sender identity.
+- **Trust EC2** (`trust-ec2-role`): SSM + CloudWatch managed policies, plus a read-only S3 inline policy on the AI Centre bucket for FL participant-kit downloads. No Cognito, SES, Secrets Manager or FLIP application bucket access.
 
 ## Deployment Workflow
 
@@ -158,6 +161,8 @@ The `PROD` variable determines which environment files are loaded:
 
 If `PROD` is omitted when running the AWS provider Makefile, it defaults to staging.
 
+The Makefile maps `PROD` onto `TF_VAR_environment` (`prod` when `PROD=true`, otherwise `stag`). Terraform branches on this variable to gate prod-only RDS hardening — see [RDS lifecycle](#rds-lifecycle-stag-vs-prod).
+
 #### AWS profile aliases
 
 The Makefile guards refuse to apply unless `AWS_PROFILE` matches the expected profile for the chosen environment. Defaults are the short logical names `prod`, `stag`, and `dev` — add these aliases to `~/.aws/config` so commands like `AWS_PROFILE=stag make plan` work without thinking about account numbers:
@@ -233,7 +238,7 @@ make destroy
 - Trust EC2 instance
 - Central Hub EC2 instance
 - Application Load Balancer
-- RDS database (with skip-final-snapshot)
+- RDS database (in `stag` only — `prod` is protected, see [RDS lifecycle](#rds-lifecycle-stag-vs-prod))
 - VPC, subnets, security groups, NAT gateway
 - IAM roles and policies
 - Elastic IPs
@@ -243,6 +248,18 @@ make destroy
 - Cognito User Pool and users (authentication data)
 - Secrets Manager secret (FLIP_API configuration)
 - S3 bucket (application data)
+
+#### RDS lifecycle (stag vs prod)
+
+The RDS instance behaves differently per environment, driven by `TF_VAR_environment`:
+
+| Setting                            | `stag` (default) | `prod` (`PROD=true`)              |
+|------------------------------------|------------------|-----------------------------------|
+| `skip_final_snapshot`              | `true`           | `false`                           |
+| `deletion_protection`              | `false`          | `true`                            |
+| `final_snapshot_identifier_prefix` | `flip-database-final` | `flip-database-final`        |
+
+In production, `terraform destroy` (or any `make destroy` against the prod account) will refuse to delete the RDS instance until deletion protection is removed manually, and a final snapshot named `flip-database-final-<suffix>` is taken before deletion. Staging stays disposable so trees can be torn down and rebuilt without snapshot cleanup.
 
 ### Status Checking
 
@@ -274,6 +291,7 @@ The Trust EC2 is in a private subnet with no inbound ports open. All Trust web U
 
 1. AWS CLI installed and configured (`aws configure sso`)
 2. AWS SSM Session Manager plugin installed:
+
    ```bash
    curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o /tmp/session-manager-plugin.deb
    sudo dpkg -i /tmp/session-manager-plugin.deb
@@ -303,17 +321,17 @@ Press Ctrl+C to stop all forwards. The Central Hub UI and API are accessed direc
 
 To connect a local (on-premises) Trust host to the AWS Central Hub:
 
-Recommended orchestration target (staging):
+Recommended orchestration target (works for both `PROD=stag` and `PROD=true`):
 
 ```bash
 cd deploy/providers/AWS
-make full-deploy-stag-hybrid LOCAL_TRUST_IP=<public-ip> [LOCAL_TRUST_SSH_KEY=~/.ssh/trust_key]
+make full-deploy-hybrid PROD=<stag|true> LOCAL_TRUST_IP=<public-ip> [LOCAL_TRUST_SSH_KEY=~/.ssh/trust_key]
 ```
 
-This wrapper target runs the full AWS deployment, provisions the local trust, and redeploys the Central Hub so the new secret values are loaded.
+This wrapper target runs the full AWS deployment, provisions the local trust, and redeploys the Central Hub so the new secret values are loaded. `PROD` is inherited from the environment — omit `LOCAL_TRUST_IP` to auto-detect the operator machine's public IP via `curl ipify.org`.
 You still need to:
 
-1. Start the trust stack on the host: `cd trust && env PROD=stag make up-local-trust-stag`
+1. Start the trust stack on the host: `cd trust && env PROD=<stag|true> make up-local-trust`
 2. Verify the trust can poll the hub (check trust-api logs for successful task polling)
 
 Or run provisioning directly:
@@ -488,7 +506,7 @@ EC2 instances are accessed through AWS Systems Manager Session Manager — port 
 - AWS CLI authenticated for the correct account and region:
 
   ```bash
-  export AWS_PROFILE=<your-profile>   # e.g. FlipDeveloperAccess-046651569599
+  export AWS_PROFILE=<your-profile>   # e.g. stag or prod
   export AWS_REGION=eu-west-2         # must match the region where instances are deployed
   aws sso login --profile $AWS_PROFILE
   ```

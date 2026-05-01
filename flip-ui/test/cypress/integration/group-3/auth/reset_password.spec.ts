@@ -24,9 +24,9 @@ describe("Reset Password Page", () => {
 
     it("should be able to reset password", () => {
         cy.getBySel("email").clear().type(dummyEmail);
-        cy.intercept("POST", cognitoUrl, { statusCode: 200 }).as("requestCode");
+        cy.intercept("POST", cognitoUrl, { statusCode: 200, fixture: "auth/cognitoForgotPassword" }).as("requestCode");
         cy.getBySel("requestCode-btn").click();
-        cy.intercept("POST", cognitoUrl, { statusCode: 200 }).as("changePassword");
+        cy.intercept("POST", cognitoUrl, { statusCode: 200, fixture: "auth/cognitoConfirmForgotPassword" }).as("changePassword");
         cy.getBySel("password").clear().type("NewPassword!1");
         cy.getBySel("email").clear().type(dummyEmail).click();
         cy.getBySel("changePassword-btn").click();
@@ -46,10 +46,10 @@ describe("Reset Password Page", () => {
         cy.getBySel("requestCode-btn").should("be.visible");
 
         cy.getBySel("email").clear().type(dummyEmail);
-        cy.intercept("POST", cognitoUrl, { statusCode: 200 }).as("requestCode");
+        cy.intercept("POST", cognitoUrl, { statusCode: 200, fixture: "auth/cognitoForgotPassword" }).as("requestCode");
         cy.getBySel("requestCode-btn").click();
         cy.wait("@requestCode");
-        cy.intercept("POST", cognitoUrl, { statusCode: 200 }).as("changePassword");
+        cy.intercept("POST", cognitoUrl, { statusCode: 200, fixture: "auth/cognitoConfirmForgotPassword" }).as("changePassword");
         cy.getBySel("confirmation-code").clear().type("12345");
         cy.getBySel("password").clear().type("NewPassword!1");
         cy.getBySel("email").clear().type(dummyEmail);

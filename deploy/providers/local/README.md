@@ -41,12 +41,14 @@ This is the **local provider** counterpart to the [AWS provider](../AWS/README.m
 
 Each local Trust host runs:
 
-| Service | Port | Protocol |
+| Service | Container port | Protocol |
 | --- | --- | --- |
 | trust-api | 8000 | HTTP (polls hub outbound) |
 | imaging-api | 8000 | HTTP (internal) |
 | data-access-api | 8000 | HTTP (internal) |
 | fl-client | — | TCP (connects outbound to FL server via NLB) |
+
+The `up-local-trust` stack does **not** publish these container ports to the host (see `trust/compose_trust.local.yml`) — services communicate over the internal Docker network only, which lets the local-trust stack coexist on a developer laptop with `make up` (whose dev `trust1` instance binds host ports `8001`/`8010`/`8020` via `compose_trust-1_override.yml`). When the same images run on a cloud Trust EC2 (production compose), the container ports are mapped to host ports `IMAGING_API_PORT` (8001), `DATA_ACCESS_API_PORT` (8010), and `TRUST_API_PORT` (8020) — see `.env.development.example`.
 
 ## Prerequisites
 
@@ -71,18 +73,18 @@ All commands are run from the `deploy/providers/AWS/` directory since the Makefi
 cd deploy/providers/AWS
 ```
 
-### Recommended end-to-end target (staging hybrid)
+### Recommended end-to-end target (hybrid)
 
 ```bash
-make full-deploy-stag-hybrid LOCAL_TRUST_IP=<public-ip> [LOCAL_TRUST_SSH_KEY=~/.ssh/trust_key]
+make full-deploy-hybrid PROD=<stag|true> LOCAL_TRUST_IP=<public-ip> [LOCAL_TRUST_SSH_KEY=~/.ssh/trust_key]
 ```
 
-This wrapper target runs the full AWS + local trust provisioning pipeline, updates the trust configuration in AWS Secrets Manager (per-trust `TRUST_API_KEY`, `AES_KEY_BASE64`, and `TRUST_API_KEY_HASHES`), and redeploys Central Hub so the new secret values are loaded.
+This wrapper target runs the full AWS + local trust provisioning pipeline, updates the trust configuration in AWS Secrets Manager (per-trust `TRUST_API_KEY`, `AES_KEY_BASE64`, and `TRUST_API_KEY_HASHES`), and redeploys Central Hub so the new secret values are loaded. `PROD` is inherited from the environment and supports both staging (`stag`) and production (`true`). Omit `LOCAL_TRUST_IP` to auto-detect the operator machine's public IP.
 You still need to start the local trust stack on the trust host:
 
 ```bash
 cd trust
-env PROD=stag make up-local-trust
+env PROD=<stag|true> make up-local-trust
 ```
 
 ### Provision a remote trust host (via SSH)
@@ -143,7 +145,7 @@ Any machine with the correct credentials can act as a trust — the hub identifi
 2. `TRUST_API_KEY_HASHES` must contain the SHA-256 hash of this trust's API key
 3. The hub must be redeployed with the updated secrets (`make deploy-centralhub`)
 
-The `full-deploy-stag` / `full-deploy-stag-hybrid` targets handle key generation and hub redeployment automatically. When using `add-local-trust` standalone, keys must already be configured.
+The `full-deploy-with-local-trust` / `full-deploy-hybrid` targets handle key generation and hub redeployment automatically (both honour `PROD=stag|true`). When using `add-local-trust` standalone, keys must already be configured.
 
 ## Ansible Playbook Details
 

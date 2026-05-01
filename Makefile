@@ -182,8 +182,9 @@ else
 	@echo "ℹ️  No flip-ui container runs when PROD=$(PROD) (S3 + CloudFront)."
 endif
 tests:
-	cd flip-ui && $(MAKE) unit_test && \
-	cd ../flip-api && $(MAKE) test
+	$(MAKE) -C flip-ui unit_test
+	$(MAKE) -C flip-ui e2e_test
+	$(MAKE) -C flip-api test
 
 debug-all:
 	@echo "🚨 Starting debug mode by overriding the DEBUG environment variable..."
@@ -258,7 +259,8 @@ unit_test:
 	$(MAKE) -C flip-ui unit_test
 	$(MAKE) -C trust/data-access-api unit_test
 	$(MAKE) -C trust/imaging-api unit_test
-	$(MAKE) -C trust/trust-api unit_test 
+	$(MAKE) -C trust/trust-api unit_test
+	$(MAKE) -C trust/xnat unit_test
 
 generate-trust-api-keys:
 	$(MAKE) -C flip-api generate-trust-api-keys $(if $(ENV_FILE),ENV_FILE=$(ENV_FILE))

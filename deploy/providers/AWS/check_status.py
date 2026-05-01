@@ -865,10 +865,11 @@ def main(
             if not success or not containers:
                 print_status("FAIL", "Could not retrieve Docker container status")
             else:
-                # Check each expected container
+                # Check each expected container.
+                # Note: the UI is served from S3 + CloudFront (no container on the hub) —
+                # UI availability is covered by the HTTPS endpoint check above.
                 expected_containers = [
                     "flip-api",
-                    "flip-ui",
                 ]
                 # Add only configured FL server and API containers
                 for net_num in configured_net_numbers:
@@ -894,18 +895,6 @@ def main(
                 )
                 if success and exited:
                     print_status("WARN", f"Exited containers found: {exited}")
-
-            # Check Docker networks
-            print_status("INFO", "Checking Docker networks...")
-            success, networks = run_ssh_command(
-                "",
-                "flip",
-                "docker network ls --format '{{.Name}}' 2>/dev/null",
-            )
-            if success and "central-hub-trust-apis-network" in networks:
-                print_status("PASS", "Docker network 'central-hub-trust-apis-network' exists")
-            else:
-                print_status("WARN", "Docker network 'central-hub-trust-apis-network' not found")
 
             # Check disk space
             print_status("INFO", "Checking disk space...")
@@ -1023,7 +1012,6 @@ def main(
                 )
 
                 expected_networks = [
-                    "central-hub-trust-apis-network",
                     "deploy_shared-net-1",
                     "deploy_shared-net-2",
                     "deploy_trust-network-1",
@@ -1123,7 +1111,7 @@ def main(
     # Check Trust EC2 CloudWatch logs if it exists
     if trust_id:
         print_status("INFO", "Checking Trust EC2 CloudWatch log groups...")
-        trust_log_group = "/aws/ec2/flipst"
+        trust_log_group = "/aws/ec2/flip-trust"
         success, output = run_aws_command([
             "logs",
             "describe-log-groups",

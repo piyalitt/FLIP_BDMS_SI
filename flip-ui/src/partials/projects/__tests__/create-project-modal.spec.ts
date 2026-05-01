@@ -24,25 +24,24 @@ const mockCreateProject = vi.fn().mockResolvedValue({ id: "test-id" });
 
 vi.mock("@/services/project-service", async (importOriginal) => {
     const actual = await importOriginal<typeof import("@/services/project-service")>();
+
     return {
         ...actual,
         createProject: (...args: unknown[]) => mockCreateProject(...args)
     };
 });
 
-vi.mock("@/router", () => ({
-    routeChange: { viewProject: vi.fn() }
-}));
+vi.mock("@/router", () => ({ routeChange: { viewProject: vi.fn() } }));
 
 const stubs = {
-    TransitionRoot: { template: '<div><slot /></div>' },
-    Dialog: { template: '<div><slot /></div>' },
-    DialogPanel: { template: '<div><slot /></div>' },
-    DialogTitle: { template: '<div><slot /></div>' },
-    TransitionChild: { template: '<div><slot /></div>' },
-    Form: { template: '<form @submit.prevent="$emit(\'submit\', $attrs[\'initial-values\'])"><slot /></form>' },
-    'icon-mdi-close': { template: '<span>×</span>' },
-    'ProjectUsers': { template: '<div>Project Users Component</div>' }
+    TransitionRoot: { template: "<div><slot /></div>" },
+    Dialog: { template: "<div><slot /></div>" },
+    DialogPanel: { template: "<div><slot /></div>" },
+    DialogTitle: { template: "<div><slot /></div>" },
+    TransitionChild: { template: "<div><slot /></div>" },
+    Form: { template: "<form @submit.prevent=\"$emit('submit', $attrs['initial-values'])\"><slot /></form>" },
+    "icon-mdi-close": { template: "<span>×</span>" },
+    "ProjectUsers": { template: "<div>Project Users Component</div>" }
 };
 
 describe("Create Project Modal", () => {
@@ -105,7 +104,7 @@ describe("Create Project Modal", () => {
                 stubs: {
                     ...stubs,
                     Form: {
-                        template: '<form @submit.prevent="$emit(\'submit\', $attrs[\'initial-values\'])"><slot /></form>',
+                        template: "<form @submit.prevent=\"$emit('submit', $attrs['initial-values'])\"><slot /></form>",
                         mounted() {
                             // Override initial-values to simulate unchecked toggle
                             (this as any).$attrs["initial-values"].dicom_to_nifti = "";

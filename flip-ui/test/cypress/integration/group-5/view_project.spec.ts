@@ -301,7 +301,7 @@ describe("Project Page: Researcher & Owner [APPROVED]", () => {
 
         cy.getBySel("import-status-warning-7e51a830-7b09-4bf7-b91a-0b4e1c36d3b2")
             .should("exist")
-            .contains("Something went wrong when retrieving the study import status.");
+            .contains("Awaiting study import status from trust.");
 
         cy.getBySel("project-reimport-status-5d512a2b-747e-4b1f-ad9d-f65fdb3c6585")
             .should("not.exist");

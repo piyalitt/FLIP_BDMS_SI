@@ -15,7 +15,7 @@
     <div v-if="showBanner" class="w-full" data-test="site-banner">
         <div class="mx-auto">
             <div class="p-2 transition bg-primary-500 sm:p-3">
-                <div class="flex flex-wrap items-center justify-between mx-auto max-w-screen-2xl">
+                <div class="flex flex-wrap items-center justify-between">
                     <span class="w-auto p-2 rounded-lg bg-primary-700">
                         <icon-ph-megaphone-duotone class="w-6 h-6 text-white" aria-hidden="true" />
                     </span>
