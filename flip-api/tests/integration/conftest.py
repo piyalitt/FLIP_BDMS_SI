@@ -312,3 +312,44 @@ def cognito_user_pool(aws_mock, monkeypatch) -> Generator[dict[str, str], None, 
     _cognito_client.cache_clear()
     yield {"pool_id": pool_id, "client_id": client_id}
     _cognito_client.cache_clear()
+
+
+@pytest.fixture
+def ses_send_email_recorder(aws_mock, monkeypatch) -> list[dict]:
+    """Capture every ``sesv2.send_email`` call made during a test.
+
+    Why a recorder instead of letting moto handle the call:
+    moto v5's sesv2 backend explicitly raises ``NotImplementedError("Template
+    functionality not ready")`` when ``send_email`` is invoked with
+    ``Content.Template`` — and every flip-api SES caller (``access_request``,
+    ``imaging_notifications``) uses templated content. Patching ``send_email``
+    on the boto3 ``sesv2`` client lets the production code path execute
+    end-to-end up to the SDK boundary; we then assert the SDK was called with
+    the expected shape (``FromEmailAddress``, ``Destination.ToAddresses``,
+    template name, template data). It is the highest-fidelity assertion that
+    moto's coverage allows today, and the closest approximation to a real
+    SES round-trip.
+
+    Switching to a real moto round-trip is a one-line fixture change once
+    moto implements sesv2 templates upstream
+    (https://github.com/getmoto/moto/issues — search ``sesv2 template``).
+    """
+    recorded: list[dict] = []
+    real_client_factory = boto3.client
+
+    def _send_email_stub(self, **kwargs):  # noqa: ANN001 - boto3 client method shape
+        recorded.append(kwargs)
+        return {"MessageId": f"stub-{len(recorded)}"}
+
+    def _patched_client(service_name, *args, **kwargs):
+        client = real_client_factory(service_name, *args, **kwargs)
+        if service_name == "sesv2":
+            # Bind the stub onto this specific client instance so cognito /
+            # s3 / etc. clients keep their normal moto behaviour.
+            import types
+
+            client.send_email = types.MethodType(_send_email_stub, client)
+        return client
+
+    monkeypatch.setattr(boto3, "client", _patched_client)
+    return recorded
