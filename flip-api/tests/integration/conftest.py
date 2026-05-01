@@ -30,7 +30,6 @@ assertions.
 import os
 from collections.abc import Generator
 from unittest.mock import patch
-from urllib.parse import urlparse
 
 import boto3
 import pytest
@@ -239,20 +238,31 @@ def session(integration_engine) -> Generator[Session, None, None]:
         yield s
 
 
-def _bucket_name_from_setting(value: str) -> str:
-    """Extract the S3 bucket name from a ``Settings`` bucket value.
-
-    Production env files set bucket settings as ``s3://bucket/some/prefix``,
-    so the netloc is the real bucket name. Tests that want to seed objects
-    in moto need just the bucket part.
-    """
-    parsed = urlparse(value)
-    return parsed.netloc or parsed.path.lstrip("/").split("/", 1)[0]
+# Bucket settings that ``s3_buckets`` rebinds to deterministic test values.
+# Each entry pairs the ``Settings`` attribute with the prefix the production
+# code expects under that bucket — keep these in sync with
+# ``.env.development.example`` so the parsed (bucket, prefix) tuples that
+# tests construct via ``urlparse`` match the production layout.
+_TEST_BUCKET_SETTINGS: dict[str, tuple[str, str]] = {
+    "UPLOADED_MODEL_FILES_BUCKET": ("flip-test-assets", "model_files/uploaded"),
+    "SCANNED_MODEL_FILES_BUCKET": ("flip-test-assets", "model_files/uploaded"),
+    "UPLOADED_FEDERATED_DATA_BUCKET": ("flip-test-assets", "uploaded_federated_data"),
+    "FL_APP_BASE_BUCKET": ("flip-test-assets", "base-application/nvflare"),
+    "FL_APP_DESTINATION_BUCKET": ("flip-test-assets", "app_destination_bucket"),
+}
 
 
 @pytest.fixture
-def s3_buckets(aws_mock) -> dict[str, str]:
-    """Create the buckets named in ``Settings`` inside the moto fake.
+def s3_buckets(aws_mock, monkeypatch) -> dict[str, str]:
+    """Rebind bucket Settings to deterministic test values and create the buckets in moto.
+
+    The bucket setting values in ``.env.development.example`` are unfilled
+    placeholders (``s3://<your-s3-bucket-name-for-flip-assets>/...``) — when
+    CI copies that file in unmodified, ``urlparse(...).netloc`` yields a
+    string that S3 rejects as an invalid bucket name. Real env files have
+    real names, so the production code path is untouched: this fixture only
+    intervenes for the integration suite, where every bucket-touching test
+    requests the fixture and ends up reading the rebound settings.
 
     Returns the mapping of setting-name → bucket-name so individual tests
     can address objects without re-parsing the setting value. Idempotent
@@ -260,14 +270,10 @@ def s3_buckets(aws_mock) -> dict[str, str]:
     fixture across tests in the same session doesn't error.
     """
     settings = get_settings()
-    bucket_settings = {
-        "UPLOADED_MODEL_FILES_BUCKET": settings.UPLOADED_MODEL_FILES_BUCKET,
-        "SCANNED_MODEL_FILES_BUCKET": settings.SCANNED_MODEL_FILES_BUCKET,
-        "UPLOADED_FEDERATED_DATA_BUCKET": settings.UPLOADED_FEDERATED_DATA_BUCKET,
-        "FL_APP_BASE_BUCKET": settings.FL_APP_BASE_BUCKET,
-        "FL_APP_DESTINATION_BUCKET": settings.FL_APP_DESTINATION_BUCKET,
-    }
-    bucket_names = {key: _bucket_name_from_setting(value) for key, value in bucket_settings.items()}
+    bucket_names: dict[str, str] = {}
+    for setting_name, (bucket, prefix) in _TEST_BUCKET_SETTINGS.items():
+        monkeypatch.setattr(settings, setting_name, f"s3://{bucket}/{prefix}")
+        bucket_names[setting_name] = bucket
 
     s3 = boto3.client("s3")
     for bucket in set(bucket_names.values()):
