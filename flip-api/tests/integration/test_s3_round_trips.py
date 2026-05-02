@@ -39,34 +39,15 @@ from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
 import boto3
-import pytest
 import requests
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
-from flip_api.auth.dependencies import verify_token
 from flip_api.config import get_settings
 from flip_api.db.models.main_models import Model, Projects, UploadedFiles
-from flip_api.db.models.user_models import RoleRef, User, UserRole
 from flip_api.domain.schemas.status import FileUploadStatus, ModelStatus
-from flip_api.main import app
 from flip_api.utils.s3_client import S3Client
-
-
-def _admin_user(session) -> UUID:
-    """Create an Admin-roled user and return the user_id.
-
-    Admin carries ``CAN_MANAGE_PROJECTS`` (per the seed contract verified in
-    ``test_auth_permissions_db_flow``), so every ``can_modify_model`` /
-    ``can_access_model`` check short-circuits to True for this user without
-    needing per-model project_user_access rows.
-    """
-    user = User(id=uuid4(), email=f"admin.{uuid4().hex[:8]}@example.com")
-    session.add(user)
-    session.commit()
-    session.add(UserRole(user_id=user.id, role_id=RoleRef.ADMIN.value))
-    session.commit()
-    return user.id
+from tests.integration.conftest import admin_user, override_verify_token_as
 
 
 def _seed_project_and_model(session, owner_id: UUID) -> tuple[UUID, UUID]:
@@ -74,11 +55,13 @@ def _seed_project_and_model(session, owner_id: UUID) -> tuple[UUID, UUID]:
 
     file_services endpoints filter on ``Projects.deleted is False`` and follow
     the FK from Model.project_id, so both rows have to exist before any
-    request lands.
+    request lands. ``flush()`` between the inserts makes the project visible
+    to the FK lookup without ending the transaction; one ``commit()`` at the
+    end suffices.
     """
     project = Projects(id=uuid4(), name="b2-s3-proj", description="b2", owner_id=owner_id, deleted=False)
     session.add(project)
-    session.commit()
+    session.flush()
     model = Model(
         id=uuid4(),
         name="b2-model",
@@ -90,11 +73,6 @@ def _seed_project_and_model(session, owner_id: UUID) -> tuple[UUID, UUID]:
     session.add(model)
     session.commit()
     return project.id, model.id
-
-
-def _override_verify_token_as(user_id: UUID):
-    """Inject ``user_id`` as the authenticated principal for the next request."""
-    app.dependency_overrides[verify_token] = lambda: user_id
 
 
 def _bucket_and_prefix(setting_value: str) -> tuple[str, str]:
@@ -167,9 +145,9 @@ def test_post_presigned_url_endpoint_returns_working_upload_url(client: TestClie
     endpoint, sign it with moto's signing path, send a real PUT through
     ``requests``, then verify the object lands at the expected key.
     """
-    user_id = _admin_user(session)
+    user_id = admin_user(session)
     _, model_id = _seed_project_and_model(session, user_id)
-    _override_verify_token_as(user_id)
+    override_verify_token_as(user_id)
 
     response = client.post(
         f"/api/files/preSignedUrl/model/{model_id}",
@@ -191,9 +169,14 @@ def test_post_presigned_url_endpoint_returns_working_upload_url(client: TestClie
 
 
 def test_post_presigned_url_endpoint_404_for_unknown_model(client: TestClient, session, s3_buckets):
-    """Unknown / deleted models should 404 before any S3 call is attempted."""
-    user_id = _admin_user(session)
-    _override_verify_token_as(user_id)
+    """Unknown / deleted models should 404 before any S3 call is attempted.
+
+    Authz runs before the model lookup (``can_modify_model`` rejects an
+    unprivileged caller with 403), so the test needs an admin user to reach
+    the 404 path.
+    """
+    user_id = admin_user(session)
+    override_verify_token_as(user_id)
 
     response = client.post(
         f"/api/files/preSignedUrl/model/{uuid4()}",
@@ -209,9 +192,9 @@ def test_post_presigned_url_endpoint_404_for_unknown_model(client: TestClient, s
 
 def test_process_scanned_file_records_metadata_in_db(client: TestClient, session, s3_buckets):
     """Pre-seed an object in the upload bucket; assert the resulting DB row."""
-    user_id = _admin_user(session)
+    user_id = admin_user(session)
     _, model_id = _seed_project_and_model(session, user_id)
-    _override_verify_token_as(user_id)
+    override_verify_token_as(user_id)
 
     settings = get_settings()
     bucket, prefix = _bucket_and_prefix(settings.UPLOADED_MODEL_FILES_BUCKET)
@@ -254,9 +237,9 @@ def test_retrieve_model_files_list_categorises_monai_files(
     ``model``. Other files in the prefix are ignored — that's a quirk of the
     endpoint, not the test, and the contract is what we want to lock in.
     """
-    user_id = _admin_user(session)
+    user_id = admin_user(session)
     _, model_id = _seed_project_and_model(session, user_id)
-    _override_verify_token_as(user_id)
+    override_verify_token_as(user_id)
 
     settings = get_settings()
     bucket, prefix = _bucket_and_prefix(settings.SCANNED_MODEL_FILES_BUCKET)
@@ -280,9 +263,9 @@ def test_retrieve_model_files_list_categorises_monai_files(
 
 def test_retrieve_model_files_list_404_when_no_objects(client: TestClient, session, s3_buckets):
     """Empty scanned-bucket prefix should bubble a 404, not a 500."""
-    user_id = _admin_user(session)
+    user_id = admin_user(session)
     _, model_id = _seed_project_and_model(session, user_id)
-    _override_verify_token_as(user_id)
+    override_verify_token_as(user_id)
 
     response = client.get(f"/api/files/model/{model_id}/files/list")
 
@@ -296,9 +279,9 @@ def test_retrieve_model_files_list_404_when_no_objects(client: TestClient, sessi
 
 def test_download_file_streams_bytes_byte_for_byte(client: TestClient, session, s3_buckets):
     """The streamed response body must be byte-identical to the S3 object."""
-    user_id = _admin_user(session)
+    user_id = admin_user(session)
     _, model_id = _seed_project_and_model(session, user_id)
-    _override_verify_token_as(user_id)
+    override_verify_token_as(user_id)
 
     settings = get_settings()
     bucket, prefix = _bucket_and_prefix(settings.SCANNED_MODEL_FILES_BUCKET)
@@ -326,9 +309,9 @@ def test_download_file_streams_bytes_byte_for_byte(client: TestClient, session, 
 
 def test_download_file_404_when_db_row_missing(client: TestClient, session, s3_buckets):
     """Endpoint must check the DB before reaching for S3 — missing row → 404."""
-    user_id = _admin_user(session)
+    user_id = admin_user(session)
     _, model_id = _seed_project_and_model(session, user_id)
-    _override_verify_token_as(user_id)
+    override_verify_token_as(user_id)
 
     response = client.get(f"/api/files/model/{model_id}/missing.bin")
 
@@ -342,9 +325,9 @@ def test_download_file_404_when_db_row_missing(client: TestClient, session, s3_b
 
 def test_delete_model_file_removes_object_and_db_row(client: TestClient, session, s3_buckets):
     """Both the S3 object and the ``uploaded_files`` row must be gone."""
-    user_id = _admin_user(session)
+    user_id = admin_user(session)
     _, model_id = _seed_project_and_model(session, user_id)
-    _override_verify_token_as(user_id)
+    override_verify_token_as(user_id)
 
     settings = get_settings()
     bucket, prefix = _bucket_and_prefix(settings.SCANNED_MODEL_FILES_BUCKET)
@@ -388,9 +371,9 @@ def test_delete_model_file_removes_object_and_db_row(client: TestClient, session
 
 def test_retrieve_federated_results_returns_presigned_urls(client: TestClient, session, s3_buckets):
     """Each FL artefact under the model's prefix gets a presigned URL back."""
-    user_id = _admin_user(session)
+    user_id = admin_user(session)
     _, model_id = _seed_project_and_model(session, user_id)
-    _override_verify_token_as(user_id)
+    override_verify_token_as(user_id)
 
     settings = get_settings()
     bucket, prefix = _bucket_and_prefix(settings.UPLOADED_FEDERATED_DATA_BUCKET)
@@ -413,16 +396,9 @@ def test_retrieve_federated_results_returns_presigned_urls(client: TestClient, s
 
 def test_retrieve_federated_results_404_for_unknown_model(client: TestClient, session, s3_buckets):
     """Federated-results endpoint should 404 a missing model before S3."""
-    user_id = _admin_user(session)
-    _override_verify_token_as(user_id)
+    user_id = admin_user(session)
+    override_verify_token_as(user_id)
 
     response = client.get(f"/api/files/model/{uuid4()}/fl/results")
 
     assert response.status_code == 404, response.text
-
-
-@pytest.fixture(autouse=True)
-def _reset_dependency_overrides_after_each_test():
-    """Each test owns its own ``verify_token`` override; clear afterwards."""
-    yield
-    app.dependency_overrides.pop(verify_token, None)

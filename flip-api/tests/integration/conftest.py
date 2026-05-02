@@ -30,6 +30,7 @@ assertions.
 import os
 from collections.abc import Generator
 from unittest.mock import patch
+from uuid import UUID, uuid4
 
 import boto3
 import pytest
@@ -46,8 +47,10 @@ import flip_api.db.database as db_module
 import flip_api.db.models.main_models  # noqa: F401
 import flip_api.db.models.user_models  # noqa: F401
 import tests.fixtures.main_fixtures as main_fixtures
+from flip_api.auth.dependencies import verify_token
 from flip_api.config import get_settings
 from flip_api.db.database import get_session
+from flip_api.db.models.user_models import RoleRef, User, UserRole
 from flip_api.db.seed.permissions import seed_permissions
 from flip_api.db.seed.role_permissions import seed_role_permissions
 from flip_api.db.seed.roles import seed_roles
@@ -245,7 +248,7 @@ def session(integration_engine) -> Generator[Session, None, None]:
 # tests construct via ``urlparse`` match the production layout.
 _TEST_BUCKET_SETTINGS: dict[str, tuple[str, str]] = {
     "UPLOADED_MODEL_FILES_BUCKET": ("flip-test-assets", "model_files/uploaded"),
-    "SCANNED_MODEL_FILES_BUCKET": ("flip-test-assets", "model_files/uploaded"),
+    "SCANNED_MODEL_FILES_BUCKET": ("flip-test-assets", "model_files/scanned"),
     "UPLOADED_FEDERATED_DATA_BUCKET": ("flip-test-assets", "uploaded_federated_data"),
     "FL_APP_BASE_BUCKET": ("flip-test-assets", "base-application/nvflare"),
     "FL_APP_DESTINATION_BUCKET": ("flip-test-assets", "app_destination_bucket"),
@@ -359,3 +362,35 @@ def ses_send_email_recorder(aws_mock, monkeypatch) -> list[dict]:
 
     monkeypatch.setattr(boto3, "client", _patched_client)
     return recorded
+
+
+def admin_user(session: Session) -> UUID:
+    """Persist an Admin-roled user and return its id.
+
+    Admin grants every permission via the seed contract verified in
+    ``test_auth_permissions_db_flow``, so any ``can_*`` check short-circuits
+    True for this user without per-resource access rows.
+    """
+    user = User(id=uuid4(), email=f"admin.{uuid4().hex[:8]}@example.com")
+    session.add(user)
+    session.flush()
+    session.add(UserRole(user_id=user.id, role_id=RoleRef.ADMIN.value))
+    session.commit()
+    return user.id
+
+
+def override_verify_token_as(user_id: UUID) -> None:
+    """Inject ``user_id`` as the authenticated principal for the next request."""
+    app.dependency_overrides[verify_token] = lambda: user_id
+
+
+@pytest.fixture(autouse=True)
+def _reset_dependency_overrides_after_each_test():
+    """Clear the per-test ``verify_token`` override on teardown.
+
+    No-op for tests that never set the override — ``dict.pop(..., None)``
+    swallows the missing key — so widening this to autouse across the whole
+    integration suite is free.
+    """
+    yield
+    app.dependency_overrides.pop(verify_token, None)

@@ -23,28 +23,12 @@ flips the ``enabled`` flag in the pool and queues XNAT trust tasks.
 from uuid import UUID, uuid4
 
 import boto3
-import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
-from flip_api.auth.dependencies import verify_token
 from flip_api.db.models.main_models import TaskType, TrustTask
 from flip_api.db.models.user_models import RoleRef, User, UserRole
-from flip_api.main import app
-
-
-def _admin_user(session) -> UUID:
-    """Persist an Admin-roled user; CAN_MANAGE_USERS comes from the seed contract."""
-    user = User(id=uuid4(), email=f"admin.{uuid4().hex[:8]}@example.com")
-    session.add(user)
-    session.commit()
-    session.add(UserRole(user_id=user.id, role_id=RoleRef.ADMIN.value))
-    session.commit()
-    return user.id
-
-
-def _override_verify_token_as(user_id: UUID) -> None:
-    app.dependency_overrides[verify_token] = lambda: user_id
+from tests.integration.conftest import admin_user, override_verify_token_as
 
 
 def _admin_create_user(pool_id: str, email: str) -> str:
@@ -68,8 +52,8 @@ def test_register_user_creates_user_in_pool_and_db(
     client: TestClient, session, cognito_user_pool
 ):
     """Happy path: endpoint creates a Cognito user AND a DB row, returns the sub."""
-    admin_id = _admin_user(session)
-    _override_verify_token_as(admin_id)
+    admin_id = admin_user(session)
+    override_verify_token_as(admin_id)
 
     response = client.post(
         "/api/users/",
@@ -97,8 +81,8 @@ def test_register_user_duplicate_email_returns_400(
     client: TestClient, session, cognito_user_pool
 ):
     """Cognito's ``UsernameExistsException`` must surface as 400, not 500."""
-    admin_id = _admin_user(session)
-    _override_verify_token_as(admin_id)
+    admin_id = admin_user(session)
+    override_verify_token_as(admin_id)
     _admin_create_user(cognito_user_pool["pool_id"], "dupe@example.com")
 
     response = client.post(
@@ -117,7 +101,7 @@ def test_register_user_403_for_non_admin(client: TestClient, session, cognito_us
     session.commit()
     session.add(UserRole(user_id=user.id, role_id=RoleRef.RESEARCHER.value))
     session.commit()
-    _override_verify_token_as(user.id)
+    override_verify_token_as(user.id)
 
     response = client.post(
         "/api/users/",
@@ -134,8 +118,8 @@ def test_register_user_403_for_non_admin(client: TestClient, session, cognito_us
 
 def test_delete_user_removes_user_from_pool(client: TestClient, session, cognito_user_pool):
     """Endpoint must remove the user from the Cognito pool."""
-    admin_id = _admin_user(session)
-    _override_verify_token_as(admin_id)
+    admin_id = admin_user(session)
+    override_verify_token_as(admin_id)
     sub = _admin_create_user(cognito_user_pool["pool_id"], "delete.me@example.com")
 
     response = client.delete(f"/api/users/{sub}")
@@ -159,8 +143,8 @@ def test_update_user_toggles_enabled_flag_in_pool(
     client: TestClient, session, cognito_user_pool
 ):
     """``disabled=True`` must call admin_disable_user; pool reflects the change."""
-    admin_id = _admin_user(session)
-    _override_verify_token_as(admin_id)
+    admin_id = admin_user(session)
+    override_verify_token_as(admin_id)
     sub = _admin_create_user(cognito_user_pool["pool_id"], "togglable@example.com")
 
     response = client.put(f"/api/users/{sub}", json={"disabled": True})
@@ -173,8 +157,8 @@ def test_update_user_toggles_enabled_flag_in_pool(
 
 def test_update_user_404_for_unknown_user(client: TestClient, session, cognito_user_pool):
     """A sub that doesn't exist in the pool must 404, not 500."""
-    admin_id = _admin_user(session)
-    _override_verify_token_as(admin_id)
+    admin_id = admin_user(session)
+    override_verify_token_as(admin_id)
 
     response = client.put(f"/api/users/{uuid4()}", json={"disabled": True})
 
@@ -185,8 +169,8 @@ def test_update_user_queues_xnat_profile_task(
     client: TestClient, session, cognito_user_pool, trust_factory
 ):
     """Production code queues a ``TrustTask`` per trust on every user update."""
-    admin_id = _admin_user(session)
-    _override_verify_token_as(admin_id)
+    admin_id = admin_user(session)
+    override_verify_token_as(admin_id)
     sub = _admin_create_user(cognito_user_pool["pool_id"], "queueable@example.com")
     # One trust seeded — the update path enumerates all trusts and writes one
     # task per trust to drive the XNAT profile sync.
@@ -211,8 +195,8 @@ def test_get_users_returns_pool_members_joined_with_db_rows(
     client: TestClient, session, cognito_user_pool
 ):
     """The endpoint joins Cognito's ListUsers output with the DB; both ends must round-trip."""
-    admin_id = _admin_user(session)
-    _override_verify_token_as(admin_id)
+    admin_id = admin_user(session)
+    override_verify_token_as(admin_id)
 
     pool_id = cognito_user_pool["pool_id"]
     seeded_emails = ["alice@example.com", "bob@example.com", "carol@example.com"]
@@ -230,10 +214,3 @@ def test_get_users_returns_pool_members_joined_with_db_rows(
     emails_returned = {u["email"] for u in body["data"]}
     for email in seeded_emails:
         assert email in emails_returned, f"missing {email} in {emails_returned}"
-
-
-@pytest.fixture(autouse=True)
-def _reset_dependency_overrides_after_each_test():
-    """Clear the per-test ``verify_token`` override on teardown."""
-    yield
-    app.dependency_overrides.pop(verify_token, None)
