@@ -325,7 +325,7 @@ filterwarnings = ["ignore::DeprecationWarning", "ignore::FutureWarning"]
 A test belongs in `tests/integration/` **if and only if it touches a real backing service**. Examples of "real backing service":
 
 - A real Postgres (via the `session` fixture or Testcontainers)
-- A real or LocalStack-emulated AWS service (S3, Cognito, SES)
+- A real AWS service (S3, Cognito, SES)
 - A running sibling API (trust-api, data-access-api, etc.) reachable over HTTP
 - A real Orthanc / XNAT / OMOP fixture
 
