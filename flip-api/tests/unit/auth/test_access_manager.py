@@ -25,10 +25,12 @@ from flip_api.auth.access_manager import (
     authenticate_internal_service,
     authenticate_trust,
     can_access_project,
+    can_contribute_to_project,
     can_modify_model,
     can_modify_project,
     verify_trust_identity,
 )
+from flip_api.db.models.user_models import PermissionRef
 
 VALID_TEST_KEY = "test_secret_key_12345_valid"
 VALID_TEST_KEY_HASH = hashlib.sha256(VALID_TEST_KEY.encode()).hexdigest()
@@ -40,6 +42,7 @@ INTERNAL_SERVICE_KEY_HASH = hashlib.sha256(INTERNAL_SERVICE_KEY.encode()).hexdig
 
 PATCH_HAS_PERMISSIONS = "flip_api.auth.access_manager.has_permissions"
 PATCH_CAN_MODIFY_PROJECT = "flip_api.auth.access_manager.can_modify_project"
+PATCH_CAN_CONTRIBUTE_TO_PROJECT = "flip_api.auth.access_manager.can_contribute_to_project"
 PATCH_GET_SETTINGS = "flip_api.auth.access_manager.get_settings"
 
 
@@ -251,6 +254,122 @@ class TestCanAccessProject:
         assert result is False
 
 
+class TestCanContributeToProject:
+    """Tests for can_contribute_to_project — looser than can_modify_project: allows
+    Researcher members of the project to contribute models."""
+
+    def test_admin_with_manage_projects_permission_allowed(self):
+        user_id = uuid4()
+        project_id = uuid4()
+        db = MagicMock(spec=Session)
+
+        with patch(PATCH_HAS_PERMISSIONS, return_value=True):
+            result = can_contribute_to_project(user_id, project_id, db)
+
+        assert result is True
+        db.exec.assert_not_called()
+
+    def test_project_owner_allowed(self):
+        user_id = uuid4()
+        project_id = uuid4()
+        db = MagicMock(spec=Session)
+        mock_project = MagicMock()
+        mock_project.owner_id = user_id
+        db.exec.return_value.first.return_value = mock_project
+
+        with patch(PATCH_HAS_PERMISSIONS, return_value=False):
+            result = can_contribute_to_project(user_id, project_id, db)
+
+        assert result is True
+
+    def test_returns_false_when_project_not_found(self):
+        user_id = uuid4()
+        project_id = uuid4()
+        db = MagicMock(spec=Session)
+        db.exec.return_value.first.return_value = None
+
+        with patch(PATCH_HAS_PERMISSIONS, return_value=False):
+            result = can_contribute_to_project(user_id, project_id, db)
+
+        assert result is False
+
+    def test_researcher_member_allowed(self):
+        """Researcher (CAN_CREATE_PROJECTS) with a ProjectUserAccess row can contribute."""
+        user_id = uuid4()
+        project_id = uuid4()
+        db = MagicMock(spec=Session)
+        mock_project = MagicMock()
+        mock_project.owner_id = uuid4()
+        mock_membership = MagicMock()
+        # Sequence of db.exec().first() calls: project lookup, then membership lookup
+        db.exec.return_value.first.side_effect = [mock_project, mock_membership]
+
+        # Admin check first (False), then CAN_CREATE_PROJECTS check (True)
+        with patch(PATCH_HAS_PERMISSIONS, side_effect=[False, True]):
+            result = can_contribute_to_project(user_id, project_id, db)
+
+        assert result is True
+
+    def test_researcher_non_member_denied(self):
+        """Researcher who is not a member of the project cannot contribute."""
+        user_id = uuid4()
+        project_id = uuid4()
+        db = MagicMock(spec=Session)
+        mock_project = MagicMock()
+        mock_project.owner_id = uuid4()
+        # Project found, but no membership row
+        db.exec.return_value.first.side_effect = [mock_project, None]
+
+        with patch(PATCH_HAS_PERMISSIONS, side_effect=[False, True]):
+            result = can_contribute_to_project(user_id, project_id, db)
+
+        assert result is False
+
+    def test_observer_member_denied(self):
+        """Observer (no CAN_CREATE_PROJECTS) on a ProjectUserAccess row is still denied."""
+        user_id = uuid4()
+        project_id = uuid4()
+        db = MagicMock(spec=Session)
+        mock_project = MagicMock()
+        mock_project.owner_id = uuid4()
+        db.exec.return_value.first.return_value = mock_project
+
+        # Both permission checks return False (Observer holds neither permission)
+        with patch(PATCH_HAS_PERMISSIONS, return_value=False):
+            result = can_contribute_to_project(user_id, project_id, db)
+
+        assert result is False
+
+    def test_observer_member_does_not_consult_membership(self):
+        """Observer is rejected by the CAN_CREATE_PROJECTS gate before the membership query runs."""
+        user_id = uuid4()
+        project_id = uuid4()
+        db = MagicMock(spec=Session)
+        mock_project = MagicMock()
+        mock_project.owner_id = uuid4()
+        db.exec.return_value.first.return_value = mock_project
+
+        with patch(PATCH_HAS_PERMISSIONS, return_value=False) as mock_perm:
+            can_contribute_to_project(user_id, project_id, db)
+
+        # Two permission checks fired: CAN_MANAGE_PROJECTS, then CAN_CREATE_PROJECTS.
+        assert mock_perm.call_count == 2
+        # Second call should be the CAN_CREATE_PROJECTS check.
+        second_call_perms = mock_perm.call_args_list[1].args[1]
+        assert PermissionRef.CAN_CREATE_PROJECTS in second_call_perms
+
+    def test_returns_false_on_database_exception(self):
+        user_id = uuid4()
+        project_id = uuid4()
+        db = MagicMock(spec=Session)
+        db.exec.side_effect = Exception("DB connection error")
+
+        with patch(PATCH_HAS_PERMISSIONS, return_value=False):
+            result = can_contribute_to_project(user_id, project_id, db)
+
+        assert result is False
+
+
 class TestCanModifyModel:
     def test_returns_true_when_user_has_manage_projects_permission(self):
         user_id = uuid4()
@@ -288,12 +407,14 @@ class TestCanModifyModel:
         assert result is False
 
     def test_returns_true_when_can_modify_project_returns_true(self):
+        """Project owner / admin paths short-circuit through can_modify_project."""
         user_id = uuid4()
         model_id = uuid4()
         mock_project_id = uuid4()
         db = MagicMock(spec=Session)
         mock_model = MagicMock()
         mock_model.project_id = mock_project_id
+        mock_model.owner_id = uuid4()  # Not the caller — proves the project path is used
         db.exec.return_value.first.return_value = mock_model
 
         with patch(PATCH_HAS_PERMISSIONS, return_value=False), \
@@ -303,21 +424,63 @@ class TestCanModifyModel:
         assert result is True
         mock_cmp.assert_called_once_with(user_id, mock_project_id, db)
 
-    def test_returns_false_when_can_modify_project_returns_false(self):
+    def test_researcher_member_allowed_for_own_model(self):
+        """Researcher member can edit a model where they are Model.owner_id."""
         user_id = uuid4()
         model_id = uuid4()
         mock_project_id = uuid4()
         db = MagicMock(spec=Session)
         mock_model = MagicMock()
         mock_model.project_id = mock_project_id
+        mock_model.owner_id = user_id
         db.exec.return_value.first.return_value = mock_model
 
         with patch(PATCH_HAS_PERMISSIONS, return_value=False), \
-             patch(PATCH_CAN_MODIFY_PROJECT, return_value=False) as mock_cmp:
+             patch(PATCH_CAN_MODIFY_PROJECT, return_value=False), \
+             patch(PATCH_CAN_CONTRIBUTE_TO_PROJECT, return_value=True) as mock_contrib:
+            result = can_modify_model(user_id, model_id, db)
+
+        assert result is True
+        mock_contrib.assert_called_once_with(user_id, mock_project_id, db)
+
+    def test_researcher_member_denied_for_other_users_model(self):
+        """Researcher member cannot edit another user's model on the same project."""
+        user_id = uuid4()
+        model_id = uuid4()
+        mock_project_id = uuid4()
+        db = MagicMock(spec=Session)
+        mock_model = MagicMock()
+        mock_model.project_id = mock_project_id
+        mock_model.owner_id = uuid4()  # Different user owns the model
+        db.exec.return_value.first.return_value = mock_model
+
+        with patch(PATCH_HAS_PERMISSIONS, return_value=False), \
+             patch(PATCH_CAN_MODIFY_PROJECT, return_value=False), \
+             patch(PATCH_CAN_CONTRIBUTE_TO_PROJECT, return_value=True) as mock_contrib:
             result = can_modify_model(user_id, model_id, db)
 
         assert result is False
-        mock_cmp.assert_called_once_with(user_id, mock_project_id, db)
+        # Contribution check is never needed if owner doesn't match.
+        mock_contrib.assert_not_called()
+
+    def test_observer_owning_model_still_denied(self):
+        """Defence in depth: even if Model.owner_id matches, an Observer (not a contributor)
+        is rejected."""
+        user_id = uuid4()
+        model_id = uuid4()
+        mock_project_id = uuid4()
+        db = MagicMock(spec=Session)
+        mock_model = MagicMock()
+        mock_model.project_id = mock_project_id
+        mock_model.owner_id = user_id
+        db.exec.return_value.first.return_value = mock_model
+
+        with patch(PATCH_HAS_PERMISSIONS, return_value=False), \
+             patch(PATCH_CAN_MODIFY_PROJECT, return_value=False), \
+             patch(PATCH_CAN_CONTRIBUTE_TO_PROJECT, return_value=False):
+            result = can_modify_model(user_id, model_id, db)
+
+        assert result is False
 
     def test_returns_false_on_database_exception(self):
         user_id = uuid4()
