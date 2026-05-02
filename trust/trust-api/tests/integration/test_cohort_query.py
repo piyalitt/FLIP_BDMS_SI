@@ -122,6 +122,65 @@ async def test_multiple_aggregates_join_returns_all_groups(stub_hub_received):
     assert all(count == 0 for count in nulls.values())
 
 
+@pytest.mark.asyncio
+async def test_realistic_cte_multi_join_shaped_query(stub_hub_received):
+    """Mirror the shape of ``flip-api/tests/example_query.sql`` — CTEs + multi-table
+    chain + concept-name filter — at small scale.
+
+    The simpler tests above cover the SQL plumbing for a single-table SELECT; this one
+    exercises the patterns FLIP users actually write: a procedure-concept CTE, the
+    canonical person → visit → procedure → image join, and a ``WHERE`` on
+    ``concept_name`` to project a specific cohort. Seed has 6 CT Spleen procedures
+    (persons 1-6) and 6 CT Head procedures (persons 7-12) so the filter returns a
+    deterministic 6-row result that clears the threshold.
+    """
+    query = """
+        WITH procedure_concept AS (
+            SELECT concept_id, concept_name
+            FROM omop.concept
+            WHERE domain_id = 'Procedure'
+        ),
+        modality_concept AS (
+            SELECT concept_id, concept_name
+            FROM omop.concept
+            WHERE concept_class_id = 'Modality'
+        )
+        SELECT
+            p.person_id,
+            p.gender_source_value,
+            pr.procedure_occurrence_id,
+            pr.procedure_date,
+            proc_c.concept_name AS procedure_name,
+            io.accession_id,
+            io.image_occurrence_date,
+            mod_c.concept_name AS modality
+        FROM omop.person p
+        LEFT JOIN omop.visit_occurrence v ON v.person_id = p.person_id
+        LEFT JOIN omop.procedure_occurrence pr ON pr.visit_occurrence_id = v.visit_occurrence_id
+        LEFT JOIN omop.image_occurrence io ON io.procedure_occurrence_id = pr.procedure_occurrence_id
+        LEFT JOIN procedure_concept proc_c ON proc_c.concept_id = pr.procedure_concept_id
+        LEFT JOIN modality_concept mod_c ON mod_c.concept_id = io.modality_concept_id
+        WHERE proc_c.concept_name = 'CT Spleen'
+    """
+    result = await handle_cohort_query(_payload(query, query_id="qid-realistic"))
+
+    assert result == {"success": True}
+    body = json.loads(stub_hub_received[0]["body"])
+    assert body["query_id"] == "qid-realistic"
+    # Six persons (1-6) had a CT Spleen procedure in the seed; the CTE filter must drop
+    # the other six (CT Head) plus the four imaging-less persons (13-16) plus the MR/XR
+    # rows whose procedure_occurrence_id is NULL.
+    assert body["record_count"] == 6
+    aggregate_names = {g["name"] for g in body["data"]}
+    assert {"Counts", "Nulls", "Sex Distribution", "Age Distribution"}.issubset(aggregate_names)
+
+    # Counts: every projected column has 6 non-null values (column names get
+    # underscores → newlines for chart rendering, see services/cohort.get_counts).
+    counts = _aggregate(body, "Counts")
+    assert counts.get("accession\nid") == 6
+    assert counts.get("procedure\nname") == 6
+
+
 # ---------------------------------------------------------------------------
 # Failure modes — each one asserts the handler reports failure cleanly without
 # crashing, and that the stub hub never receives a callback.
