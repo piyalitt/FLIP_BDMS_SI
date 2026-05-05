@@ -18,11 +18,14 @@ services:
   # --- Application services ---
 
   # Image built from https://github.com/londonaicentre/flip-omop-db
+  # NOTE no host port mapping in production: trust-internal services reach
+  # the database via the in-network hostname `omop-db:5432`. Exposing the
+  # port on the host would allow any caller with SSM port-forward access
+  # to connect with the OMOP superuser, bypassing data-access-api's
+  # authentication and validate_query() entirely.
   omop-db:
     image: ghcr.io/londonaicentre/omop-db:latest
     restart: always
-    ports:
-      - "${OMOP_DB_PORT}:5432"
     environment:
       POSTGRES_USER: ${OMOP_POSTGRES_USER}
       POSTGRES_PASSWORD: ${OMOP_POSTGRES_PASSWORD}

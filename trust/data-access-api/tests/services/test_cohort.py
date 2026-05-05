@@ -275,42 +275,116 @@ def test_get_records_undefined_column_with_extraction_failure(mock_read_sql, moc
 
 
 # Tests for validate_query
+#
+# DDL/DML keyword filtering is intentionally not asserted here: data-access-api
+# connects as data_analyst_reader (see flip-omop-db/files/create_readonly_users.sql),
+# a Postgres role that has INSERT/UPDATE/DELETE/TRUNCATE/CREATE explicitly
+# REVOKEd. Writes are rejected at the database layer; validate_query only
+# enforces structural rules that the DB role cannot enforce on its own.
 
 
-def test_validate_query():
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT * FROM test_table",
+        "SELECT * FROM omop.person",
+        "SELECT * FROM omop.person LIMIT 10",
+        "SELECT * FROM omop.person LIMIT 10 OFFSET 5",
+        "SELECT person_id FROM omop.person WHERE person_id > 0 ORDER BY person_id",
+        "WITH p AS (SELECT * FROM omop.person) SELECT * FROM p",
+        "SELECT * FROM omop.person UNION SELECT * FROM omop.person",
+    ],
+)
+def test_validate_query_accepts_well_formed_select(query: str):
+    """Plain SELECT (with or without omop qualification, CTE, or UNION) is accepted."""
+    assert validate_query(query) is True
+
+
+def test_validate_query_rejects_unparseable_input():
+    """Garbage input that does not parse as SQL is rejected, not silently accepted."""
+    with pytest.raises(HTTPException) as excinfo:
+        validate_query("INVALID SQL")
+    assert excinfo.value.status_code == 400
+
+
+def test_validate_query_rejects_empty_query():
+    """An empty query has no statements and must be rejected."""
+    with pytest.raises(HTTPException, match="Exactly one SQL statement is allowed per request"):
+        validate_query("")
+
+
+def test_validate_query_rejects_query_stacking():
+    """Multiple statements per request are rejected."""
+    with pytest.raises(HTTPException, match="Exactly one SQL statement is allowed per request"):
+        validate_query("SELECT 1; SELECT 2")
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "DROP TABLE test_table",
+        "DELETE FROM omop.person",
+        "UPDATE omop.person SET person_id = 1",
+        "INSERT INTO omop.person VALUES (1)",
+        "CREATE TABLE foo (id int)",
+        "ALTER TABLE omop.person ADD COLUMN col int",
+        "TRUNCATE omop.person",
+    ],
+)
+def test_validate_query_rejects_non_select_statements(query: str):
     """
-    Test the validate_query function.
+    Non-SELECT statements are rejected at the API layer even though Postgres
+    rejects them too — data_analyst_reader has no DDL/DML privileges.
     """
-    assert validate_query("SELECT * FROM test_table") is True
-    assert validate_query("INVALID SQL") is True
+    with pytest.raises(HTTPException, match="Only SELECT statements are allowed"):
+        validate_query(query)
 
-    # Test restricted schemas
-    with pytest.raises(HTTPException, match="Query contains restricted PostgreSQL internal functions or schemas."):
-        validate_query("SELECT * FROM pg_catalog.pg_tables")
-    with pytest.raises(HTTPException, match="Query contains restricted PostgreSQL internal functions or schemas."):
-        validate_query("SELECT * FROM information_schema.tables")
 
-    # Test unsafe operations
-    with pytest.raises(HTTPException, match="Query contains unsafe operations like DROP, DELETE, or UPDATE."):
-        validate_query("DROP TABLE test_table")
-    with pytest.raises(HTTPException, match="Query contains unsafe operations like DROP, DELETE, or UPDATE."):
-        validate_query("DELETE FROM test_table")
-    with pytest.raises(HTTPException, match="Query contains unsafe operations like DROP, DELETE, or UPDATE."):
-        validate_query("UPDATE test_table SET col=1")
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT * FROM pg_catalog.pg_tables",
+        "SELECT * FROM information_schema.tables",
+        "SELECT * FROM information_schema.columns",
+        "SELECT * FROM pg_catalog.pg_class",
+        "SELECT * FROM omop.person UNION SELECT table_name, NULL FROM information_schema.tables",
+        "SELECT (SELECT table_name FROM information_schema.tables LIMIT 1) FROM omop.person",
+    ],
+)
+def test_validate_query_rejects_non_omop_schemas(query: str):
+    """
+    Postgres grants SELECT on information_schema and pg_catalog to role
+    public by default, so the API must reject these references itself.
+    Subqueries and UNION arms are walked too.
+    """
+    with pytest.raises(HTTPException, match="is not accessible"):
+        validate_query(query)
 
-    # Test INSERT
-    with pytest.raises(HTTPException, match="Query contains unsafe operation like INSERT."):
-        validate_query("INSERT INTO test_table VALUES (1)")
 
-    # Test CREATE
-    with pytest.raises(HTTPException, match="Query contains unsafe operation like CREATE."):
-        validate_query("CREATE TABLE test_table (id int)")
-
-    # Test ALTER
-    with pytest.raises(HTTPException, match="Query contains unsafe operation like ALTER."):
-        validate_query("ALTER TABLE test_table ADD COLUMN col int")
-
-    assert validate_query("") is True
+@pytest.mark.parametrize(
+    "query",
+    [
+        # The exact pentest payload — bypass of the cohort minimum-size protection.
+        "SELECT * FROM testlarge LIMIT CASE WHEN (substr('abcd', 2, 1))='b' THEN 6 ELSE 1 END",
+        # Same shape with an OMOP table.
+        "SELECT * FROM omop.person LIMIT CASE WHEN 1=1 THEN 100 ELSE 1 END",
+        # CASE in OFFSET.
+        "SELECT * FROM omop.person OFFSET CASE WHEN 1=1 THEN 0 ELSE 5 END",
+        # CASE inside a subquery's LIMIT.
+        "SELECT * FROM (SELECT * FROM omop.person LIMIT CASE WHEN 1=1 THEN 1 ELSE 5 END) sub",
+        # Non-literal LIMIT (subquery as count).
+        "SELECT * FROM omop.person LIMIT (SELECT count(*) FROM omop.person)",
+    ],
+)
+def test_validate_query_rejects_non_literal_limit_or_offset(query: str):
+    """
+    LIMIT / OFFSET must be literal integers so the row count cannot be a
+    function of data values — that pattern was used in the legacy pentest
+    to exfiltrate single character values one at a time via the cohort-size
+    error message.
+    """
+    with pytest.raises(HTTPException, match="must be a literal integer"):
+        validate_query(query)
 
 
 # Tests for get_counts
