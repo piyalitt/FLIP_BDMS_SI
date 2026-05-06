@@ -10,39 +10,14 @@
 # limitations under the License.
 #
 
-import asyncio
+"""Tests for data_access_api.main app construction (currently: docs gating)."""
+
 import importlib
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
-from trust_api import config, main
-from trust_api.main import lifespan
-
-
-@pytest.mark.asyncio
-async def test_lifespan_starts_and_cancels_poller():
-    """Lifespan should start run_poller as a background task and cancel it on shutdown."""
-    mock_app = AsyncMock()
-
-    with patch("trust_api.main.run_poller", new_callable=AsyncMock) as mock_run_poller:
-        # Simulate a poller that runs until cancelled
-        async def fake_poller():
-            try:
-                await asyncio.sleep(3600)
-            except asyncio.CancelledError:
-                pass
-
-        mock_run_poller.side_effect = fake_poller
-
-        async with lifespan(mock_app):
-            # Poller should be running
-            mock_run_poller.assert_called_once()
-
-        # After exiting lifespan, poller task should have been cancelled
-        # (no exception means it was handled cleanly)
+from data_access_api import config, main
 
 
 class TestDocsGating:
