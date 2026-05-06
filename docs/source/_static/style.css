@@ -177,8 +177,17 @@ body, .wy-body-for-nav,
 
 /* Sidebar nav links */
 .wy-menu-vertical a:link,
-.wy-menu-vertical a:visited {
-    color: #C9C2D1;
+.wy-menu-vertical a:visited,
+.wy-menu-vertical li.toctree-l2 a,
+.wy-menu-vertical li.toctree-l3 a,
+.wy-menu-vertical li.toctree-l4 a,
+.wy-menu-vertical li.toctree-l5 a,
+.wy-menu-vertical li.toctree-l6 a,
+.wy-menu-vertical li.toctree-l7 a,
+.wy-menu-vertical li.toctree-l8 a,
+.wy-menu-vertical li.toctree-l9 a,
+.wy-menu-vertical li.toctree-l10 a {
+    color: #E2DCE8;
     font-family: var(--font-body);
     font-size: 14px;
     font-weight: 500;
@@ -201,13 +210,23 @@ body, .wy-body-for-nav,
     font-weight: 600;
 }
 .wy-menu-vertical li.toctree-l2.current > a,
-.wy-menu-vertical li.toctree-l3.current > a {
+.wy-menu-vertical li.toctree-l3.current > a,
+.wy-menu-vertical li.toctree-l4.current > a {
     background: rgba(97, 54, 110, 0.35);
     color: #fff;
 }
 .wy-menu-vertical li.toctree-l2 a,
-.wy-menu-vertical li.toctree-l3 a {
+.wy-menu-vertical li.toctree-l3 a,
+.wy-menu-vertical li.toctree-l4 a {
     background: transparent;
+}
+/* Descendants of a current section: theme greys them out; restore brand palette */
+.wy-menu-vertical li.toctree-l2.current li.toctree-l3 > a,
+.wy-menu-vertical li.toctree-l3.current li.toctree-l4 > a,
+.wy-menu-vertical li.toctree-l4.current li.toctree-l5 > a,
+.wy-menu-vertical li.toctree-l5.current li.toctree-l6 > a {
+    background: transparent;
+    color: #E2DCE8;
 }
 .wy-menu-vertical p.caption {
     color: var(--flip-primary-300);
