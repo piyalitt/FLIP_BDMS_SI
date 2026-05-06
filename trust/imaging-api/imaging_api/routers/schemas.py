@@ -14,12 +14,19 @@ import uuid
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from imaging_api.config import get_settings
 
 PACS_ID = get_settings().PACS_ID
 XNAT_PORT = get_settings().XNAT_PORT
+
+# XML control characters disallowed in project_name to defend against XML
+# injection in the XNAT projectData payload built by imaging_api.services.projects.
+# The XML serializer already escapes these, so this is defense in depth at the
+# trust-boundary schema layer — and gives a clear 422 instead of a corrupted XNAT
+# entity for callers that try to send them.
+_XML_FORBIDDEN_CHARS = ("<", ">", "&")
 
 # #########################
 # Users
@@ -115,6 +122,15 @@ class CentralHubProject(BaseModel):
     query: str
     users: list[CentralHubUser] = []
     dicom_to_nifti: bool = True
+
+    @field_validator("project_name")
+    @classmethod
+    def _reject_xml_control_chars(cls, v: str) -> str:
+        if any(c in v for c in _XML_FORBIDDEN_CHARS):
+            raise ValueError(
+                f"project_name must not contain XML control characters {_XML_FORBIDDEN_CHARS}"
+            )
+        return v
 
 
 class Subject(BaseModel):

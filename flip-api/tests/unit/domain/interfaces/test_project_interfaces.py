@@ -14,17 +14,20 @@ from datetime import datetime
 from typing import TypeVar
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel
+import pytest
+from pydantic import BaseModel, ValidationError
 
 from flip_api.domain.interfaces.project import (
     IApprovedTrust,
     ICountResponse,
+    IEditProject,
     IImagingImportStatus,
     IImagingProjectStatusParams,
     IImagingStatus,
     IImagingStatusResponse,
     IModelsInfoResponse,
     IProject,
+    IProjectDetails,
     IProjectQuery,
     IProjectResponse,
     IReimportQuery,
@@ -210,6 +213,28 @@ class TestICountResponseSchema:
     def test_valid_icount_response(self):
         response = ICountResponse(count=123)
         assert response.count == 123
+
+
+class TestProjectNameXmlControlCharRejection:
+    """
+    FLIP-PT-082: project ``name`` fields on hub-side schemas must reject XML
+    control characters so they cannot reach the imaging-api XNAT projectData
+    payload as un-escaped content.
+    """
+
+    @pytest.mark.parametrize("bad_name", ["evil<tag>", "name>injected", "amp&injection"])
+    def test_iproject_details_rejects_xml_control_chars(self, bad_name: str):
+        with pytest.raises(ValidationError, match="XML control characters"):
+            IProjectDetails(name=bad_name, description="d", users=[])
+
+    @pytest.mark.parametrize("bad_name", ["evil<tag>", "name>injected", "amp&injection"])
+    def test_iedit_project_rejects_xml_control_chars(self, bad_name: str):
+        with pytest.raises(ValidationError, match="XML control characters"):
+            IEditProject(name=bad_name, description="d", users=[])
+
+    def test_iproject_details_accepts_normal_name(self):
+        details = IProjectDetails(name="Cardiology Q1", description="d", users=[])
+        assert details.name == "Cardiology Q1"
 
 
 # Schemas like IProjectDetails, IProjectApproval, IStageProjectRequest

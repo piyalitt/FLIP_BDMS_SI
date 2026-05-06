@@ -14,10 +14,25 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, validator
 
 from flip_api.domain.schemas.status import ModelStatus, ProjectStatus
 from flip_api.domain.schemas.users import CognitoUser
+
+# XML control characters disallowed in project name fields so they can never
+# reach the imaging-api projectData XML payload as un-escaped content. The
+# imaging-api XML serializer already escapes these (defense in depth on the
+# trust side); rejecting at the hub boundary fails fast with a clear 422 when
+# a caller submits a name that would break or inject the XNAT payload.
+_XML_FORBIDDEN_CHARS = ("<", ">", "&")
+
+
+def _reject_xml_control_chars(v: str) -> str:
+    if any(c in v for c in _XML_FORBIDDEN_CHARS):
+        raise ValueError(
+            f"name must not contain XML control characters {_XML_FORBIDDEN_CHARS}"
+        )
+    return v
 
 
 class IProjectQuery(BaseModel):
@@ -111,11 +126,15 @@ class IEditProject(BaseModel):
             return []
         return value
 
+    _validate_name_xml = field_validator("name")(_reject_xml_control_chars)
+
 
 class IProjectDetails(BaseModel):
     name: str = Field(..., description="Project name")
     description: str = Field(default="", description="Project description")
     users: list[UUID] | None = Field(default=[], description="List of user IDs to add to the project")  # type: ignore[arg-type]
+
+    _validate_name_xml = field_validator("name")(_reject_xml_control_chars)
 
 
 class IProjectApproval(BaseModel):
