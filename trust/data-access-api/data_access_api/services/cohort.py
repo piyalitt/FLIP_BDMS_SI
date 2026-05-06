@@ -37,6 +37,11 @@ COHORT_QUERY_THRESHOLD = get_settings().COHORT_QUERY_THRESHOLD
 # reference to a different schema is rejected by validate_query.
 ALLOWED_SCHEMA = "omop"
 
+# Reject pathologically large queries before sqlglot does any work — cheap DoS guard
+# at the API layer. The DB role limits blast radius too, but rejecting here is
+# defence in depth and stops the parser allocating an arbitrarily large AST.
+MAX_QUERY_LENGTH = 10_240  # 10 KiB
+
 # Top-level statement shapes that count as SELECT-like for the cohort API.
 _ALLOWED_QUERY_TYPES: tuple[type[exp.Expression], ...] = (
     exp.Select,
@@ -64,14 +69,16 @@ def validate_query(query: str) -> bool:
     ---------------------------
     Since the read-only role can still issue arbitrary ``SELECT`` queries:
 
-    1. The query parses as exactly one statement (defeats query stacking).
-    2. The top-level statement is SELECT-shaped (rejects ``COPY``, ``EXPLAIN``,
+    1. The query is shorter than ``MAX_QUERY_LENGTH`` (DoS guard).
+    2. The query parses as exactly one non-empty statement (defeats query stacking,
+       stray semicolons that bypass the count check, and empty inputs).
+    3. The top-level statement is SELECT-shaped (rejects ``COPY``, ``EXPLAIN``,
        and any DDL/DML the DB would also reject — fail fast at the API).
-    3. Any schema-qualified table reference targets only the ``omop`` schema
+    4. Any schema-qualified table reference targets only the ``omop`` schema
        (blocks enumeration of ``information_schema``, ``pg_catalog``,
        ``pg_class`` etc., which Postgres makes readable to role ``public``
        by default).
-    4. Every ``LIMIT`` and ``OFFSET`` is a literal integer (defeats the blind
+    5. Every ``LIMIT`` and ``OFFSET`` is a literal integer (defeats the blind
        data-extraction technique that abuses
        ``LIMIT CASE WHEN <predicate> THEN n ELSE m END`` to make the row count
        a function of a single character value, then reads it back via the
@@ -86,15 +93,25 @@ def validate_query(query: str) -> bool:
     Raises:
         HTTPException(400): When any of the rules above is violated.
     """
+    if len(query) > MAX_QUERY_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Query exceeds maximum length of {MAX_QUERY_LENGTH} characters.",
+        )
+
     try:
-        statements = [s for s in sqlglot.parse(query, read="postgres") if s is not None]
+        statements = sqlglot.parse(query, read="postgres")
     except SqlglotError as e:
         # SqlglotError is the parent of both ParseError (e.g. "SELECT FROM") and
         # TokenError (e.g. unterminated string literals); catch the parent so a
         # tokenizer failure can't bubble up as an unhandled 500.
         raise HTTPException(status_code=400, detail=f"Could not parse SQL query: {e}") from e
 
-    if len(statements) != 1:
+    # sqlglot returns ``None`` for empty/whitespace input and for stray semicolons
+    # (e.g. ``SELECT 1; ;`` parses to ``[Select, None]``). Reject if the result is
+    # not exactly one non-empty statement — silently filtering ``None`` would let
+    # callers smuggle an extra trailing semicolon past the single-statement check.
+    if len(statements) != 1 or statements[0] is None:
         raise HTTPException(
             status_code=400,
             detail="Exactly one SQL statement is allowed per request.",

@@ -20,6 +20,7 @@ from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 
 from data_access_api.routers.schema import CohortQueryInput
 from data_access_api.services.cohort import (
+    MAX_QUERY_LENGTH,
     get_age_distribution,
     get_counts,
     get_null_counts,
@@ -293,6 +294,8 @@ def test_get_records_undefined_column_with_extraction_failure(mock_read_sql, moc
         "SELECT person_id FROM omop.person WHERE person_id > 0 ORDER BY person_id",
         "WITH p AS (SELECT * FROM omop.person) SELECT * FROM p",
         "SELECT * FROM omop.person UNION SELECT * FROM omop.person",
+        # Single trailing semicolon is allowed — it doesn't introduce a second statement.
+        "SELECT * FROM omop.person;",
     ],
 )
 def test_validate_query_accepts_well_formed_select(query: str):
@@ -326,16 +329,41 @@ def test_validate_query_rejects_garbage_that_parses_as_non_select():
         validate_query("INVALID SQL")
 
 
-def test_validate_query_rejects_empty_query():
-    """An empty query has no statements and must be rejected."""
+@pytest.mark.parametrize(
+    "query",
+    [
+        "",                  # empty input → sqlglot returns [None]
+        "   ",               # whitespace only → [None]
+        "; ;",               # multiple Nones
+        "SELECT 1; ;",       # valid statement followed by stray semicolon → [Select, None]
+        "; SELECT 1",        # leading stray semicolon → [None, Select]
+    ],
+)
+def test_validate_query_rejects_empty_or_partial_statements(query: str):
+    """Empty input and stray semicolons must be rejected.
+
+    Without the ``statements[0] is None`` guard, ``SELECT 1; ;`` would slip past
+    the count check because the trailing ``None`` was filtered out.
+    """
     with pytest.raises(HTTPException, match="Exactly one SQL statement is allowed per request"):
-        validate_query("")
+        validate_query(query)
 
 
 def test_validate_query_rejects_query_stacking():
-    """Multiple statements per request are rejected."""
+    """Multiple SELECT statements per request are rejected."""
     with pytest.raises(HTTPException, match="Exactly one SQL statement is allowed per request"):
         validate_query("SELECT 1; SELECT 2")
+
+
+def test_validate_query_rejects_oversized_query():
+    """Pathologically large queries are rejected before sqlglot starts work.
+
+    DoS guard: parse cost grows with input size, so cap the input length up front.
+    """
+    oversized = "SELECT 'x" + ("a" * (MAX_QUERY_LENGTH + 100)) + "' FROM omop.person"
+    assert len(oversized) > MAX_QUERY_LENGTH
+    with pytest.raises(HTTPException, match="exceeds maximum length"):
+        validate_query(oversized)
 
 
 @pytest.mark.parametrize(
