@@ -10,6 +10,8 @@
 # limitations under the License.
 #
 
+import logging
+import re
 import uuid
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -313,3 +315,78 @@ class TestS3Client:
                 s3_client.get_presigned_url("test-bucket", "test-key")
 
             assert "An error occurred (AccessDenied)" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# Logging policy: the route used to JSON-dump the presigned-URL list at INFO,
+# which made every entry's X-Amz-Signature / X-Amz-Credential reachable from
+# the application log. Pin that it cannot regress.
+# ---------------------------------------------------------------------------
+
+
+_FAKE_SIGNED_URL = (
+    "https://test-bucket.s3.amazonaws.com/model-id/weights.bin?"
+    "X-Amz-Algorithm=AWS4-HMAC-SHA256&"
+    "X-Amz-Credential=AKIAEXAMPLEKEY%2F20260506%2Feu-west-2%2Fs3%2Faws4_request&"
+    "X-Amz-Date=20260506T000000Z&"
+    "X-Amz-Expires=600&"
+    "X-Amz-SignedHeaders=host&"
+    "X-Amz-Signature=deadbeefcafe1234567890abcdef"
+)
+_S3_URL_WITH_QUERY = re.compile(r"https?://[^\s]*s3[^\s/]*\.amazonaws\.com[^\s]*\?[^\s]*", re.IGNORECASE)
+_FORBIDDEN_TOKENS = ("X-Amz-Signature=", "X-Amz-Credential=", "X-Amz-SignedHeaders=")
+
+
+def _assert_logs_have_no_presigned_url(records: list[logging.LogRecord]) -> None:
+    for record in records:
+        candidates = [record.getMessage()]
+        if record.args:
+            candidates.append(repr(record.args))
+        for candidate in candidates:
+            for token in _FORBIDDEN_TOKENS:
+                assert token not in candidate, (
+                    f"Pre-signed URL artefact {token!r} leaked into a log line: {candidate!r}"
+                )
+            assert not _S3_URL_WITH_QUERY.search(candidate), (
+                f"Pre-signed S3 URL leaked into a log line: {candidate!r}"
+            )
+
+
+def test_retrieve_federated_results_does_not_log_url_list(caplog):
+    """The route must never emit the list of presigned URLs into a log line."""
+    caplog.set_level(logging.DEBUG, logger="uvicorn")
+    model_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    settings = Settings(
+        UPLOADED_FEDERATED_DATA_BUCKET="s3://test-bucket/uploaded_federated_data",
+    )
+
+    mock_session = MagicMock()
+    mock_session.exec.return_value.first.return_value = MagicMock()  # bypass the 404 branch
+    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[verify_token] = lambda: user_id
+    try:
+        with (
+            patch("flip_api.file_services.retrieve_federated_results.get_settings", return_value=settings),
+            patch("flip_api.file_services.retrieve_federated_results.can_access_model", return_value=True),
+            patch("flip_api.file_services.retrieve_federated_results.S3Client") as mock_s3_cls,
+        ):
+            mock_s3 = MagicMock()
+            mock_s3.list_objects.return_value = [
+                f"s3://test-bucket/uploaded_federated_data/{model_id}/metrics.json",
+                f"s3://test-bucket/uploaded_federated_data/{model_id}/weights.bin",
+            ]
+            mock_s3.get_presigned_url.side_effect = [
+                _FAKE_SIGNED_URL,
+                _FAKE_SIGNED_URL.replace("weights.bin", "metrics.json"),
+            ]
+            mock_s3_cls.return_value = mock_s3
+
+            response = TestClient(app).get(f"/api/files/model/{model_id}/fl/results")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200, response.text
+    assert len(response.json()) == 2
+    _assert_logs_have_no_presigned_url(caplog.records)
