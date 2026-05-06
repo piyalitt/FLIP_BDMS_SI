@@ -140,18 +140,18 @@ body, .wy-body-for-nav,
 }
 .wy-side-nav-search input[type="text"] {
     border-radius: 6px;
-    border: 1px solid rgba(255,255,255,0.25);
+    border: 1px solid var(--flip-primary-400);
     background: rgba(255,255,255,0.08);
-    color: #fff;
+    color: var(--flip-primary-400);
     font-family: var(--font-body);
     font-size: 13.5px;
     padding: 8px 12px;
     box-shadow: none;
     transition: border-color 150ms ease, background 150ms ease;
 }
-.wy-side-nav-search input[type="text"]::placeholder { color: rgba(255,255,255,0.55); }
+.wy-side-nav-search input[type="text"]::placeholder { color:var(--flip-primary-400); }
 .wy-side-nav-search input[type="text"]:focus {
-    border-color: rgba(255,255,255,0.55);
+    border-color:var(--flip-primary-400);
     background: rgba(255,255,255,0.14);
     outline: none;
 }
