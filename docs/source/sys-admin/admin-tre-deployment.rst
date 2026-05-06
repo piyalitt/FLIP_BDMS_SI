@@ -116,7 +116,6 @@ Both pathways use **outbound-only** connections, making FLIP compatible with TRE
 policies that block inbound traffic.
 
 .. figure:: ../assets/tre/TRE_FLIP_diagram_steps.png
-   :width: 700
    :align: center
 
    FLIP TRE deployment: outbound-only connections from the FLIP node to the Central Hub.
