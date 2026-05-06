@@ -161,9 +161,9 @@ def test_create_payload_for_project_creation():
 
 def test_create_payload_for_project_creation_escapes_xml_control_chars():
     """
-    Regression test for FLIP-PT-082: name/description must be XML-escaped, never
-    interpolated raw, so an attacker-supplied value cannot inject elements into
-    the projectData document XNAT receives.
+    name/description must be XML-escaped, never interpolated raw, so an
+    attacker-supplied value cannot inject elements into the projectData
+    document XNAT receives.
     """
     import xml.etree.ElementTree as ET
 

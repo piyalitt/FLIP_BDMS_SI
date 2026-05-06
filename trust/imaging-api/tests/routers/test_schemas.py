@@ -41,8 +41,8 @@ def test_central_hub_project_defaults_dicom_to_nifti_true():
 )
 def test_central_hub_project_rejects_xml_control_chars_in_name(bad_name: str):
     """
-    FLIP-PT-082: project_name must not carry XML control characters that could
-    inject into the XNAT projectData payload built by imaging-api.
+    project_name must not carry XML control characters that could inject into
+    the XNAT projectData payload built by imaging-api.
     """
     with pytest.raises(ValidationError, match="XML control characters"):
         CentralHubProject(
