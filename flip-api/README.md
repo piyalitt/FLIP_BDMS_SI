@@ -48,14 +48,15 @@ or as part of the full platform:
 make up
 ```
 
-Before starting the platform, generate per-trust API keys and the internal service key:
+Before starting the platform, generate per-trust API keys, the internal service key, and the per-trust internal service keys:
 
 ```bash
-make generate-trust-api-keys        # from repo root
-make generate-internal-service-key  # from repo root (also invoked automatically by `make up`)
+make generate-trust-api-keys                  # from repo root
+make generate-internal-service-key            # from repo root (also invoked automatically by `make up`)
+make generate-trust-internal-service-keys     # from repo root
 ```
 
-`generate-trust-api-keys` updates `TRUST_API_KEYS` and `TRUST_API_KEY_HASHES` in `.env.development`. `generate-internal-service-key` writes `INTERNAL_SERVICE_KEY` and `INTERNAL_SERVICE_KEY_HASH` (used for fl-server-to-hub authentication).
+`generate-trust-api-keys` updates `TRUST_API_KEYS` and `TRUST_API_KEY_HASHES` in `.env.development`. `generate-internal-service-key` writes `INTERNAL_SERVICE_KEY` and `INTERNAL_SERVICE_KEY_HASH` (used for fl-server-to-hub authentication). `generate-trust-internal-service-keys` writes `TRUST_INTERNAL_SERVICE_KEYS` (per-trust JSON dict) used for trust-api / imaging-api / data-access-api / fl-client authentication inside each trust — never sent to the hub.
 See [`.env.development.example`](../.env.development.example) for the expected format.
 
 The API is served on the port defined by `API_PORT` in [`.env.development.example`](../.env.development.example)
