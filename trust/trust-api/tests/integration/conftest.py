@@ -95,11 +95,34 @@ class _StubHubHandler(http.server.BaseHTTPRequestHandler):
     formed JSON keeps the handler's success path. Recording the bodies lets tests
     inspect what would have been sent to flip-api (B3 is scoped *not* to validate
     the hub side, but the visibility is useful for diagnosing failures).
+
+    The handler also enforces the trust-api auth header. Without that check, a
+    regression that drops ``TRUST_API_KEY_HEADER`` from the outbound request would
+    silently pass — the stub would just record a header-less POST. Validating the
+    header here means a missing-auth regression surfaces as ``make_request`` raising
+    on the 401 response, which then surfaces as ``handle_cohort_query`` returning
+    ``success=False`` and the test failing.
     """
 
     received: list[dict[str, Any]] = []
+    # Populated at session-fixture setup time by ``stub_hub_server`` so the handler
+    # has access to the same key/header pair the trust-api side uses on outbound
+    # POSTs. Empty defaults make the handler safe to import without a fixture run.
+    expected_header_name: str = ""
+    expected_value: str = ""
 
     def do_POST(self) -> None:  # noqa: N802 — http.server API
+        # Auth gate before recording — a request that fails auth never lands in
+        # ``received`` so tests can still ``assert stub_hub_received == []`` on
+        # the failure-path branches without false positives.
+        sent = self.headers.get(self.expected_header_name) if self.expected_header_name else None
+        if not self.expected_value or sent != self.expected_value:
+            self.send_response(401)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"detail": "missing or invalid trust-api key"}')
+            return
+
         length = int(self.headers.get("Content-Length", "0") or "0")
         body = self.rfile.read(length) if length > 0 else b""
         _StubHubHandler.received.append({
@@ -120,6 +143,12 @@ class _StubHubHandler(http.server.BaseHTTPRequestHandler):
 @pytest.fixture(scope="session")
 def stub_hub_server() -> Generator[socketserver.TCPServer, None, None]:
     """Run a stdlib HTTP server on an ephemeral localhost port for the session."""
+    # Tell the handler which auth header / value to enforce. Reading from
+    # ``task_handlers`` rather than hard-coding keeps the fixture in lock-step with
+    # whatever the trust-api side actually sends — a rename of TRUST_API_KEY_HEADER
+    # would not silently break the auth-gate.
+    _StubHubHandler.expected_header_name = task_handlers.TRUST_API_KEY_HEADER
+    _StubHubHandler.expected_value = task_handlers.TRUST_API_KEY
     server = socketserver.TCPServer(("127.0.0.1", 0), _StubHubHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

@@ -248,5 +248,9 @@ async def test_missing_table_returns_failure(stub_hub_received):
     result = await handle_cohort_query(_payload("SELECT * FROM omop.does_not_exist"))
 
     assert result["success"] is False
-    assert "does_not_exist" in result["error"] or "does not exist" in result["error"].lower()
+    # Apply ``.lower()`` to both halves of the OR — Postgres versions vary on identifier
+    # quoting / casing in error messages, so making both checks case-insensitive avoids
+    # a future-Postgres flake.
+    err = result["error"].lower()
+    assert "does_not_exist" in err or "does not exist" in err
     assert stub_hub_received == []

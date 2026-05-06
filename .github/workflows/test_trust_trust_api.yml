@@ -21,6 +21,7 @@ on:
       - "trust/data-access-api/**"
       - "trust/observability/**"
       - ".github/workflows/test_trust_trust_api.yml"
+      - ".github/actions/setup-trust-test-env/**"
   pull_request:
     branches: [main, develop]
 
@@ -39,25 +40,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup trust test env
+        uses: ./.github/actions/setup-trust-test-env
         with:
-          # get python version from ./trust/trust-api/.python-version file
-          # if not found, use 3.11
           python-version: ${{ github.event.inputs.python-version || '3.11' }}
-
-      - name: Install uv (if used for dependency management)
-        run: pip install uv
-
-      - name: Setup environment file
-        run: | # pragma: allowlist secret
-          cp ../../.env.development.example ../../.env.development
-          # Override sensitive values with GitHub secrets
-          echo "TRUST_API_KEY=${{ secrets.TRUST_API_KEY || 'test-trust-api-key-for-ci' }}" >> ../../.env.development
-          echo "AES_KEY_BASE64=${{ secrets.AES_KEY_BASE64 || 'dGVzdC1hZXMta2V5LWZvci1jaS10ZXN0aW5nLTMyYnl0ZXM=' }}" >> ../../.env.development  # pragma: allowlist secret
-          echo "DATA_ACCESS_POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> ../../.env.development
-          echo "OMOP_POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> ../../.env.development
-          echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> ../../.env.development
+          trust-api-key: ${{ secrets.TRUST_API_KEY || 'test-trust-api-key-for-ci' }}
+          aes-key-base64: ${{ secrets.AES_KEY_BASE64 || 'dGVzdC1hZXMta2V5LWZvci1jaS10ZXN0aW5nLTMyYnl0ZXM=' }}  # pragma: allowlist secret
+          postgres-password: ${{ secrets.POSTGRES_PASSWORD }}
 
       - name: Run tests with pytest (example)
         # Replace with your actual test command
@@ -91,22 +80,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup trust test env
+        uses: ./.github/actions/setup-trust-test-env
         with:
           python-version: ${{ github.event.inputs.python-version || '3.12' }}
-
-      - name: Install uv
-        run: pip install uv
-
-      - name: Setup environment file
-        run: | # pragma: allowlist secret
-          cp ../../.env.development.example ../../.env.development
-          echo "TRUST_API_KEY=${{ secrets.TRUST_API_KEY || 'test-trust-api-key-for-ci' }}" >> ../../.env.development
-          echo "AES_KEY_BASE64=${{ secrets.AES_KEY_BASE64 || 'QgZ+TBA0lUxcuCiRPLneFe/JjMaUEUJWHACHHGz2gGA=' }}" >> ../../.env.development  # pragma: allowlist secret
-          echo "DATA_ACCESS_POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'test_password' }}" >> ../../.env.development
-          echo "OMOP_POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'test_password' }}" >> ../../.env.development
-          echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'test_password' }}" >> ../../.env.development
+          trust-api-key: ${{ secrets.TRUST_API_KEY || 'test-trust-api-key-for-ci' }}
+          aes-key-base64: ${{ secrets.AES_KEY_BASE64 || 'QgZ+TBA0lUxcuCiRPLneFe/JjMaUEUJWHACHHGz2gGA=' }}  # pragma: allowlist secret
+          postgres-password: ${{ secrets.POSTGRES_PASSWORD || 'test_password' }}
 
       - name: Sync trust-api venv (incl. testcontainers)
         run: uv sync --frozen
