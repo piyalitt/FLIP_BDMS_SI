@@ -100,15 +100,13 @@ def get_presigned_url_for_upload(
         try:
             pre_signed_url = s3.get_put_presigned_url(s3_path, expiration=MAX_PUT_PRESIGNED_URL_TTL_SECONDS)
             return pre_signed_url
-        except Exception as e:
-            # Compose the operator-facing error from non-secret components.
-            # ``s3_path`` is safe (bucket + logical key, no signature). ``e``
-            # from boto3 does not contain the URL but may include the key —
-            # that's acceptable, the URL itself is what must never appear.
-            error_msg = (
-                f"Could not create a pre-signed URL for bucket={bucket} key_hash={key_hash}. Error: {e}"
+        except Exception:
+            # Use logger.exception so the boto traceback is captured out-of-band.
+            # The formatted log line is built from non-secret components only —
+            # ``str(e)`` is excluded in case a future exception type embeds the URL.
+            logger.exception(
+                f"Could not create a pre-signed URL for bucket={bucket} key_hash={key_hash}"
             )
-            logger.error(error_msg)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Could not create a pre-signed URL",
@@ -116,8 +114,8 @@ def get_presigned_url_for_upload(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Unhandled error: {str(e)}")
+    except Exception:
+        logger.exception(f"Unhandled error in get_presigned_url_for_upload model_id={model_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",

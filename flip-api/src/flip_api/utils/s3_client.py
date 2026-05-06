@@ -79,23 +79,29 @@ class S3Client:
         return url
 
     def get_put_presigned_url(self, s3_path: str, expiration: int = MAX_PUT_PRESIGNED_URL_TTL_SECONDS) -> str:
-        """
-        Generate a pre-signed URL for uploading a file to S3.
+        """Generate a pre-signed URL for uploading a file to S3.
 
         Args:
-            s3_path: Full S3 path (e.g., s3://bucket-name/key)
-            expiration: URL expiration time in seconds. Capped at
-                ``MAX_PUT_PRESIGNED_URL_TTL_SECONDS`` to limit the blast
-                radius of a leaked URL.
+            s3_path (str): Full S3 path (e.g., ``s3://bucket-name/key``).
+            expiration (int): URL expiration time in seconds. Values above
+                ``MAX_PUT_PRESIGNED_URL_TTL_SECONDS`` are silently clamped to
+                the ceiling — a warning is logged so an over-limit caller
+                leaves an audit trail. Silent clamping is deliberate: the
+                ceiling is a hard security policy, never an error condition.
 
         Returns:
-            str: Pre-signed URL string
+            str: Pre-signed URL string.
 
         Raises:
-            Exception: If URL generation fails
+            Exception: If URL generation fails.
         """
         bucket, key = parse_s3_path(s3_path)
         ttl = min(expiration, MAX_PUT_PRESIGNED_URL_TTL_SECONDS)
+        if expiration > MAX_PUT_PRESIGNED_URL_TTL_SECONDS:
+            logger.warning(
+                f"Requested PUT pre-signed URL TTL {expiration}s exceeds the "
+                f"{MAX_PUT_PRESIGNED_URL_TTL_SECONDS}s security ceiling; clamped to {ttl}s."
+            )
         try:
             url = self.client.generate_presigned_url(
                 "put_object",
@@ -111,10 +117,14 @@ class S3Client:
             )
             return url
         except ClientError as e:
-            logger.error(
-                f"Error generating pre-signed PUT URL bucket={bucket} key_hash={hash_s3_key(key)}: {e}"
+            # Use logger.exception so the boto traceback is captured out-of-band.
+            # ``str(e)`` is intentionally excluded from the formatted log line —
+            # the boto ``Error.Message`` field is operator-controlled in some
+            # error shapes and could in pathological cases carry URL fragments.
+            logger.exception(
+                f"Error generating pre-signed PUT URL bucket={bucket} key_hash={hash_s3_key(key)}"
             )
-            raise Exception("Unable to create a pre-signed URL")
+            raise Exception("Unable to create a pre-signed URL") from e
 
     def delete_object(self, s3_path: str) -> None:
         """

@@ -41,8 +41,17 @@ _FAKE_SIGNED_URL = (
     "X-Amz-SignedHeaders=host&"
     "X-Amz-Signature=deadbeefcafe1234567890abcdef"
 )
-_S3_URL_WITH_QUERY = re.compile(r"https?://[^\s]*s3[^\s/]*\.amazonaws\.com[^\s]*\?[^\s]*", re.IGNORECASE)
-_FORBIDDEN_TOKENS = ("X-Amz-Signature=", "X-Amz-Credential=", "X-Amz-SignedHeaders=")
+# Match any URL that carries SigV4 query parameters, regardless of host —
+# AWS, moto/localstack (``http://localhost:4566/...``), GovCloud, S3
+# Accelerate, and path-style endpoints all produce ``...?X-Amz-...`` URLs.
+_S3_URL_WITH_QUERY = re.compile(r"https?://\S+\?\S*X-Amz-", re.IGNORECASE)
+_FORBIDDEN_TOKENS = (
+    "X-Amz-Signature=",
+    "X-Amz-Credential=",
+    "X-Amz-SignedHeaders=",
+    "X-Amz-Security-Token=",
+    "Authorization=AWS4-HMAC-SHA256",
+)
 
 
 def _assert_logs_have_no_presigned_url(records: list[logging.LogRecord]) -> None:
@@ -63,7 +72,10 @@ def _assert_logs_have_no_presigned_url(records: list[logging.LogRecord]) -> None
 @pytest.fixture
 def upload_route_settings():
     """Settings stub the upload route reads via ``get_settings``."""
-    settings = Settings(UPLOADED_MODEL_FILES_BUCKET="test-uploaded-bucket")
+    # Use an ``s3://`` prefix so ``parse_s3_path`` exercises the same code
+    # path as production — without the scheme, ``urlparse`` sets ``netloc=""``
+    # and the production parser would silently emit ``bucket=`` empty.
+    settings = Settings(UPLOADED_MODEL_FILES_BUCKET="s3://test-uploaded-bucket")
     with patch("flip_api.file_services.presigned_url_for_upload.get_settings", return_value=settings):
         yield settings
 
@@ -120,7 +132,7 @@ def test_presigned_url_endpoint_env_override_path_does_not_log_url(
     model_id = uuid.uuid4()
 
     settings = Settings(
-        UPLOADED_MODEL_FILES_BUCKET="test-uploaded-bucket",
+        UPLOADED_MODEL_FILES_BUCKET="s3://test-uploaded-bucket",
         PRE_SIGNED_URL=_FAKE_SIGNED_URL,
     )
     with (
@@ -154,3 +166,66 @@ def test_presigned_url_endpoint_rejects_path_traversal_filename(
 
     assert response.status_code == 422, response.text
     mock_s3_cls.assert_not_called()
+
+
+def test_presigned_url_endpoint_redacts_url_when_s3_raises(
+    caplog, upload_route_settings, override_upload_dependencies
+):
+    """If ``S3Client.get_put_presigned_url`` raises with a URL embedded in the
+    exception message, the route's error handler must not leak it to the log.
+
+    Exception paths evolve more often than happy paths, so pin redaction here
+    even though boto's own ``ClientError`` does not carry the URL today.
+    """
+    caplog.set_level(logging.DEBUG, logger="uvicorn")
+    model_id = uuid.uuid4()
+
+    with (
+        patch("flip_api.file_services.presigned_url_for_upload.can_modify_model", return_value=True),
+        patch("flip_api.file_services.presigned_url_for_upload.S3Client") as mock_s3_cls,
+    ):
+        mock_s3 = MagicMock()
+        mock_s3.get_put_presigned_url.side_effect = Exception(_FAKE_SIGNED_URL)
+        mock_s3_cls.return_value = mock_s3
+
+        response = TestClient(app).post(
+            f"/api/files/preSignedUrl/model/{model_id}",
+            json={"fileName": "weights.bin"},
+        )
+
+    assert response.status_code == 500, response.text
+    assert _FAKE_SIGNED_URL not in response.text
+    _assert_logs_have_no_presigned_url(caplog.records)
+
+
+def test_presigned_url_endpoint_redacts_url_when_unhandled_error(
+    caplog, upload_route_settings, override_upload_dependencies
+):
+    """The outer ``except Exception`` must not leak a URL via ``logger.exception``.
+
+    Force the access check to raise with a URL in the message — without the
+    redaction in place this would land in the unhandled-error log line.
+    """
+    caplog.set_level(logging.DEBUG, logger="uvicorn")
+    model_id = uuid.uuid4()
+
+    with patch(
+        "flip_api.file_services.presigned_url_for_upload.can_modify_model",
+        side_effect=Exception(_FAKE_SIGNED_URL),
+    ):
+        response = TestClient(app).post(
+            f"/api/files/preSignedUrl/model/{model_id}",
+            json={"fileName": "weights.bin"},
+        )
+
+    assert response.status_code == 500, response.text
+    assert _FAKE_SIGNED_URL not in response.text
+    # Note: ``logger.exception`` writes the traceback to ``record.exc_info`` —
+    # which our policy assertion intentionally does not check, since operators
+    # need that traceback to debug. The contract is that the formatted log
+    # message itself never carries URL artefacts.
+    for record in caplog.records:
+        for token in _FORBIDDEN_TOKENS:
+            assert token not in record.getMessage(), (
+                f"Pre-signed URL artefact {token!r} leaked into log message: {record.getMessage()!r}"
+            )

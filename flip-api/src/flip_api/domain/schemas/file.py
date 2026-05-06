@@ -10,13 +10,49 @@
 # limitations under the License.
 #
 
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AfterValidator, BaseModel, Field, field_validator
 
 from flip_api.domain.schemas.status import BucketAction, BucketStatus, FileUploadStatus
 from flip_api.domain.schemas.types import NonEmptyUUIDList
+
+
+def validate_safe_file_name(value: str) -> str:
+    """Reject any character that would let the caller steer an S3 key off-prefix.
+
+    Used at every boundary where caller-supplied text is concatenated into an
+    S3 object key — request bodies (``UploadFileBody``) and FastAPI path
+    parameters on the download/delete routes. Without this guard a value like
+    ``../other-model/x`` or one containing NUL/control bytes would write
+    outside the ``{model_id}/`` prefix or smuggle an unexpected key past the
+    downstream scan/download endpoints.
+
+    Args:
+        value (str): Caller-supplied filename to validate.
+
+    Returns:
+        str: The value unchanged when every rule passes.
+
+    Raises:
+        ValueError: If the value contains whitespace at the edges, path
+            separators, a path-traversal token, or control characters.
+    """
+    if not value:
+        raise ValueError("file name must not be empty")
+    if value != value.strip():
+        raise ValueError("file name must not have leading or trailing whitespace")
+    if "/" in value or "\\" in value:
+        raise ValueError("file name must not contain path separators")
+    if value in (".", "..") or value.startswith(".."):
+        raise ValueError("file name must not be a path-traversal token")
+    if any(ord(c) < 0x20 or ord(c) == 0x7F for c in value):
+        raise ValueError("file name must not contain control characters")
+    return value
+
+
+SafeFileName = Annotated[str, AfterValidator(validate_safe_file_name)]
 
 
 class ModelFiles(BaseModel):
@@ -60,24 +96,8 @@ class UploadFileBody(BaseModel):
 
     @field_validator("fileName")
     @classmethod
-    def reject_path_traversal(cls, v: str) -> str:
-        """Reject any character that would let the caller steer the S3 key off-prefix.
-
-        ``body.fileName`` is concatenated into the S3 object key by the
-        upload route. Without this validator a value like ``../other-model/x``
-        or one containing NUL/control bytes would write outside the
-        ``{model_id}/`` prefix or smuggle an unexpected key past the
-        downstream scan/download endpoints.
-        """
-        if v != v.strip():
-            raise ValueError("fileName must not have leading or trailing whitespace")
-        if "/" in v or "\\" in v:
-            raise ValueError("fileName must not contain path separators")
-        if v in (".", "..") or v.startswith(".."):
-            raise ValueError("fileName must not be a path-traversal token")
-        if any(ord(c) < 0x20 or ord(c) == 0x7F for c in v):
-            raise ValueError("fileName must not contain control characters")
-        return v
+    def _validate_file_name(cls, v: str) -> str:
+        return validate_safe_file_name(v)
 
 
 class ModelFile(BaseModel):
@@ -103,7 +123,7 @@ class PreSignedUrlResponse(BaseModel):
 class ModelFileDownload(BaseModel):
     """Model for file download requests."""
 
-    fileName: str
+    fileName: SafeFileName
     model_id: UUID
     user_id: UUID
 
