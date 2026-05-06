@@ -12,7 +12,8 @@
 
 .PHONY: build dev prod clean stop up down up-no-trust up-trusts central-fl central-hub \
 		restart restart-no-trust ci tests debug create-networks remove-networks recreate-networks consolidate-deps \
-		check-aws-access up-local-trust generate-trust-api-keys generate-internal-service-key integration_test
+		check-aws-access up-local-trust generate-trust-api-keys generate-internal-service-key \
+		generate-trust-internal-service-keys integration_test
 
 ifeq ($(PROD),true)
 MAIN_ENV_FILE=.env.production
@@ -271,6 +272,9 @@ generate-trust-api-keys:
 
 generate-internal-service-key:
 	$(MAKE) -C flip-api generate-internal-service-key $(if $(ENV_FILE),ENV_FILE=$(ENV_FILE)) $(if $(FORCE),FORCE=$(FORCE))
+
+generate-trust-internal-service-keys:
+	$(MAKE) -C flip-api generate-trust-internal-service-keys $(if $(ENV_FILE),ENV_FILE=$(ENV_FILE)) $(if $(FORCE),FORCE=$(FORCE))
 
 check-aws-access:
 	@echo "🔎 Checking AWS CLI access..."

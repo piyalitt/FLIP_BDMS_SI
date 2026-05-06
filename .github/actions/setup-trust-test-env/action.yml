@@ -57,3 +57,7 @@ runs:
         echo "DATA_ACCESS_POSTGRES_PASSWORD=${{ inputs.postgres-password }}" >> .env.development
         echo "OMOP_POSTGRES_PASSWORD=${{ inputs.postgres-password }}" >> .env.development
         echo "POSTGRES_PASSWORD=${{ inputs.postgres-password }}" >> .env.development
+        # The GitHub environment can inject empty-string env vars; Pydantic Settings
+        # treats explicit env vars (even empty) as an override, so pin ENV=development
+        # explicitly so the Literal field doesn't fail validation in CI.
+        echo "ENV=development" >> .env.development
