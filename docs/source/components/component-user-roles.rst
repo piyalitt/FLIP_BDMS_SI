@@ -13,7 +13,10 @@ User Roles
    * - ``admin``
      - Grants all platform permissions including; project approval, unstaging projects, deleting any project, managing deployments (deployment mode), managing the site banner, user management, accessing the admin panel, and all ``researcher`` capabilities.
    * - ``researcher``
-     - Allows a user to create and manage FLIP projects. On projects they own, Researchers can edit project details, stage projects for approval on specified trusts, create cohort queries, create models, upload files required for those models, and initiate model training. On projects they have been added to as a member (via a ``ProjectUserAccess`` record) but do not own, Researchers may contribute their own models — creating models, uploading files for those models, and initiating training — but they cannot edit, stage, or delete the project itself, nor modify models created by other Researchers.
+     - Allows a user to create and manage FLIP projects.
+
+       - **On projects they own:** Researchers can edit project details, stage projects for approval on specified trusts, create cohort queries, create models, upload files required for those models, and initiate model training.
+       - **On projects they have been added to as a member (via a** ``ProjectUserAccess`` **record) but do not own:** Researchers may contribute their own models — creating models, uploading files for those models, and initiating training — but they cannot edit, stage, or delete the project itself, nor modify models created by other Researchers.
    * - ``observer``
      - Provides read-only access to assigned projects. Observers can view project details, cohort query results, model metrics and training results, and download model results. Observers cannot create or edit projects, run or save cohort queries, create or edit models, upload model files, or initiate training.
 

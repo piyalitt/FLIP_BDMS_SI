@@ -30,7 +30,6 @@ from flip_api.auth.access_manager import (
     can_modify_project,
     verify_trust_identity,
 )
-from flip_api.db.models.user_models import PermissionRef
 
 VALID_TEST_KEY = "test_secret_key_12345_valid"
 VALID_TEST_KEY_HASH = hashlib.sha256(VALID_TEST_KEY.encode()).hexdigest()
@@ -301,8 +300,18 @@ class TestCanContributeToProject:
         mock_project = MagicMock()
         mock_project.owner_id = uuid4()
         mock_membership = MagicMock()
-        # Sequence of db.exec().first() calls: project lookup, then membership lookup
-        db.exec.return_value.first.side_effect = [mock_project, mock_membership]
+
+        project_result = MagicMock()
+        project_result.first.return_value = mock_project
+        membership_result = MagicMock()
+        membership_result.first.return_value = mock_membership
+
+        def _exec(stmt):
+            # Route by what the statement targets — robust to intermediate queries
+            # being added in front of these later.
+            return membership_result if "project_user_access" in str(stmt).lower() else project_result
+
+        db.exec.side_effect = _exec
 
         # Admin check first (False), then CAN_CREATE_PROJECTS check (True)
         with patch(PATCH_HAS_PERMISSIONS, side_effect=[False, True]):
@@ -317,8 +326,16 @@ class TestCanContributeToProject:
         db = MagicMock(spec=Session)
         mock_project = MagicMock()
         mock_project.owner_id = uuid4()
-        # Project found, but no membership row
-        db.exec.return_value.first.side_effect = [mock_project, None]
+
+        project_result = MagicMock()
+        project_result.first.return_value = mock_project
+        empty_membership_result = MagicMock()
+        empty_membership_result.first.return_value = None
+
+        def _exec(stmt):
+            return empty_membership_result if "project_user_access" in str(stmt).lower() else project_result
+
+        db.exec.side_effect = _exec
 
         with patch(PATCH_HAS_PERMISSIONS, side_effect=[False, True]):
             result = can_contribute_to_project(user_id, project_id, db)
@@ -341,7 +358,12 @@ class TestCanContributeToProject:
         assert result is False
 
     def test_observer_member_does_not_consult_membership(self):
-        """Observer is rejected by the CAN_CREATE_PROJECTS gate before the membership query runs."""
+        """Observer is rejected before the membership query runs.
+
+        Observable effect: only the project lookup hits the DB; no membership query
+        is executed. Asserting on db.exec.call_count keeps this resilient to internal
+        re-ordering of the permission checks.
+        """
         user_id = uuid4()
         project_id = uuid4()
         db = MagicMock(spec=Session)
@@ -349,14 +371,11 @@ class TestCanContributeToProject:
         mock_project.owner_id = uuid4()
         db.exec.return_value.first.return_value = mock_project
 
-        with patch(PATCH_HAS_PERMISSIONS, return_value=False) as mock_perm:
+        with patch(PATCH_HAS_PERMISSIONS, return_value=False):
             can_contribute_to_project(user_id, project_id, db)
 
-        # Two permission checks fired: CAN_MANAGE_PROJECTS, then CAN_CREATE_PROJECTS.
-        assert mock_perm.call_count == 2
-        # Second call should be the CAN_CREATE_PROJECTS check.
-        second_call_perms = mock_perm.call_args_list[1].args[1]
-        assert PermissionRef.CAN_CREATE_PROJECTS in second_call_perms
+        # Project lookup happened, but no follow-up membership query.
+        assert db.exec.call_count == 1
 
     def test_returns_false_on_database_exception(self):
         user_id = uuid4()
