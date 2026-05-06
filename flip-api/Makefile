@@ -58,9 +58,13 @@ local_mypy:
 local_test:
 	$(lint_command) && $(mypy_command) && $(test_coverage_html_command) --skip-client --skip-db
 unit_test:
-	$(lint_command) && $(mypy_command) && $(test_coverage_html_command_unit) --skip-client --skip-db
+	$(lint_command) && $(mypy_command) && $(test_coverage_html_command_unit) --skip-client
+# Integration tests boot a throwaway Postgres via Testcontainers (see
+# tests/integration/conftest.py). --skip-client stays so the AWS-Cognito tests
+# (out of scope for B1, see tests/integration/test_user_registration_real_api.py)
+# don't try to call boto3.
 integration_test:
-	$(lint_command) && $(mypy_command) && $(test_coverage_html_command_integration)
+	$(lint_command) && $(mypy_command) && $(test_coverage_html_command_integration) --skip-client
 build:
 	$(docker_command) build $(service_name)
 restart: down up
