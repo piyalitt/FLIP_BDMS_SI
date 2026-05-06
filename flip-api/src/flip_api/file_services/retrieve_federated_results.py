@@ -10,7 +10,6 @@
 # limitations under the License.
 #
 
-import json
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -91,7 +90,7 @@ def retrieve_federated_results(
                 detail="An error occurred when finding the result data",
             )
 
-        logger.debug(f"List of files returned: {json.dumps(list_objects, default=str)}")
+        logger.debug(f"Found {len(list_objects)} federated-result objects under {s3_path}")
 
         # Check if any files were found
         if len(list_objects) == 0:
@@ -108,7 +107,10 @@ def retrieve_federated_results(
                 detail="An error occurred when attempting to retrieve the files",
             )
 
-        logger.info(f"Output: {json.dumps(result)}")
+        # Never log the URL list: each entry contains X-Amz-Signature /
+        # X-Amz-Credential which together form a readable capability against
+        # the federated-results bucket.
+        logger.info(f"Returned {len(result)} pre-signed URLs for model {model_id}")
         return result
 
     except HTTPException:

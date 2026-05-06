@@ -13,7 +13,7 @@
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from flip_api.domain.schemas.status import BucketAction, BucketStatus, FileUploadStatus
 from flip_api.domain.schemas.types import NonEmptyUUIDList
@@ -56,7 +56,28 @@ class ScannedFileInput(BaseModel):
 class UploadFileBody(BaseModel):
     """Model for file upload request body."""
 
-    fileName: str = Field(..., description="Name of the file to upload")
+    fileName: str = Field(..., description="Name of the file to upload", min_length=1, max_length=255)
+
+    @field_validator("fileName")
+    @classmethod
+    def reject_path_traversal(cls, v: str) -> str:
+        """Reject any character that would let the caller steer the S3 key off-prefix.
+
+        ``body.fileName`` is concatenated into the S3 object key by the
+        upload route. Without this validator a value like ``../other-model/x``
+        or one containing NUL/control bytes would write outside the
+        ``{model_id}/`` prefix or smuggle an unexpected key past the
+        downstream scan/download endpoints.
+        """
+        if v != v.strip():
+            raise ValueError("fileName must not have leading or trailing whitespace")
+        if "/" in v or "\\" in v:
+            raise ValueError("fileName must not contain path separators")
+        if v in (".", "..") or v.startswith(".."):
+            raise ValueError("fileName must not be a path-traversal token")
+        if any(ord(c) < 0x20 or ord(c) == 0x7F for c in v):
+            raise ValueError("fileName must not contain control characters")
+        return v
 
 
 class ModelFile(BaseModel):

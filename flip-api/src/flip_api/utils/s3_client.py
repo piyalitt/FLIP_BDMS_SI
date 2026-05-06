@@ -10,6 +10,7 @@
 # limitations under the License.
 #
 
+import hashlib
 from collections import defaultdict
 from typing import Any
 from urllib.parse import urlparse
@@ -19,6 +20,11 @@ from botocore.exceptions import ClientError, EndpointConnectionError
 
 from flip_api.config import get_settings
 from flip_api.utils.logger import logger
+
+# Upper bound on PUT pre-signed URL lifetime. A leaked URL is a writable
+# capability against the upload bucket, so the leak window must stay tight.
+# 600s is the security ceiling — callers may pass less.
+MAX_PUT_PRESIGNED_URL_TTL_SECONDS = 600
 
 
 def parse_s3_path(s3_path: str) -> tuple[str, str]:
@@ -35,6 +41,11 @@ def parse_s3_path(s3_path: str) -> tuple[str, str]:
     bucket = parsed.netloc
     key = parsed.path.lstrip("/")
     return bucket, key
+
+
+def hash_s3_key(key: str) -> str:
+    """SHA-256 prefix of an S3 key, suitable for log correlation without leaking the key itself."""
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
 
 
 class S3Client:
@@ -67,13 +78,15 @@ class S3Client:
         )
         return url
 
-    def get_put_presigned_url(self, s3_path: str, expiration: int = 3600) -> str:
+    def get_put_presigned_url(self, s3_path: str, expiration: int = MAX_PUT_PRESIGNED_URL_TTL_SECONDS) -> str:
         """
         Generate a pre-signed URL for uploading a file to S3.
 
         Args:
             s3_path: Full S3 path (e.g., s3://bucket-name/key)
-            expiration: URL expiration time in seconds (default: 1 hour)
+            expiration: URL expiration time in seconds. Capped at
+                ``MAX_PUT_PRESIGNED_URL_TTL_SECONDS`` to limit the blast
+                radius of a leaked URL.
 
         Returns:
             str: Pre-signed URL string
@@ -81,17 +94,26 @@ class S3Client:
         Raises:
             Exception: If URL generation fails
         """
+        bucket, key = parse_s3_path(s3_path)
+        ttl = min(expiration, MAX_PUT_PRESIGNED_URL_TTL_SECONDS)
         try:
-            bucket, key = parse_s3_path(s3_path)
-
             url = self.client.generate_presigned_url(
                 "put_object",
                 Params={"Bucket": bucket, "Key": key},
-                ExpiresIn=expiration,
+                ExpiresIn=ttl,
+            )
+            # Never log the URL itself: the query string carries
+            # X-Amz-Signature / X-Amz-Credential, and writable capability
+            # leaks chain into FL supply-chain attacks.
+            logger.info(
+                "Generated pre-signed PUT URL "
+                f"bucket={bucket} key_hash={hash_s3_key(key)} expires_in={ttl}"
             )
             return url
         except ClientError as e:
-            logger.error(f"Error generating pre-signed URL: {e}")
+            logger.error(
+                f"Error generating pre-signed PUT URL bucket={bucket} key_hash={hash_s3_key(key)}: {e}"
+            )
             raise Exception("Unable to create a pre-signed URL")
 
     def delete_object(self, s3_path: str) -> None:
