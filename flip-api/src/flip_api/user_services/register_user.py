@@ -20,7 +20,13 @@ from flip_api.auth.dependencies import verify_token
 from flip_api.db.database import get_session
 from flip_api.db.models.user_models import PermissionRef, User
 from flip_api.domain.interfaces.user import IRegisterUser, IUserResponse
-from flip_api.utils.cognito_helpers import create_cognito_user, get_all_roles, get_user_pool_id, validate_roles
+from flip_api.utils.cognito_helpers import (
+    create_cognito_user,
+    delete_cognito_user,
+    get_all_roles,
+    get_user_pool_id,
+    validate_roles,
+)
 from flip_api.utils.logger import logger
 
 router = APIRouter(prefix="/users", tags=["user_services"])
@@ -83,6 +89,18 @@ def register_user(
         except Exception as e:
             db.rollback()
             logger.error(f"Error creating user in database: {str(e)}")
+            # Cognito accepted the user before the DB rejected the row, so the
+            # account exists upstream with no local counterpart. Without this
+            # delete the next retry hits Cognito's UsernameExistsException
+            # (or, depending on pool config, silently creates a second
+            # account) and the operator has to clean up by hand.
+            try:
+                delete_cognito_user(user_data.email, user_pool_id)
+            except Exception:
+                logger.exception(
+                    f"Failed to roll back Cognito user {user_data.email} after DB error; "
+                    f"manual cleanup required."
+                )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=f"User with email {user_data.email} already exists."
             )

@@ -122,6 +122,67 @@ def test_user_pool_id_error(mock_request, mock_db, token_id, user_data):
         mock_logger.error.assert_called_once()
 
 
+def test_db_failure_rolls_back_cognito_user(mock_request, mock_db, token_id, user_data):
+    """DB insert failure must delete the Cognito user so retries aren't blocked by orphans."""
+    user_pool_id = "eu-west-2_gergtrhrt"
+    user_id = UUID("c602d2a4-60e1-70fc-76b5-ac649566cb82")
+
+    mock_db.commit.side_effect = Exception("UNIQUE constraint failed: user.email")
+
+    with (
+        patch("flip_api.user_services.register_user.has_permissions") as mock_has_permissions,
+        patch("flip_api.user_services.register_user.get_all_roles") as mock_get_all_roles,
+        patch("flip_api.user_services.register_user.validate_roles") as mock_validate_roles,
+        patch("flip_api.user_services.register_user.get_user_pool_id") as mock_get_user_pool_id,
+        patch("flip_api.user_services.register_user.create_cognito_user") as mock_create_cognito_user,
+        patch("flip_api.user_services.register_user.delete_cognito_user") as mock_delete_cognito_user,
+    ):
+        mock_has_permissions.return_value = True
+        mock_get_all_roles.return_value = []
+        mock_validate_roles.return_value = None
+        mock_get_user_pool_id.return_value = user_pool_id
+        mock_create_cognito_user.return_value = user_id
+
+        with pytest.raises(HTTPException) as exc_info:
+            register_user(user_data, mock_request, mock_db, token_id)
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert user_data.email in exc_info.value.detail
+        mock_delete_cognito_user.assert_called_once_with(user_data.email, user_pool_id)
+        mock_db.rollback.assert_called_once()
+
+
+def test_db_failure_still_400s_when_cognito_rollback_fails(mock_request, mock_db, token_id, user_data):
+    """If the Cognito rollback itself fails, surface the original 400 (don't mask it as 500)."""
+    user_pool_id = "eu-west-2_gergtrhrt"
+    user_id = UUID("c602d2a4-60e1-70fc-76b5-ac649566cb82")
+
+    mock_db.commit.side_effect = Exception("UNIQUE constraint failed: user.email")
+
+    with (
+        patch("flip_api.user_services.register_user.has_permissions") as mock_has_permissions,
+        patch("flip_api.user_services.register_user.get_all_roles") as mock_get_all_roles,
+        patch("flip_api.user_services.register_user.validate_roles") as mock_validate_roles,
+        patch("flip_api.user_services.register_user.get_user_pool_id") as mock_get_user_pool_id,
+        patch("flip_api.user_services.register_user.create_cognito_user") as mock_create_cognito_user,
+        patch("flip_api.user_services.register_user.delete_cognito_user") as mock_delete_cognito_user,
+        patch("flip_api.user_services.register_user.logger") as mock_logger,
+    ):
+        mock_has_permissions.return_value = True
+        mock_get_all_roles.return_value = []
+        mock_validate_roles.return_value = None
+        mock_get_user_pool_id.return_value = user_pool_id
+        mock_create_cognito_user.return_value = user_id
+        mock_delete_cognito_user.side_effect = Exception("Cognito unreachable")
+
+        with pytest.raises(HTTPException) as exc_info:
+            register_user(user_data, mock_request, mock_db, token_id)
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        # Operator needs to know an orphan was left behind so they can clean up.
+        mock_logger.exception.assert_called()
+
+
 def test_create_cognito_user_error(mock_request, mock_db, token_id, user_data):
     """Test when creating Cognito user fails."""
     user_pool_id = "eu-west-2_gergtrhrt"
