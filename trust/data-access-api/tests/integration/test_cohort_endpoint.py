@@ -70,7 +70,8 @@ def test_cohort_endpoint_rejects_below_threshold(http_client):
 
 
 def test_cohort_endpoint_rejects_unsafe_sql(http_client):
-    """validate_query gates on operation keywords; DROP must not reach the engine."""
+    """validate_query rejects SQL injection attempts. The AST-based validator drops the
+    multi-statement payload before the second statement (``DROP``) can reach Postgres."""
     response = http_client.post(
         "/cohort",
         json=_cohort_payload(
@@ -78,7 +79,9 @@ def test_cohort_endpoint_rejects_unsafe_sql(http_client):
         ),
     )
     assert response.status_code == 400
-    assert "drop" in response.json()["detail"].lower() or "unsafe" in response.json()["detail"].lower()
+    # validate_query enforces "exactly one statement per request" as its first rule, so
+    # query-stacking attempts are caught before the DDL/DML test.
+    assert "one sql statement" in response.json()["detail"].lower()
 
 
 def test_cohort_endpoint_requires_auth_header(data_access_api_url):
