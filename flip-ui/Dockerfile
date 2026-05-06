@@ -15,18 +15,18 @@
 # the UI is served as a static bundle from S3 + CloudFront (see
 # deploy/providers/AWS/cloudfront.tf and `make deploy-ui`).
 #
-# Accepted risk (FLIP-PT-034, Minimal/Info): this image runs as root. No USER
-# directive is set, deliberately — the dev workflow bind-mounts the host repo
-# into /app and runs `npm install` against it on container start
-# (docker/ui-entrypoint.sh), which needs to write into the bind-mounted tree
-# regardless of the host UID/GID. Matching host UID/GID at build time (as
-# flip-api/Dockerfile does) was rejected because the UI image is shared across
-# contributor machines via GHCR and would have to be rebuilt per host. The
-# blast radius is bounded: the container is dev-only, never reachable from
-# stag/prod, and only ever runs the Vite dev server against a local checkout.
-# Production has no flip-ui container at all — a compromise of this image
-# cannot affect any deployed FLIP environment. Reassess if this image is ever
-# repurposed for stag/prod or exposed beyond localhost.
+# This image runs as root. No USER directive is set, deliberately — the dev
+# workflow bind-mounts the host repo into /app and runs `npm install` against
+# it on container start (docker/ui-entrypoint.sh), which needs to write into
+# the bind-mounted tree regardless of the host UID/GID. Matching host UID/GID
+# at build time (as flip-api/Dockerfile does) was rejected because the UI
+# image is shared across contributor machines via GHCR and would have to be
+# rebuilt per host. The blast radius is bounded: the container is dev-only,
+# never reachable from stag/prod, and only ever runs the Vite dev server
+# against a local checkout. Production has no flip-ui container at all — a
+# compromise of this image cannot affect any deployed FLIP environment.
+# Reassess if this image is ever repurposed for stag/prod or exposed beyond
+# localhost.
 FROM node:22-alpine
 
 # Install dependencies for building node modules
