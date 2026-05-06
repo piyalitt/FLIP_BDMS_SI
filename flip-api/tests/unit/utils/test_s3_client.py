@@ -26,6 +26,9 @@ import logging
 import re
 from unittest.mock import MagicMock, patch
 
+import pytest
+from botocore.exceptions import ClientError
+
 from flip_api.utils.s3_client import MAX_PUT_PRESIGNED_URL_TTL_SECONDS, S3Client
 
 # Mirrors the shape of a real SigV4 pre-signed URL so the assertions
@@ -39,8 +42,17 @@ _FAKE_SIGNED_URL = (
     "X-Amz-SignedHeaders=host&"
     "X-Amz-Signature=deadbeefcafe1234567890abcdef"
 )
-_S3_URL_WITH_QUERY = re.compile(r"https?://[^\s]*s3[^\s/]*\.amazonaws\.com[^\s]*\?[^\s]*", re.IGNORECASE)
-_FORBIDDEN_TOKENS = ("X-Amz-Signature=", "X-Amz-Credential=", "X-Amz-SignedHeaders=")
+# Match any URL that carries SigV4 query parameters, regardless of host —
+# AWS, moto/localstack (``http://localhost:4566/...``), GovCloud, S3
+# Accelerate, and path-style endpoints all produce ``...?X-Amz-...`` URLs.
+_S3_URL_WITH_QUERY = re.compile(r"https?://\S+\?\S*X-Amz-", re.IGNORECASE)
+_FORBIDDEN_TOKENS = (
+    "X-Amz-Signature=",
+    "X-Amz-Credential=",
+    "X-Amz-SignedHeaders=",
+    "X-Amz-Security-Token=",
+    "Authorization=AWS4-HMAC-SHA256",
+)
 
 
 def _assert_logs_have_no_presigned_url(records: list[logging.LogRecord]) -> None:
@@ -98,3 +110,85 @@ def test_get_put_presigned_url_default_ttl_is_at_most_600s():
 
     _, kwargs = boto.generate_presigned_url.call_args
     assert kwargs["ExpiresIn"] <= 600
+
+
+def test_get_put_presigned_url_logs_warning_when_clamped(caplog):
+    """Over-ceiling callers must leave a warning trail so the silent clamp is auditable."""
+    caplog.set_level(logging.WARNING, logger="uvicorn")
+
+    with patch("flip_api.utils.s3_client.boto3.client") as mock_boto:
+        boto = MagicMock()
+        boto.generate_presigned_url.return_value = _FAKE_SIGNED_URL
+        mock_boto.return_value = boto
+
+        S3Client().get_put_presigned_url("s3://test-bucket/key", expiration=3600)
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("3600" in r.getMessage() and "600" in r.getMessage() for r in warnings), (
+        f"Expected a clamp warning citing both 3600s and 600s; got: {[r.getMessage() for r in warnings]}"
+    )
+
+
+def test_get_put_presigned_url_does_not_warn_at_or_below_ceiling(caplog):
+    """A within-policy caller must not trip the warning."""
+    caplog.set_level(logging.WARNING, logger="uvicorn")
+
+    with patch("flip_api.utils.s3_client.boto3.client") as mock_boto:
+        boto = MagicMock()
+        boto.generate_presigned_url.return_value = _FAKE_SIGNED_URL
+        mock_boto.return_value = boto
+
+        S3Client().get_put_presigned_url("s3://test-bucket/key", expiration=300)
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert not warnings, f"Did not expect a warning for in-policy TTL: {[r.getMessage() for r in warnings]}"
+
+
+def test_get_put_presigned_url_at_ceiling_passes_through():
+    """Boundary case: an ``expiration`` exactly at the ceiling must round-trip unchanged."""
+    with patch("flip_api.utils.s3_client.boto3.client") as mock_boto:
+        boto = MagicMock()
+        boto.generate_presigned_url.return_value = _FAKE_SIGNED_URL
+        mock_boto.return_value = boto
+
+        S3Client().get_put_presigned_url(
+            "s3://test-bucket/key", expiration=MAX_PUT_PRESIGNED_URL_TTL_SECONDS
+        )
+
+    _, kwargs = boto.generate_presigned_url.call_args
+    assert kwargs["ExpiresIn"] == MAX_PUT_PRESIGNED_URL_TTL_SECONDS
+
+
+def test_max_put_presigned_url_ttl_is_600s():
+    """Pin the ceiling value itself — moving it requires a security review."""
+    assert MAX_PUT_PRESIGNED_URL_TTL_SECONDS == 600
+
+
+def test_get_put_presigned_url_does_not_log_url_on_client_error(caplog):
+    """If boto raises ``ClientError``, the error log line must not contain the URL.
+
+    ``ClientError`` from ``generate_presigned_url`` does not carry the URL today,
+    but pin the contract so a future boto3 change cannot regress the redaction.
+    """
+    caplog.set_level(logging.DEBUG, logger="uvicorn")
+
+    with patch("flip_api.utils.s3_client.boto3.client") as mock_boto:
+        boto = MagicMock()
+        # Simulate the worst case: an exception whose __str__ contains the URL.
+        boto.generate_presigned_url.side_effect = ClientError(
+            {"Error": {"Code": "AccessDenied", "Message": _FAKE_SIGNED_URL}}, "generate_presigned_url"
+        )
+        mock_boto.return_value = boto
+
+        with pytest.raises(Exception, match="Unable to create a pre-signed URL"):
+            S3Client().get_put_presigned_url("s3://test-bucket/key")
+
+    # The wrapped exception we re-raise has a static message, but we still
+    # want the error log line to stay redacted even though it interpolates
+    # ``{e}`` — the f-string includes the boto error which itself includes
+    # the URL we put in the simulated message.
+    for record in caplog.records:
+        for token in _FORBIDDEN_TOKENS:
+            assert token not in record.getMessage(), (
+                f"Pre-signed URL artefact {token!r} leaked into log message: {record.getMessage()!r}"
+            )

@@ -333,8 +333,17 @@ _FAKE_SIGNED_URL = (
     "X-Amz-SignedHeaders=host&"
     "X-Amz-Signature=deadbeefcafe1234567890abcdef"
 )
-_S3_URL_WITH_QUERY = re.compile(r"https?://[^\s]*s3[^\s/]*\.amazonaws\.com[^\s]*\?[^\s]*", re.IGNORECASE)
-_FORBIDDEN_TOKENS = ("X-Amz-Signature=", "X-Amz-Credential=", "X-Amz-SignedHeaders=")
+# Match any URL that carries SigV4 query parameters, regardless of host —
+# AWS, moto/localstack (``http://localhost:4566/...``), GovCloud, S3
+# Accelerate, and path-style endpoints all produce ``...?X-Amz-...`` URLs.
+_S3_URL_WITH_QUERY = re.compile(r"https?://\S+\?\S*X-Amz-", re.IGNORECASE)
+_FORBIDDEN_TOKENS = (
+    "X-Amz-Signature=",
+    "X-Amz-Credential=",
+    "X-Amz-SignedHeaders=",
+    "X-Amz-Security-Token=",
+    "Authorization=AWS4-HMAC-SHA256",
+)
 
 
 def _assert_logs_have_no_presigned_url(records: list[logging.LogRecord]) -> None:
@@ -390,3 +399,67 @@ def test_retrieve_federated_results_does_not_log_url_list(caplog):
     assert response.status_code == 200, response.text
     assert len(response.json()) == 2
     _assert_logs_have_no_presigned_url(caplog.records)
+
+
+def test_retrieve_federated_results_redacts_url_when_get_presigned_raises(caplog):
+    """If ``get_presigned_url`` raises with a URL in the message, redaction must hold."""
+    caplog.set_level(logging.DEBUG, logger="uvicorn")
+    model_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    settings = Settings(UPLOADED_FEDERATED_DATA_BUCKET="s3://test-bucket/uploaded_federated_data")
+    mock_session = MagicMock()
+    mock_session.exec.return_value.first.return_value = MagicMock()
+    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[verify_token] = lambda: user_id
+    try:
+        with (
+            patch("flip_api.file_services.retrieve_federated_results.get_settings", return_value=settings),
+            patch("flip_api.file_services.retrieve_federated_results.can_access_model", return_value=True),
+            patch("flip_api.file_services.retrieve_federated_results.S3Client") as mock_s3_cls,
+        ):
+            mock_s3 = MagicMock()
+            mock_s3.list_objects.return_value = [
+                f"s3://test-bucket/uploaded_federated_data/{model_id}/weights.bin"
+            ]
+            mock_s3.get_presigned_url.side_effect = Exception(_FAKE_SIGNED_URL)
+            mock_s3_cls.return_value = mock_s3
+
+            response = TestClient(app).get(f"/api/files/model/{model_id}/fl/results")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 500, response.text
+    assert _FAKE_SIGNED_URL not in response.text  # static detail in HTTP body
+    for record in caplog.records:
+        for token in _FORBIDDEN_TOKENS:
+            assert token not in record.getMessage(), (
+                f"Pre-signed URL artefact {token!r} leaked into log message: {record.getMessage()!r}"
+            )
+
+
+def test_retrieve_federated_results_redacts_url_when_unhandled_error(caplog):
+    """The outer ``except Exception`` must not echo the exception into the HTTP body or log message."""
+    caplog.set_level(logging.DEBUG, logger="uvicorn")
+    model_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    mock_session = MagicMock()
+    app.dependency_overrides[get_session] = lambda: mock_session
+    app.dependency_overrides[verify_token] = lambda: user_id
+    try:
+        with patch(
+            "flip_api.file_services.retrieve_federated_results.can_access_model",
+            side_effect=Exception(_FAKE_SIGNED_URL),
+        ):
+            response = TestClient(app).get(f"/api/files/model/{model_id}/fl/results")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 500, response.text
+    assert _FAKE_SIGNED_URL not in response.text
+    for record in caplog.records:
+        for token in _FORBIDDEN_TOKENS:
+            assert token not in record.getMessage(), (
+                f"Pre-signed URL artefact {token!r} leaked into log message: {record.getMessage()!r}"
+            )

@@ -23,7 +23,7 @@ downstream scan/download endpoints. Pin every rejection rule.
 import pytest
 from pydantic import ValidationError
 
-from flip_api.domain.schemas.file import UploadFileBody
+from flip_api.domain.schemas.file import ModelFileDownload, UploadFileBody, validate_safe_file_name
 
 
 @pytest.mark.parametrize(
@@ -36,6 +36,7 @@ from flip_api.domain.schemas.file import UploadFileBody
         "subdir\\file.bin",
         "file\x00.bin",
         "file\x07.bin",
+        "file\x7f.bin",
         "  leading-space.bin",
         "trailing-space.bin  ",
         "",
@@ -67,3 +68,40 @@ def test_upload_file_body_max_length_caps_at_255():
     """Reject pathologically long names that could bloat the S3 key."""
     with pytest.raises(ValidationError):
         UploadFileBody(fileName="a" * 256)
+
+
+@pytest.mark.parametrize(
+    "bad_name",
+    [
+        "../escape.bin",
+        "subdir/file.bin",
+        "subdir\\file.bin",
+        "file\x00.bin",
+        "file\x7f.bin",
+    ],
+)
+def test_model_file_download_rejects_unsafe_file_names(bad_name):
+    """``ModelFileDownload.fileName`` carries the same constraint as the upload body."""
+    import uuid
+
+    with pytest.raises(ValidationError):
+        ModelFileDownload(fileName=bad_name, model_id=uuid.uuid4(), user_id=uuid.uuid4())
+
+
+@pytest.mark.parametrize(
+    "bad_name",
+    [
+        "../escape.bin",
+        "subdir/file.bin",
+        "subdir\\file.bin",
+        "..",
+        "file\x00.bin",
+        "file\x7f.bin",
+        "  leading-space.bin",
+        "",
+    ],
+)
+def test_validate_safe_file_name_rejects_unsafe_inputs(bad_name):
+    """The shared validator helper rejects every documented unsafe shape."""
+    with pytest.raises(ValueError, match="file name"):
+        validate_safe_file_name(bad_name)
