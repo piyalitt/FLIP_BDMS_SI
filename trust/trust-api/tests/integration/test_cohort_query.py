@@ -231,14 +231,16 @@ async def test_data_access_api_unreachable_returns_failure(monkeypatch, stub_hub
 
 @pytest.mark.asyncio
 async def test_sql_injection_attempt_rejected(stub_hub_received):
-    """``DROP TABLE`` and friends are filtered by data-access-api's validate_query."""
+    """Multi-statement payloads (e.g. trailing ``DROP``) are filtered by
+    data-access-api's validate_query."""
     result = await handle_cohort_query(
         _payload("SELECT * FROM omop.image_occurrence; DROP TABLE omop.person")
     )
 
     assert result["success"] is False
-    # validate_query raises 400 with one of "DROP/DELETE/UPDATE" rejection messages.
-    assert "drop" in result["error"].lower() or "unsafe" in result["error"].lower()
+    # The AST-based validate_query enforces a single-statement invariant before any DDL/
+    # DML check, so query-stacking surfaces as the "one statement per request" message.
+    assert "one sql statement" in result["error"].lower()
     assert stub_hub_received == []
 
 
