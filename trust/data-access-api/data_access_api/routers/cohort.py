@@ -31,7 +31,7 @@ from data_access_api.utils.logger import logger
 router = APIRouter(prefix="/cohort", tags=["Cohort"], dependencies=[Depends(authenticate_internal_service)])
 
 
-@router.post("/", response_model=StatisticsResponse)
+@router.post("", response_model=StatisticsResponse)
 def receive_cohort_query(query_input: CohortQueryInput) -> StatisticsResponse:
     """
     Receives a cohort query and returns the aggregated statistics.
