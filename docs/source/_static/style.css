@@ -130,7 +130,7 @@ body, .wy-body-for-nav,
 }
 .wy-side-nav-search,
 .wy-nav-top {
-    background: var(--flip-primary) !important;
+    background: var(--flip-primary-100) !important;
     border-bottom: 3px solid transparent;
     border-image: var(--flip-gradient-bar) 1;
     position: relative;
