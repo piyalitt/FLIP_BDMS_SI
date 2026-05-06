@@ -300,11 +300,30 @@ def test_validate_query_accepts_well_formed_select(query: str):
     assert validate_query(query) is True
 
 
-def test_validate_query_rejects_unparseable_input():
-    """Garbage input that does not parse as SQL is rejected, not silently accepted."""
-    with pytest.raises(HTTPException) as excinfo:
+@pytest.mark.parametrize(
+    "query",
+    [
+        # ParseError shape: incomplete FROM list — sqlglot raises ParseError.
+        "SELECT FROM",
+        "SELECT * FROM",
+        # TokenError shape: unterminated string literal — sqlglot raises TokenError.
+        # Both ParseError and TokenError inherit from SqlglotError; the validator
+        # catches the parent so a tokenizer failure can't bubble up as a 500.
+        "SELECT 'unterminated",
+        # Junk that doesn't even start as a statement.
+        "@#$%^&*",
+    ],
+)
+def test_validate_query_rejects_unparseable_input(query: str):
+    """sqlglot's parse / tokenize failures both surface as a 400 with a parse-error detail."""
+    with pytest.raises(HTTPException, match="Could not parse SQL query"):
+        validate_query(query)
+
+
+def test_validate_query_rejects_garbage_that_parses_as_non_select():
+    """Garbage that sqlglot loosely parses (e.g. ``INVALID SQL`` → Alias) still must be rejected."""
+    with pytest.raises(HTTPException, match="Only SELECT statements are allowed"):
         validate_query("INVALID SQL")
-    assert excinfo.value.status_code == 400
 
 
 def test_validate_query_rejects_empty_query():

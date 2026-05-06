@@ -22,7 +22,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.sql.elements import TextClause
 from sqlglot import exp
-from sqlglot.errors import ParseError
+from sqlglot.errors import SqlglotError
 
 from data_access_api.config import get_settings
 from data_access_api.db.database import engine
@@ -88,7 +88,10 @@ def validate_query(query: str) -> bool:
     """
     try:
         statements = [s for s in sqlglot.parse(query, read="postgres") if s is not None]
-    except ParseError as e:
+    except SqlglotError as e:
+        # SqlglotError is the parent of both ParseError (e.g. "SELECT FROM") and
+        # TokenError (e.g. unterminated string literals); catch the parent so a
+        # tokenizer failure can't bubble up as an unhandled 500.
         raise HTTPException(status_code=400, detail=f"Could not parse SQL query: {e}") from e
 
     if len(statements) != 1:
@@ -113,7 +116,9 @@ def validate_query(query: str) -> bool:
             # the omop schema in the OMOP DB image, so unqualified references
             # can only resolve to omop tables.
             continue
-        schema_name = schema_node.name.lower() if hasattr(schema_node, "name") else str(schema_node).lower()
+        # exp.Table.args["db"] is always None or an Identifier in sqlglot's
+        # schema, so .name is safe here.
+        schema_name = schema_node.name.lower()
         if schema_name != ALLOWED_SCHEMA:
             raise HTTPException(
                 status_code=400,
