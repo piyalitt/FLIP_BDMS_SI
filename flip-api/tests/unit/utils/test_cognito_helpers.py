@@ -1202,9 +1202,9 @@ class TestGetCognitoUsers:
         """Multi-page pools must be fully consumed.
 
         Cognito ListUsers returns up to 60 users per page; without paginator
-        iteration the reconcile script would treat page-2+ users as ghosts
-        and delete their role grants. Override the default single-page
-        ``paginate.side_effect`` and assert every page is read.
+        iteration the admin "list users" endpoint and the XNAT-onboarding
+        lookup would silently miss users on page 2+. Override the default
+        single-page ``paginate.side_effect`` and assert every page is read.
         """
         page_1 = {
             "Users": [
