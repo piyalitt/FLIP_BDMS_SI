@@ -165,8 +165,9 @@ def test_db_cleanup_durable_when_cognito_delete_fails(mock_request, mock_db, use
     """Lock the documented ordering: DB cleanup commits BEFORE the Cognito delete.
 
     If Cognito raises after the DB commit, the role grants are already gone and the audit row
-    is durable — preferable to dangling grants on a deleted user. This test pins the contract
-    so a future refactor can't silently reorder the side effects.
+    is durable — preferable to dangling grants on a deleted user. The response detail must
+    name the half-deleted state explicitly so the operator knows the user can still
+    authenticate but has zero app authority, and that manual Cognito cleanup is required.
     """
     user_pool_id = "test-user-pool-id"
     username = "test@example.com"
@@ -181,14 +182,20 @@ def test_db_cleanup_durable_when_cognito_delete_fails(mock_request, mock_db, use
         mock_has_permissions.return_value = True
         mock_get_settings.return_value.AWS_COGNITO_USER_POOL_ID = user_pool_id
         mock_get_username.return_value = username
-        mock_delete_cognito_user.side_effect = Exception("Cognito unreachable")
+        # Production path: delete_cognito_user wraps boto3 ClientError as HTTPException.
+        mock_delete_cognito_user.side_effect = HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete user"
+        )
 
         with pytest.raises(HTTPException) as exc_info:
             delete_user(user_id, mock_request, mock_db, token_id)
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        # Generic detail — no exception text leaked into the response body.
-        assert exc_info.value.detail == "Internal server error"
+        # Detail must name the half-deleted state so the operator knows what to clean up.
+        detail = exc_info.value.detail.lower()
+        assert "role grants revoked" in detail
+        assert "cognito" in detail
+        assert "manual" in detail
 
         # DB cleanup ran and committed BEFORE the Cognito call.
         mock_db.execute.assert_called_once()
@@ -198,8 +205,4 @@ def test_db_cleanup_durable_when_cognito_delete_fails(mock_request, mock_db, use
         assert audit_row.action == "Deleted user"
         mock_db.commit.assert_called_once()
         mock_delete_cognito_user.assert_called_once_with(username, user_pool_id)
-        # Outer except path runs db.rollback() defensively so a failed
-        # downstream operation cannot leave the request-scoped session
-        # in an aborted state on the way out.
-        mock_db.rollback.assert_called_once()
         mock_logger.exception.assert_called_once()

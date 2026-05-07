@@ -81,13 +81,30 @@ def update_user_endpoint(
         # Update user in Cognito
         response = update_user(username, user_pool_id, disabled.disabled)
 
-        # Update XNAT user profile
+        # Update XNAT user profile. If this fails after the Cognito mutation
+        # has already landed, surface the partial state explicitly so the
+        # operator can reconcile — otherwise the generic "Failed to update
+        # user" catch-all is indistinguishable from "nothing happened".
         set_user_enabled_data = IUpdateXnatProfile(
             email=username,
             enabled=not disabled.disabled,
         )
 
-        update_xnat_user_profile(set_user_enabled_data, db)
+        try:
+            update_xnat_user_profile(set_user_enabled_data, db)
+        except Exception as xnat_err:
+            db.rollback()
+            logger.exception(
+                f"Cognito update succeeded for user_id={user_id} (initiated by {token_id}) "
+                f"but XNAT profile update failed; manual XNAT reconciliation required."
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=(
+                    "Cognito update succeeded but XNAT profile update failed; "
+                    "user state partially updated — please verify and contact ops."
+                ),
+            ) from xnat_err
 
         # Cognito + XNAT mutations succeeded; record the audit row. If the
         # audit commit fails, the user-visible state has already changed

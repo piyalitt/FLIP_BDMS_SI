@@ -63,6 +63,37 @@ def ensure_user_and_role(email: str, role_ref: RoleRef, session: Session) -> Non
         session.commit()
 
 
+def _ensure_user_and_role_resilient(email: str, role_ref: RoleRef, session: Session) -> None:
+    """Run ``ensure_user_and_role`` but tolerate transient Cognito-side HTTP failures.
+
+    Seeding now reads from Cognito on every boot. A 5xx blip mid-deploy would
+    otherwise couple flip-api liveness to Cognito read availability — log the skip
+    loudly and continue with the remaining users instead.
+
+    Definitive 4xx failures (e.g. 400 "no email/id provided", 403 if a future
+    auth gate is added) still propagate: those are config / programming errors
+    that should fail boot loudly rather than producing a platform with quietly
+    missing grants.
+
+    Args:
+        email (str): The user's email used to look up the corresponding Cognito user.
+        role_ref (RoleRef): The role to grant if missing.
+        session (Session): The SQLModel session used for DB reads and writes.
+    """
+    try:
+        ensure_user_and_role(email, role_ref, session)
+    except HTTPException as exc:
+        if exc.status_code < status.HTTP_500_INTERNAL_SERVER_ERROR:
+            raise
+        logger.warning(
+            "Skipping seed for %s with role %s due to Cognito read failure (status=%s); "
+            "platform will boot without this grant — investigate if it persists.",
+            email,
+            role_ref.name,
+            exc.status_code,
+        )
+
+
 def seed_main_users(session: Session) -> None:
     """
     Seed role grants for the well-known admin/researcher/observer emails.
@@ -76,14 +107,14 @@ def seed_main_users(session: Session) -> None:
     logger.debug("Seeding main users...")
 
     # Ensure the Admin role grant for each well-known admin email.
-    ensure_user_and_role(ADMIN_EMAIL_1, RoleRef.ADMIN, session)
-    ensure_user_and_role(ADMIN_EMAIL_2, RoleRef.ADMIN, session)
-    ensure_user_and_role(ADMIN_EMAIL_3, RoleRef.ADMIN, session)
+    _ensure_user_and_role_resilient(ADMIN_EMAIL_1, RoleRef.ADMIN, session)
+    _ensure_user_and_role_resilient(ADMIN_EMAIL_2, RoleRef.ADMIN, session)
+    _ensure_user_and_role_resilient(ADMIN_EMAIL_3, RoleRef.ADMIN, session)
 
     # Ensure the Researcher role grant.
-    ensure_user_and_role(RESEARCHER_EMAIL, RoleRef.RESEARCHER, session)
+    _ensure_user_and_role_resilient(RESEARCHER_EMAIL, RoleRef.RESEARCHER, session)
 
     # Ensure the Observer role grant.
-    ensure_user_and_role(OBSERVER_EMAIL, RoleRef.OBSERVER, session)
+    _ensure_user_and_role_resilient(OBSERVER_EMAIL, RoleRef.OBSERVER, session)
 
     logger.info("✅ Finished seeding main users.")

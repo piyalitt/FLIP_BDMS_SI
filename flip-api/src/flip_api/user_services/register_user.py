@@ -91,16 +91,26 @@ def register_user(
             logger.exception(f"Error writing audit row for new user {user_data.email}")
             # Cognito accepted the user before the audit-row write failed.
             # Without this rollback the next retry hits Cognito's
-            # UsernameExistsException (or, depending on pool config, silently
-            # creates a second account) and the operator has to clean up by
+            # UsernameExistsException and the operator has to clean up by
             # hand.
             try:
                 delete_cognito_user(user_data.email, user_pool_id)
             except Exception:
+                # Rollback itself failed: the Cognito user is orphaned and a
+                # retry will deterministically fail with
+                # UsernameExistsException. Surface that explicitly so the
+                # caller doesn't loop on "Please try again".
                 logger.exception(
                     f"Failed to roll back Cognito user {user_data.email} after audit-write failure; "
                     f"manual cleanup required."
                 )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=(
+                        "Failed to register user; rollback also failed. "
+                        "Manual cleanup of the Cognito user required."
+                    ),
+                ) from audit_err
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to register user. Please try again.",

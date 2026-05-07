@@ -88,9 +88,26 @@ def delete_user(
         db.commit()
 
         if username is not None:
-            delete_cognito_user(username, user_pool_id)
+            try:
+                delete_cognito_user(username, user_pool_id)
+            except HTTPException as cognito_err:
+                # Half-deleted state: role grants are already gone and the
+                # audit row is durable, but the Cognito user remains and can
+                # still authenticate (with zero app authority). Surface the
+                # state explicitly so the caller doesn't see a generic 500.
+                logger.exception(
+                    f"Cognito delete failed for user {user_id} ({username}) after DB cleanup; "
+                    f"manual Cognito cleanup required."
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=(
+                        "Role grants revoked, but Cognito user deletion failed. "
+                        "The user can still authenticate with zero app authority — "
+                        "manual Cognito cleanup required."
+                    ),
+                ) from cognito_err
 
-        # Return empty response with 204 status code
         return {}
 
     except HTTPException:

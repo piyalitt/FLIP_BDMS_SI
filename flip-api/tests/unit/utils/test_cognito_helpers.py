@@ -1003,8 +1003,63 @@ class TestGetCognitoUsers:
         assert exc_info.value.detail == "Failed to get Cognito users"
         assert str(client_error) not in exc_info.value.detail
 
-        # Verify logging
-        mock_logger.exception.assert_called_with("Error getting Cognito users")
+        # Log line must include page index + collected count so an operator can tell
+        # whether pagination was throttled mid-walk vs. failed on page 1.
+        mock_logger.exception.assert_called_once()
+        log_msg = mock_logger.exception.call_args.args[0]
+        assert "page=" in log_msg
+        assert "collected=" in log_msg
+
+    def test_client_error_mid_pagination_logs_page_index(
+        self, mock_boto3_client, mock_get_settings, mock_logger
+    ):
+        """A ClientError on page 3 of 10 must log page=3 and collected count.
+
+        Without this, operators investigating a list_users 500 cannot tell whether
+        the failure was throttling partway through (retry-friendly) or a hard failure
+        on page 1 (config / permissions). The current generic "Error getting Cognito
+        users" log buries that signal.
+        """
+        # Three pages: page 1 returns one user, page 2 returns one user, page 3 raises.
+        mock_client_instance = mock_boto3_client.return_value
+        page_1 = {
+            "Users": [
+                {
+                    "Username": "u1@example.com",
+                    "Attributes": [{"Name": "sub", "Value": str(user1)}],
+                    "Enabled": True,
+                }
+            ]
+        }
+        page_2 = {
+            "Users": [
+                {
+                    "Username": "u2@example.com",
+                    "Attributes": [{"Name": "sub", "Value": str(user2)}],
+                    "Enabled": True,
+                }
+            ]
+        }
+
+        def _paginate_three(**_params):
+            yield page_1
+            yield page_2
+            raise ClientError(
+                error_response={"Error": {"Code": "TooManyRequestsException", "Message": "Throttled"}},
+                operation_name="ListUsers",
+            )
+
+        mock_client_instance.get_paginator.return_value.paginate.side_effect = _paginate_three
+
+        with pytest.raises(HTTPException):
+            get_cognito_users()
+
+        mock_logger.exception.assert_called_once()
+        log_msg = mock_logger.exception.call_args.args[0]
+        # page=3 because the third yield raised before producing items.
+        assert "page=3" in log_msg
+        # Two users were already accumulated when the failure hit.
+        assert "collected=2" in log_msg
 
     def test_various_client_errors(self, mock_boto3_client, mock_get_settings, mock_logger):
         """Test handling of various ClientError types."""

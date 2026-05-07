@@ -91,6 +91,7 @@ describe("authStore", () => {
         vi.mocked(routeChange.gotoLogin).mockReset();
         vi.mocked(fetchAuthSession).mockReset();
         vi.mocked(Snackbar.error).mockReset();
+        vi.mocked(Snackbar.show).mockReset();
         // Default: tokens are visible immediately so waitForSessionTokens
         // resolves without triggering the forceRefresh fallback. Tests that
         // exercise the race re-arm this with mockResolvedValueOnce.
@@ -723,6 +724,29 @@ describe("authStore", () => {
             expect(consoleSpy).toHaveBeenCalled();
             consoleSpy.mockRestore();
         });
+
+        it("notifies the user when post-success hydrate fails", async () => {
+            // Without a user-facing signal, a transient hydrate failure right
+            // after a valid TOTP code leaves the user thinking sign-in worked
+            // while every subsequent API call 401s under `mfaEnabled=null`.
+            // A visible snackbar lets them retry the navigation rather than
+            // assuming the app silently broke.
+            vi.mocked(confirmSignIn).mockResolvedValue({
+                isSignedIn: true,
+                nextStep: undefined
+            } as never);
+            vi.mocked(getCurrentUser).mockRejectedValue(new Error("Network Error"));
+            const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+            await store.confirmTotpChallenge("123456");
+
+            expect(Snackbar.show).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    type: "warning"
+                })
+            );
+            consoleSpy.mockRestore();
+        });
     });
 
     describe("confirmTotpSetup", () => {
@@ -1013,13 +1037,39 @@ describe("authStore", () => {
             consoleSpy.mockRestore();
         });
 
-        it("does NOT warn when GlobalSignOut throws NotAuthorizedException", async () => {
-            // The api.ts 401 interceptor calls signOut() with already-
-            // invalid tokens; Cognito rejects GlobalSignOut with
-            // NotAuthorizedException as expected. Surfacing "Sign-out
-            // incomplete" here would stack a second snackbar on top of
-            // the interceptor's "Not Authorised" message every time the
-            // session expires.
+        it("does NOT warn when GlobalSignOut throws NotAuthorizedException via interceptor", async () => {
+            // The api.ts 401 interceptor calls signOut({ viaInterceptor: true })
+            // with already-invalid tokens; Cognito rejects GlobalSignOut
+            // with NotAuthorizedException as expected. Surfacing any
+            // snackbar here would stack on top of the interceptor's
+            // "Not Authorised" message every time the session expires.
+            const expected = Object.assign(new Error("Access Token has been revoked"), {
+                name: "NotAuthorizedException"
+            });
+            vi.mocked(signOut).mockRejectedValue(expected);
+            const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+            store.user = {
+                username: "u",
+                userId: "id",
+                attributes: { sub: "s", email: "e@f.com" },
+                permissions: []
+            };
+
+            await store.signOut({ viaInterceptor: true });
+
+            expect(store.user).toBeNull();
+            expect(routeChange.gotoLogin).toHaveBeenCalledTimes(1);
+            expect(Snackbar.error).not.toHaveBeenCalled();
+            expect(Snackbar.show).not.toHaveBeenCalled();
+            consoleSpy.mockRestore();
+        });
+
+        it("informs the user on user-initiated NotAuthorizedException sign-out", async () => {
+            // User clicks "Sign out" but the session is already invalid (e.g.
+            // an admin force-revoked it via the new MFA-reset path). The
+            // current code blanket-suppresses NotAuthorizedException so the
+            // user gets no signal about the remote revocation. For
+            // user-initiated sign-out, show an info-level message either way.
             const expected = Object.assign(new Error("Access Token has been revoked"), {
                 name: "NotAuthorizedException"
             });
@@ -1036,7 +1086,12 @@ describe("authStore", () => {
 
             expect(store.user).toBeNull();
             expect(routeChange.gotoLogin).toHaveBeenCalledTimes(1);
+            // Not an "incomplete" error — the session was already gone — but
+            // the user should know that's what happened.
             expect(Snackbar.error).not.toHaveBeenCalled();
+            expect(Snackbar.show).toHaveBeenCalledWith(
+                expect.objectContaining({ type: "info" })
+            );
             consoleSpy.mockRestore();
         });
     });

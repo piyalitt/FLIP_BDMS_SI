@@ -151,17 +151,18 @@ def get_cognito_users(params: dict[str, Any] | None = None) -> list[CognitoUser]
     elif "UserPoolId" not in params:
         params["UserPoolId"] = user_pool_id
 
-    try:
-        logger.debug(f"Cognito list users params: {params}")
-        # Cognito ListUsers returns up to 60 users per page. Use the boto3
-        # paginator so callers see the whole pool — the admin "list users"
-        # endpoint and the per-trust XNAT-onboarding lookup both walk the
-        # full set, and silent truncation at page 1 would hide users from
-        # the UI and skip XNAT provisioning for anyone past the boundary.
-        paginator = client.get_paginator("list_users")
-        users: list[CognitoUser] = []
+    logger.debug(f"Cognito list users params: {params}")
+    # Cognito ListUsers returns up to 60 users per page. Use the boto3
+    # paginator so callers see the whole pool — the admin "list users"
+    # endpoint and the per-trust XNAT-onboarding lookup both walk the
+    # full set, and silent truncation at page 1 would hide users from
+    # the UI and skip XNAT provisioning for anyone past the boundary.
+    paginator = client.get_paginator("list_users")
+    users: list[CognitoUser] = []
+    page_index = 0
 
-        for page in paginator.paginate(**params):
+    try:
+        for page_index, page in enumerate(paginator.paginate(**params), start=1):
             for user in page.get("Users", []):
                 attributes = {attr["Name"]: attr["Value"] for attr in user.get("Attributes", [])}
                 user_id = attributes.get("sub", "")
@@ -180,8 +181,12 @@ def get_cognito_users(params: dict[str, Any] | None = None) -> list[CognitoUser]
     except ClientError as e:
         # boto3 ClientError messages can carry request IDs and ARNs that
         # don't belong in a 500 detail surfaced to API clients. Log the
-        # full error server-side, return a generic message.
-        logger.exception("Error getting Cognito users")
+        # full error server-side (with page+collected so operators can
+        # distinguish a mid-walk throttle from a page-1 hard failure),
+        # return a generic message.
+        logger.exception(
+            f"Error getting Cognito users (page={page_index + 1}, collected={len(users)})"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get Cognito users"
         ) from e

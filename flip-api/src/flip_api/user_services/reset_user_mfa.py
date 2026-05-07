@@ -76,8 +76,9 @@ def reset_mfa_for_user(
         # commit fails, the security-relevant Cognito state has already
         # changed — surface a 500 so the operator knows reconciliation may
         # be needed, and log richly enough that they can do it. A retry is
-        # safe (admin_reset_user_password is idempotent on the MFA
-        # preference).
+        # safe (admin_set_user_mfa_preference is idempotent on the
+        # SoftwareTokenMfaSettings payload, and admin_user_global_sign_out
+        # is idempotent once sessions are already revoked).
         try:
             db.add(UsersAudit(action="Reset user MFA", user_id=user_id, modified_by_user_id=token_id))
             db.commit()

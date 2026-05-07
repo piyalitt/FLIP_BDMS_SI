@@ -50,8 +50,9 @@ def set_user_roles(
         IRoles: The updated roles data for the user.
 
     Raises:
-        HTTPException: If the user does not have permission to update roles, if the target user does
-            not exist in Cognito, or if any role does not exist.
+        HTTPException: 403 if the caller lacks permission, 404 if the target user is not in
+            Cognito, 400 if any role is invalid, or 503 if the Cognito existence check itself
+            failed (transient — caller may retry).
     """
     try:
         # Check permissions

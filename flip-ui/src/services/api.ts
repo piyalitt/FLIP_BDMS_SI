@@ -106,7 +106,7 @@ class Http {
                         return Promise.reject(error);
                     }
 
-                    authStore.signOut();
+                    authStore.signOut({ viaInterceptor: true });
 
                     const now = Date.now();
                     if (now - lastNotAuthorisedAt > NOT_AUTHORISED_COOLDOWN_MS) {

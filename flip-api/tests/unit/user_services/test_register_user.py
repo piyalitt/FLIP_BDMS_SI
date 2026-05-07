@@ -198,10 +198,12 @@ def test_audit_commit_failure_rolls_back_cognito_user(mock_request, mock_db, tok
 def test_audit_commit_failure_still_500s_when_cognito_rollback_fails(
     mock_request, mock_db, token_id, user_data
 ):
-    """If both the audit commit AND the rollback fail, still surface 500.
+    """If both the audit commit AND the rollback fail, surface a distinct 500 detail.
 
-    The Cognito user is orphaned; the operator needs the failure logged, not silently
-    masked. ``logger.exception`` records the orphan email so manual cleanup is possible.
+    The Cognito user is orphaned. A retry would hit ``UsernameExistsException`` and
+    deterministically fail — telling the caller to "Please try again" is misleading.
+    The detail must instead name the orphan state so the operator knows manual
+    cleanup is required. ``logger.exception`` records the orphan email.
     """
     user_pool_id = "eu-west-2_gergtrhrt"
     user_id = UUID("c602d2a4-60e1-70fc-76b5-ac649566cb82")
@@ -227,7 +229,9 @@ def test_audit_commit_failure_still_500s_when_cognito_rollback_fails(
             register_user(user_data, mock_request, mock_db, token_id)
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert exc_info.value.detail == "Failed to register user. Please try again."
+        detail = exc_info.value.detail.lower()
+        assert "manual cleanup" in detail
+        assert "please try again" not in detail
         mock_delete_cognito_user.assert_called_once_with(user_data.email, user_pool_id)
         # Both the audit-write failure and the rollback failure are logged with stack traces.
         assert mock_logger.exception.call_count >= 2

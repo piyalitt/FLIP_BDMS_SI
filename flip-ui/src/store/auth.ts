@@ -362,6 +362,15 @@ export const useAuthStore = defineStore("auth", {
                 console.error("Failed to hydrate user post-TOTP-challenge:", e);
                 this.signInStep = "DONE";
                 this.mfaEnabled = null;
+                // Surface the partial-success state. Without this, the user
+                // sees a clean form submission and assumes sign-in worked,
+                // while every subsequent API call will 401 until the router
+                // guard re-fetches MFA status on the next navigation.
+                Snackbar.show({
+                    type: "warning",
+                    title: "Sign-in needs another step",
+                    text: "We couldn't finish loading your account. Please retry the page or sign in again."
+                });
             }
         },
 
@@ -486,8 +495,17 @@ export const useAuthStore = defineStore("auth", {
             }
         },
 
-        async signOut() {
+        // `viaInterceptor=true` is set by the api.ts 401 handler. In that
+        // path the interceptor already shows its own "Not Authorised"
+        // snackbar, so we suppress sign-out feedback to avoid stacking
+        // notifications. User-initiated sign-out (from MainLayout) leaves
+        // it false: NotAuthorizedException then surfaces an info-level
+        // notice so a session that was force-revoked remotely (e.g. by an
+        // admin via MFA reset) doesn't disappear silently.
+        async signOut(opts: { viaInterceptor?: boolean } = {}) {
+            const { viaInterceptor = false } = opts;
             let serverSideSignOutFailed = false;
+            let sessionAlreadyEnded = false;
             try {
                 // global:true calls Cognito's GlobalSignOut, which invalidates
                 // all tokens (including the refresh token) for this user session.
@@ -499,11 +517,15 @@ export const useAuthStore = defineStore("auth", {
                 // anything with access to where it was stored (XSS
                 // payload, hostile extension), so warn the user — except
                 // when the failure is just "tokens were already invalid"
-                // (NotAuthorizedException), which is the expected case
-                // when sign-out is triggered from the 401 interceptor.
+                // (NotAuthorizedException). For interceptor-driven sign-
+                // out that case stays silent; for user-clicked sign-out
+                // we still want to inform them rather than silently mask
+                // a remote revocation.
                 console.error("Sign out error:", error);
                 const name = (error as { name?: string }).name;
-                if (name !== "NotAuthorizedException") {
+                if (name === "NotAuthorizedException") {
+                    sessionAlreadyEnded = true;
+                } else {
                     serverSideSignOutFailed = true;
                 }
             }
@@ -515,6 +537,12 @@ export const useAuthStore = defineStore("auth", {
                 Snackbar.error({
                     title: "Sign-out incomplete",
                     text: "We couldn't fully end your session on the server. Please close all browser windows for this site."
+                });
+            } else if (sessionAlreadyEnded && !viaInterceptor) {
+                Snackbar.show({
+                    type: "info",
+                    title: "Session already ended",
+                    text: "Your session had already ended (it may have been revoked elsewhere). You've been signed out."
                 });
             }
         },
