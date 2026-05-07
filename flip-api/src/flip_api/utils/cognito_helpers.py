@@ -153,24 +153,27 @@ def get_cognito_users(params: dict[str, Any] | None = None) -> list[CognitoUser]
 
     try:
         logger.debug(f"Cognito list users params: {params}")
-        response = client.list_users(**params)
-
-        cognito_users = response.get("Users", [])
+        # Cognito ListUsers returns up to 60 users per page. Use the boto3
+        # paginator so callers see the whole pool (in particular, the
+        # reconcile_user_roles script must not silently treat page-2 users
+        # as "ghosts" and delete their role grants).
+        paginator = client.get_paginator("list_users")
         users: list[CognitoUser] = []
 
-        for user in cognito_users:
-            attributes = {attr["Name"]: attr["Value"] for attr in user.get("Attributes", [])}
-            user_id = attributes.get("sub", "")
-            email = attributes.get("email", user.get("Username", ""))
-            is_disabled = not user.get("Enabled", True)
+        for page in paginator.paginate(**params):
+            for user in page.get("Users", []):
+                attributes = {attr["Name"]: attr["Value"] for attr in user.get("Attributes", [])}
+                user_id = attributes.get("sub", "")
+                email = attributes.get("email", user.get("Username", ""))
+                is_disabled = not user.get("Enabled", True)
 
-            users.append(
-                CognitoUser(
-                    id=UUID(user_id),
-                    email=email,
-                    is_disabled=is_disabled,
-                )  # type: ignore[call-arg]
-            )
+                users.append(
+                    CognitoUser(
+                        id=UUID(user_id),
+                        email=email,
+                        is_disabled=is_disabled,
+                    )  # type: ignore[call-arg]
+                )
 
         return users
     except ClientError as e:

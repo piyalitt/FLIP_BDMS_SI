@@ -18,7 +18,7 @@ from sqlmodel import Session
 from flip_api.auth.auth_utils import has_permissions
 from flip_api.auth.dependencies import verify_token
 from flip_api.db.database import get_session
-from flip_api.db.models.user_models import PermissionRef
+from flip_api.db.models.user_models import PermissionRef, UsersAudit
 from flip_api.domain.interfaces.project import IUpdateXnatProfile
 from flip_api.domain.schemas.users import Disabled
 from flip_api.project_services.services.image_service import update_xnat_user_profile
@@ -73,13 +73,10 @@ def update_user_endpoint(
         # Get user pool ID
         user_pool_id = get_user_pool_id(request)
 
-        # Get username from user ID
+        # Look up the Cognito username (email). `get_username` raises 404
+        # if the sub is gone — propagate it directly via the outer
+        # HTTPException re-raise.
         username = get_username(str(user_id), user_pool_id)
-
-        if not username:
-            err_msg = f"User could not be found with id: {user_id}"
-            logger.error(err_msg)
-            raise HTTPException(status_code=404, detail=err_msg)
 
         # Update user in Cognito
         response = update_user(username, user_pool_id, disabled.disabled)
@@ -92,6 +89,34 @@ def update_user_endpoint(
 
         update_xnat_user_profile(set_user_enabled_data, db)
 
+        # Cognito + XNAT mutations succeeded; record the audit row. If the
+        # audit commit fails, the user-visible state has already changed
+        # (Cognito enable/disable + XNAT profile flip) — surface a 500 so
+        # the operator knows reconciliation may be needed, and log enough
+        # to do it. A retry is safe (admin_enable_user / admin_disable_user
+        # are idempotent).
+        action = "Disabled user" if disabled.disabled else "Enabled user"
+        try:
+            db.add(
+                UsersAudit(
+                    action=action,
+                    user_id=user_id,
+                    modified_by_user_id=token_id,
+                )
+            )
+            db.commit()
+        except Exception as audit_err:
+            db.rollback()
+            logger.exception(
+                f"{action} succeeded in Cognito + XNAT for user_id={user_id} "
+                f"(initiated by {token_id}) but audit-row write failed; manual "
+                f"audit-log reconciliation required."
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="User update partially succeeded; please verify and contact ops.",
+            ) from audit_err
+
         logger.info(f"User updated successfully: {response}")
         return response
 
@@ -100,5 +125,8 @@ def update_user_endpoint(
         raise
 
     except Exception as e:
-        logger.error(f"Failed to update user: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        logger.exception("Failed to update user")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update user",
+        ) from e

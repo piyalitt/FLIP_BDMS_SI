@@ -17,10 +17,11 @@ from sqlmodel import Session, col, delete, select
 
 from flip_api.auth.auth_utils import has_permissions
 from flip_api.auth.dependencies import verify_token
+from flip_api.config import get_settings
 from flip_api.db.database import get_session
-from flip_api.db.models.user_models import PermissionRef, Role, User, UserRole, UsersAudit
+from flip_api.db.models.user_models import PermissionRef, Role, UserRole, UsersAudit
 from flip_api.domain.interfaces.user import IRoles
-from flip_api.utils.cognito_helpers import validate_roles
+from flip_api.utils.cognito_helpers import get_username, validate_roles
 from flip_api.utils.logger import logger
 
 router = APIRouter(prefix="/users", tags=["user_services"])
@@ -36,6 +37,9 @@ def set_user_roles(
     """
     Set roles for a user.
 
+    User existence is validated against Cognito (the source of truth) rather
+    than a local DB row.
+
     Args:
         user_id (UUID): The ID of the user to update roles for.
         roles_data (IRoles): The roles data containing a list of role IDs to assign to the user.
@@ -47,7 +51,7 @@ def set_user_roles(
 
     Raises:
         HTTPException: If the user does not have permission to update roles, if the target user does
-            not exist, or if any role does not exist.
+            not exist in Cognito, or if any role does not exist.
     """
     try:
         # Check permissions
@@ -58,46 +62,47 @@ def set_user_roles(
                 detail=f"User with ID: {token_id} was unable to update a user's roles",
             )
 
-        if db.get(User, user_id) is None:
+        # Validate user existence against Cognito (the source of truth — no
+        # local users table). 404 = genuinely-not-found; 5xx = Cognito read
+        # failure. Surface them as distinct status codes so callers (in
+        # particular ``register_user_step_function``) can decide whether to
+        # treat this as a definitive "role assignment failed" (and roll back
+        # the registration) or a transient "could not verify; retry later".
+        try:
+            get_username(str(user_id), get_settings().AWS_COGNITO_USER_POOL_ID)
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_404_NOT_FOUND:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"User with ID {user_id} not found",
+                ) from exc
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User with ID {user_id} not found",
-            )
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Could not verify user existence in Cognito; please try again.",
+            ) from exc
 
         user_roles_ids = roles_data.roles
 
-        # Get all available roles for validation (query Role table)
+        # Validate the requested role IDs against the Role table.
         role_ids_from_db = db.exec(select(Role.id)).all()
         role_ids: list[UUID] = [r for r in role_ids_from_db if r is not None]
-        validate_roles(user_roles_ids, role_ids)  # This will raise an HTTPException if any role is invalid
+        validate_roles(user_roles_ids, role_ids)
 
-        # Delete existing roles
-        delete_stmt = delete(UserRole).where(col(UserRole.user_id) == user_id)
-        deleted = db.execute(delete_stmt)
-        db.commit()
-
-        if hasattr(deleted, "rowcount") and deleted.rowcount == 0:
-            logger.info("No changes made to the database. The user did not have any roles.")
-
-        # Insert new roles
         logger.info(f"Setting roles for user {user_id}: {user_roles_ids}")
-        new_user_roles = [UserRole(user_id=user_id, role_id=role_id) for role_id in user_roles_ids]
-        db.add_all(new_user_roles)
-        db.commit()
 
-        if len(new_user_roles) != len(user_roles_ids):
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to set all roles. Please check the provided role IDs.",
+        # Single transaction: drop old grants, insert the new ones, write
+        # audit. A failure between the delete and the insert previously
+        # left the user with no roles silently; consolidating into one
+        # commit means either everything lands or nothing does.
+        db.execute(delete(UserRole).where(col(UserRole.user_id) == user_id))
+        db.add_all([UserRole(user_id=user_id, role_id=role_id) for role_id in user_roles_ids])
+        db.add(
+            UsersAudit(
+                action="Updated user roles",
+                user_id=user_id,
+                modified_by_user_id=token_id,
             )
-
-        # Add audit record
-        audit = UsersAudit(
-            action=f"Updated roles: [{user_roles_ids}]",
-            user_id=user_id,
-            modified_by_user_id=token_id,
         )
-        db.add(audit)
         db.commit()
 
         return roles_data
@@ -105,7 +110,7 @@ def set_user_roles(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error setting user roles: {str(e)}")
+        logger.exception("Error setting user roles")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error"
-        )
+        ) from e

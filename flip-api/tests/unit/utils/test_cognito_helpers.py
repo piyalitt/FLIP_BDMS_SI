@@ -712,8 +712,24 @@ class TestGetCognitoUsers:
 
     @pytest.fixture
     def mock_boto3_client(self):
-        """Mock boto3 client for Cognito operations."""
+        """Mock boto3 client for Cognito operations.
+
+        The production code uses ``client.get_paginator("list_users").paginate(...)``
+        rather than ``client.list_users(...)`` directly, so wire the mock paginator
+        to delegate back to ``list_users``. That keeps the existing per-test
+        ``mock_client.list_users.return_value = ...`` / ``side_effect = ...`` /
+        ``assert_called_once_with(...)`` assertions working unchanged while still
+        exercising the paginator code path.
+        """
         with patch("flip_api.utils.cognito_helpers.boto3.client") as mock_client:
+            client_instance = mock_client.return_value
+
+            def _fake_paginate(**params):
+                # Single-page default. Tests that need multiple pages can
+                # override .paginate.side_effect or .return_value directly.
+                return [client_instance.list_users(**params)]
+
+            client_instance.get_paginator.return_value.paginate.side_effect = _fake_paginate
             yield mock_client
 
     @pytest.fixture
@@ -1181,6 +1197,44 @@ class TestGetCognitoUsers:
         expected_params = {"UserPoolId": "test-pool-id"}
         mock_client_instance.list_users.assert_called_once_with(**expected_params)
         assert len(result) == 2
+
+    def test_paginator_consumes_all_pages(self, mock_boto3_client, mock_get_settings, mock_logger):
+        """Multi-page pools must be fully consumed.
+
+        Cognito ListUsers returns up to 60 users per page; without paginator
+        iteration the reconcile script would treat page-2+ users as ghosts
+        and delete their role grants. Override the default single-page
+        ``paginate.side_effect`` and assert every page is read.
+        """
+        page_1 = {
+            "Users": [
+                {
+                    "Username": "page1user@example.com",
+                    "Attributes": [{"Name": "sub", "Value": str(user1)}],
+                    "Enabled": True,
+                }
+            ]
+        }
+        page_2 = {
+            "Users": [
+                {
+                    "Username": "page2user@example.com",
+                    "Attributes": [{"Name": "sub", "Value": str(user2)}],
+                    "Enabled": True,
+                }
+            ]
+        }
+
+        mock_client_instance = mock_boto3_client.return_value
+        # Drop the default fixture wiring; return both pages directly.
+        mock_client_instance.get_paginator.return_value.paginate.side_effect = None
+        mock_client_instance.get_paginator.return_value.paginate.return_value = [page_1, page_2]
+
+        result = get_cognito_users()
+
+        assert len(result) == 2
+        assert {u.id for u in result} == {user1, user2}
+        mock_client_instance.get_paginator.assert_called_once_with("list_users")
 
 
 class TestOriginFromUrl:

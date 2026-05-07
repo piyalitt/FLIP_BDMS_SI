@@ -14,13 +14,13 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlmodel import Session
+from sqlmodel import Session, col, delete
 
 from flip_api.auth.auth_utils import has_permissions
 from flip_api.auth.dependencies import verify_token
 from flip_api.config import get_settings
 from flip_api.db.database import get_session
-from flip_api.db.models.user_models import PermissionRef
+from flip_api.db.models.user_models import PermissionRef, UserRole, UsersAudit
 from flip_api.utils.cognito_helpers import delete_cognito_user, get_username
 from flip_api.utils.logger import logger
 
@@ -39,19 +39,26 @@ def delete_user(
     token_id: UUID = Depends(verify_token),
 ) -> dict[str, Any]:
     """
-    Delete a user from the system.
+    Delete a user from Cognito and revoke their role grants.
+
+    DB cleanup (delete role grants + write audit row) commits before the
+    Cognito delete so a Cognito failure leaves a Cognito user with no
+    app-side authority — preferable to dangling role grants on a deleted
+    user. Idempotent: if the Cognito user is already gone, the DB-side
+    cleanup still runs so any ghost role grants are reaped.
 
     Args:
-        user_id: ID of the user to delete
-        request: FastAPI request object
-        db: Database session
-        token_id: ID of the authenticated user
+        user_id (str): Cognito ``sub`` of the user to delete.
+        request (Request): The FastAPI request object.
+        db (Session): The database session.
+        token_id (UUID): ID of the authenticated user performing the delete.
 
     Returns:
         dict[str, Any]: Empty dictionary on success.
 
     Raises:
-        HTTPException: If the user doesn't have permission or other errors occur
+        HTTPException: If the caller lacks permission or an unexpected error
+            (other than a Cognito 404) occurs.
     """
     try:
         # Check if user has permission to manage users
@@ -61,11 +68,26 @@ def delete_user(
                 status_code=status.HTTP_403_FORBIDDEN, detail=f"User with ID: {token_id} was unable to manage users"
             )
 
-        # Get user pool ID and username
         user_pool_id = get_settings().AWS_COGNITO_USER_POOL_ID
-        username = get_username(user_id, user_pool_id)
+        user_uuid = UUID(user_id)
 
-        if username:
+        # Look up the Cognito username (email). `get_username` raises 404
+        # if the sub is gone — treat that as "Cognito side already cleaned
+        # up; still drop any ghost role grants on the DB side".
+        try:
+            username: str | None = get_username(user_id, user_pool_id)
+        except HTTPException as exc:
+            if exc.status_code != status.HTTP_404_NOT_FOUND:
+                raise
+            username = None
+
+        # DB-side cleanup commits first so a subsequent Cognito failure
+        # cannot leave dangling role grants on a deleted user.
+        db.execute(delete(UserRole).where(col(UserRole.user_id) == user_uuid))
+        db.add(UsersAudit(action="Deleted user", user_id=user_uuid, modified_by_user_id=token_id))
+        db.commit()
+
+        if username is not None:
             delete_cognito_user(username, user_pool_id)
 
         # Return empty response with 204 status code
@@ -74,7 +96,7 @@ def delete_user(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error deleting user: {str(e)}")
+        logger.exception("Error deleting user")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error"
+        ) from e
