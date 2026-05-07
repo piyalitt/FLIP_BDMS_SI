@@ -51,7 +51,11 @@ const jobTypes = {
     diffusion: ["trainer.py", "config.json", "diffusion.py"]
 };
 
-const configBlob = (payload: unknown): { data: Blob } => ({ data: new Blob([JSON.stringify(payload)], { type: "application/json" }) });
+const configBlob = (payload: unknown): { data: Blob } => {
+    const data = new Blob([JSON.stringify(payload)], { type: "application/json" });
+
+    return { data };
+};
 
 describe("getJobTypeFromConfig", () => {
     beforeEach(() => {
