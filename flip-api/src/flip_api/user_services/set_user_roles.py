@@ -110,6 +110,12 @@ def set_user_roles(
     except HTTPException:
         raise
     except Exception as e:
+        # Roll back any pending transaction so a failed db.commit() (or any
+        # error after the DELETE/INSERT have been buffered) cannot leave
+        # the request-scoped session in an aborted state on the way out.
+        # Matches the convention used elsewhere in user/cohort/private
+        # services.
+        db.rollback()
         logger.exception("Error setting user roles")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error"

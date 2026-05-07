@@ -33,7 +33,7 @@ router = APIRouter(prefix="/users", tags=["user_services"])
 # TODO [#114] This endpoint was not defined in the old repo, it was run as part of the 'registerUser' step function.
 @router.delete("/{user_id}", response_model=dict[str, Any])
 def delete_user(
-    user_id: str,
+    user_id: UUID,
     request: Request,
     db: Session = Depends(get_session),
     token_id: UUID = Depends(verify_token),
@@ -48,7 +48,8 @@ def delete_user(
     cleanup still runs so any ghost role grants are reaped.
 
     Args:
-        user_id (str): Cognito ``sub`` of the user to delete.
+        user_id (UUID): Cognito ``sub`` of the user to delete. FastAPI
+            validates the path segment, returning 422 on malformed input.
         request (Request): The FastAPI request object.
         db (Session): The database session.
         token_id (UUID): ID of the authenticated user performing the delete.
@@ -69,13 +70,12 @@ def delete_user(
             )
 
         user_pool_id = get_settings().AWS_COGNITO_USER_POOL_ID
-        user_uuid = UUID(user_id)
 
         # Look up the Cognito username (email). `get_username` raises 404
         # if the sub is gone — treat that as "Cognito side already cleaned
         # up; still drop any ghost role grants on the DB side".
         try:
-            username: str | None = get_username(user_id, user_pool_id)
+            username: str | None = get_username(str(user_id), user_pool_id)
         except HTTPException as exc:
             if exc.status_code != status.HTTP_404_NOT_FOUND:
                 raise
@@ -83,8 +83,8 @@ def delete_user(
 
         # DB-side cleanup commits first so a subsequent Cognito failure
         # cannot leave dangling role grants on a deleted user.
-        db.execute(delete(UserRole).where(col(UserRole.user_id) == user_uuid))
-        db.add(UsersAudit(action="Deleted user", user_id=user_uuid, modified_by_user_id=token_id))
+        db.execute(delete(UserRole).where(col(UserRole.user_id) == user_id))
+        db.add(UsersAudit(action="Deleted user", user_id=user_id, modified_by_user_id=token_id))
         db.commit()
 
         if username is not None:
@@ -96,6 +96,11 @@ def delete_user(
     except HTTPException:
         raise
     except Exception as e:
+        # Roll back any pending transaction so a failed db.commit() does
+        # not leave the request-scoped session in an aborted state on the
+        # way out. Matches the convention used elsewhere in user/cohort/
+        # private services.
+        db.rollback()
         logger.exception("Error deleting user")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error"

@@ -32,7 +32,7 @@ def mock_db():
 @pytest.fixture
 def user_id():
     """User ID fixture (a Cognito sub)."""
-    return str(uuid.uuid4())
+    return uuid.uuid4()
 
 
 @pytest.fixture
@@ -83,7 +83,7 @@ def test_cognito_user_already_gone_still_drops_role_grants(mock_request, mock_db
         result = delete_user(user_id, mock_request, mock_db, token_id)
 
         assert result == {}
-        mock_get_username.assert_called_once_with(user_id, user_pool_id)
+        mock_get_username.assert_called_once_with(str(user_id), user_pool_id)
         # DB cleanup runs even though Cognito is gone — that's the whole point.
         mock_db.execute.assert_called_once()
         mock_db.add.assert_called_once()
@@ -143,7 +143,7 @@ def test_user_deleted_successfully(mock_request, mock_db, user_id, token_id):
         result = delete_user(user_id, mock_request, mock_db, token_id)
 
         assert result == {}
-        mock_get_username.assert_called_once_with(user_id, user_pool_id)
+        mock_get_username.assert_called_once_with(str(user_id), user_pool_id)
 
         # user_role rows deleted in a single execute() call
         mock_db.execute.assert_called_once()
@@ -153,7 +153,7 @@ def test_user_deleted_successfully(mock_request, mock_db, user_id, token_id):
         audit_row = mock_db.add.call_args[0][0]
         assert isinstance(audit_row, UsersAudit)
         assert audit_row.action == "Deleted user"
-        assert str(audit_row.user_id) == user_id
+        assert audit_row.user_id == user_id
         assert audit_row.modified_by_user_id == token_id
 
         # DB commits before Cognito delete (so a Cognito failure can't leave dangling grants)
@@ -198,4 +198,8 @@ def test_db_cleanup_durable_when_cognito_delete_fails(mock_request, mock_db, use
         assert audit_row.action == "Deleted user"
         mock_db.commit.assert_called_once()
         mock_delete_cognito_user.assert_called_once_with(username, user_pool_id)
+        # Outer except path runs db.rollback() defensively so a failed
+        # downstream operation cannot leave the request-scoped session
+        # in an aborted state on the way out.
+        mock_db.rollback.assert_called_once()
         mock_logger.exception.assert_called_once()

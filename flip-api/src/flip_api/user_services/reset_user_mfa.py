@@ -28,7 +28,7 @@ router = APIRouter(prefix="/users", tags=["user_services"])
 
 @router.post("/{user_id}/mfa/reset", response_model=dict[str, Any])
 def reset_mfa_for_user(
-    user_id: str,
+    user_id: UUID,
     request: Request,
     db: Session = Depends(get_session),
     token_id: UUID = Depends(verify_token),
@@ -45,10 +45,12 @@ def reset_mfa_for_user(
     post-auth enrolment page instead.
 
     Args:
-        user_id: ID (Cognito ``sub``) of the user whose MFA should be reset
-        request: FastAPI request object
-        db: Database session
-        token_id: ID of the authenticated user performing the reset
+        user_id (UUID): ID (Cognito ``sub``) of the user whose MFA should be
+            reset. FastAPI validates the path segment, returning 422 on
+            malformed input.
+        request (Request): FastAPI request object.
+        db (Session): Database session.
+        token_id (UUID): ID of the authenticated user performing the reset.
 
     Returns:
         dict[str, Any]: Empty dictionary on success.
@@ -66,8 +68,7 @@ def reset_mfa_for_user(
             )
 
         user_pool_id = get_user_pool_id(request)
-        username = get_username(user_id, user_pool_id)
-        user_uuid = UUID(user_id)
+        username = get_username(str(user_id), user_pool_id)
 
         reset_user_mfa(username, user_pool_id)
 
@@ -78,7 +79,7 @@ def reset_mfa_for_user(
         # safe (admin_reset_user_password is idempotent on the MFA
         # preference).
         try:
-            db.add(UsersAudit(action="Reset user MFA", user_id=user_uuid, modified_by_user_id=token_id))
+            db.add(UsersAudit(action="Reset user MFA", user_id=user_id, modified_by_user_id=token_id))
             db.commit()
         except Exception as audit_err:
             db.rollback()

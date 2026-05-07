@@ -97,7 +97,7 @@ def register_user_step_function_endpoint(
             # user; it is idempotent on a missing Cognito sub.
             logger.exception(f"Failed to set user roles {roles} for user {user_id}; rolling back")
             try:
-                delete_user(user_id=str(user_id), request=request, db=db, token_id=token_id)
+                delete_user(user_id=user_id, request=request, db=db, token_id=token_id)
             except Exception:
                 # The rollback itself failed — surface the *original* error
                 # to the caller, but log enough that an operator can clean
@@ -122,7 +122,7 @@ def register_user_step_function_endpoint(
         except Exception as role_err:
             logger.exception(f"Failed to set user roles {roles} for user {user_id}; rolling back")
             try:
-                delete_user(user_id=str(user_id), request=request, db=db, token_id=token_id)
+                delete_user(user_id=user_id, request=request, db=db, token_id=token_id)
             except Exception:
                 logger.exception(
                     f"Failed to roll back user {user_id} ({user_data.email}) after role assignment "

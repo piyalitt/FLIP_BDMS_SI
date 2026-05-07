@@ -28,7 +28,7 @@ def mock_db():
 
 @pytest.fixture
 def user_id():
-    return str(uuid.uuid4())
+    return uuid.uuid4()
 
 
 @pytest.fixture
@@ -75,7 +75,7 @@ def test_user_not_found(mock_request, mock_db, user_id, token_id):
 
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
         assert f"User with ID {user_id} is not registered." in exc_info.value.detail
-        mock_get_username.assert_called_once_with(user_id, user_pool_id)
+        mock_get_username.assert_called_once_with(str(user_id), user_pool_id)
         mock_reset_user_mfa.assert_not_called()
 
 
@@ -104,7 +104,7 @@ def test_mfa_reset_successfully(mock_request, mock_db, user_id, token_id):
         assert isinstance(audit_row, UsersAudit)
         # Stable past-tense verb-noun convention, consistent across services.
         assert audit_row.action == "Reset user MFA"
-        assert str(audit_row.user_id) == user_id
+        assert audit_row.user_id == user_id
         assert audit_row.modified_by_user_id == token_id
         mock_db.commit.assert_called_once()
 

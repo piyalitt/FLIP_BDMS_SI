@@ -181,3 +181,33 @@ def test_invalid_roles(mock_db, user_id, token_id, roles_data):
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
         assert "Invalid role(s):" in exc_info.value.detail
+
+
+def test_commit_failure_rolls_back_session(mock_db, user_id, token_id, roles_data):
+    """A failed db.commit() must trigger db.rollback() before raising 500.
+
+    Without the rollback the request-scoped session is left in an aborted
+    transaction state — close() would discard it, but the explicit
+    rollback documents intent and matches the convention used elsewhere
+    in user/cohort/private services.
+    """
+    mock_db.exec.return_value.all.return_value = roles_data.roles
+    mock_db.execute.return_value = MagicMock(rowcount=1)
+    mock_db.commit.side_effect = Exception("DB unavailable")
+
+    with (
+        patch("flip_api.user_services.set_user_roles.has_permissions") as mock_has_permissions,
+        patch("flip_api.user_services.set_user_roles.get_username") as mock_get_username,
+        patch("flip_api.user_services.set_user_roles.get_settings") as mock_get_settings,
+    ):
+        mock_has_permissions.return_value = True
+        mock_get_username.return_value = "user@example.com"
+        mock_get_settings.return_value.AWS_COGNITO_USER_POOL_ID = "pool-id"
+
+        with pytest.raises(HTTPException) as exc_info:
+            set_user_roles(user_id, roles_data, mock_db, token_id)
+
+        assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        # SQLAlchemy text must not leak through detail.
+        assert "DB unavailable" not in exc_info.value.detail
+        mock_db.rollback.assert_called_once()
