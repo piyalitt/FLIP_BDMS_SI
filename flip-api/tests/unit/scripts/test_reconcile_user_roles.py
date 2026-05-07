@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 
 from flip_api.db.models.user_models import UserRole
 from flip_api.domain.schemas.users import CognitoUser
-from flip_api.scripts.reconcile_user_roles import reconcile
+from flip_api.scripts.reconcile_user_roles import main, reconcile
 
 
 def _cognito_user(user_id: UUID, email: str = "x@example.com") -> CognitoUser:
@@ -108,3 +108,29 @@ def test_reconcile_refuses_to_delete_when_cognito_returns_empty():
     assert ghosts_found == 1
     session.execute.assert_not_called()
     session.commit.assert_not_called()
+
+
+@patch("flip_api.scripts.reconcile_user_roles.reconcile")
+@patch("flip_api.scripts.reconcile_user_roles.Session")
+def test_main_default_invokes_reconcile_in_destructive_mode(mock_session_cls, mock_reconcile):
+    """Default CLI invocation passes ``dry_run=False`` and opens a Session against the engine."""
+    session_instance = MagicMock()
+    mock_session_cls.return_value.__enter__.return_value = session_instance
+
+    with patch("sys.argv", ["reconcile_user_roles"]):
+        main()
+
+    mock_reconcile.assert_called_once_with(session_instance, dry_run=False)
+
+
+@patch("flip_api.scripts.reconcile_user_roles.reconcile")
+@patch("flip_api.scripts.reconcile_user_roles.Session")
+def test_main_dry_run_flag_propagates_to_reconcile(mock_session_cls, mock_reconcile):
+    """``--dry-run`` flips the kwarg passed into ``reconcile``."""
+    session_instance = MagicMock()
+    mock_session_cls.return_value.__enter__.return_value = session_instance
+
+    with patch("sys.argv", ["reconcile_user_roles", "--dry-run"]):
+        main()
+
+    mock_reconcile.assert_called_once_with(session_instance, dry_run=True)

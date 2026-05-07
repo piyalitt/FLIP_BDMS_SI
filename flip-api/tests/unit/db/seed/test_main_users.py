@@ -11,13 +11,15 @@
 #
 
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException, status
 from sqlmodel import Session
 
-from flip_api.db.models.user_models import RoleRef
+from flip_api.db.models.user_models import RoleRef, UserRole
 from flip_api.db.seed.main_users import ensure_user_and_role, seed_main_users
+from flip_api.domain.schemas.users import CognitoUser
 from flip_api.utils.constants import (
     ADMIN_EMAIL_1,
     ADMIN_EMAIL_2,
@@ -127,3 +129,47 @@ def test_ensure_user_and_role_reraises_non_404_cognito_errors(
         ensure_user_and_role("missing@example.com", RoleRef.RESEARCHER, mock_session)
 
     assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
+
+@patch("flip_api.db.seed.main_users.get_settings")
+@patch("flip_api.db.seed.main_users.get_user_by_email_or_id")
+def test_ensure_user_and_role_grants_role_when_missing(
+    mock_get_user_by_email_or_id, mock_get_settings, mock_session, mock_settings
+):
+    """Cognito user exists but has no UserRole row → add the grant and commit."""
+    mock_get_settings.return_value = mock_settings
+    sub = uuid4()
+    mock_get_user_by_email_or_id.return_value = CognitoUser(
+        id=sub, email="alex@example.com", is_disabled=False
+    )  # type: ignore[call-arg]
+    mock_session.exec.return_value.first.return_value = None
+
+    ensure_user_and_role("alex@example.com", RoleRef.RESEARCHER, mock_session)
+
+    mock_session.add.assert_called_once()
+    added_obj = mock_session.add.call_args.args[0]
+    assert isinstance(added_obj, UserRole)
+    assert added_obj.user_id == sub
+    assert added_obj.role_id == RoleRef.RESEARCHER.value
+    mock_session.commit.assert_called_once()
+
+
+@patch("flip_api.db.seed.main_users.get_settings")
+@patch("flip_api.db.seed.main_users.get_user_by_email_or_id")
+def test_ensure_user_and_role_is_idempotent_when_grant_already_exists(
+    mock_get_user_by_email_or_id, mock_get_settings, mock_session, mock_settings
+):
+    """Cognito user exists and already has the role → no add, no commit."""
+    mock_get_settings.return_value = mock_settings
+    sub = uuid4()
+    mock_get_user_by_email_or_id.return_value = CognitoUser(
+        id=sub, email="alex@example.com", is_disabled=False
+    )  # type: ignore[call-arg]
+    mock_session.exec.return_value.first.return_value = UserRole(
+        user_id=sub, role_id=RoleRef.RESEARCHER.value
+    )
+
+    ensure_user_and_role("alex@example.com", RoleRef.RESEARCHER, mock_session)
+
+    mock_session.add.assert_not_called()
+    mock_session.commit.assert_not_called()
