@@ -14,12 +14,19 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 
-import { checkViteLocal } from "../check-build-flags.mjs";
+import { checkViteLocal, runCli } from "../check-build-flags.mjs";
 
 // Resolved once because every spec runs the script as a child process,
 // and resolving relative to __dirname keeps the test order-independent
 // (vitest's cwd is not stable across runners).
 const SCRIPT = path.resolve(__dirname, "../check-build-flags.mjs");
+
+function makeIo(): { error: ReturnType<typeof vi.fn>; exit: ReturnType<typeof vi.fn> } {
+    return {
+        error: vi.fn(),
+        exit: vi.fn()
+    };
+}
 
 describe("checkViteLocal", () => {
     it("returns null when VITE_LOCAL is unset", () => {
@@ -57,24 +64,53 @@ describe("checkViteLocal", () => {
     });
 });
 
-describe("check-build-flags.mjs CLI", () => {
-    it("exits 0 when VITE_LOCAL is unset", () => {
-        const env = { ...process.env };
-        delete env.VITE_LOCAL;
+describe("runCli", () => {
+    // runCli is the exported CLI entry. We drive it directly (rather
+    // than spawning the script as a child process) so vitest's
+    // coverage instrumentation actually sees the lines execute —
+    // child-process runs don't propagate to the v8 coverage report.
 
-        // Throws on non-zero exit, so a successful return == exit 0.
-        expect(() => execFileSync("node", [SCRIPT], { env })).not.toThrow();
+    it("returns 0 and does not call exit/error when VITE_LOCAL is unset", () => {
+        const io = makeIo();
+
+        const code = runCli({}, io);
+
+        expect(code).toBe(0);
+        expect(io.exit).not.toHaveBeenCalled();
+        expect(io.error).not.toHaveBeenCalled();
     });
 
-    it("exits 0 when VITE_LOCAL='false'", () => {
-        const env = {
-            ...process.env,
-            VITE_LOCAL: "false"
-        };
-        expect(() => execFileSync("node", [SCRIPT], { env })).not.toThrow();
+    it("returns 0 and does not call exit/error when VITE_LOCAL='false'", () => {
+        const io = makeIo();
+
+        const code = runCli({ VITE_LOCAL: "false" }, io);
+
+        expect(code).toBe(0);
+        expect(io.exit).not.toHaveBeenCalled();
+        expect(io.error).not.toHaveBeenCalled();
     });
 
-    it("exits non-zero and prints the reason on stderr when VITE_LOCAL='true'", () => {
+    it("returns 1 and forwards the reason to error+exit when VITE_LOCAL='true'", () => {
+        const io = makeIo();
+
+        const code = runCli({ VITE_LOCAL: "true" }, io);
+
+        expect(code).toBe(1);
+        expect(io.exit).toHaveBeenCalledWith(1);
+        expect(io.error).toHaveBeenCalledTimes(1);
+        const errMsg = io.error.mock.calls[0][0];
+        expect(errMsg).toContain("Refusing to build");
+        expect(errMsg).toMatch(/Cognito/i);
+    });
+});
+
+describe("check-build-flags.mjs CLI (smoke)", () => {
+    // Belt-and-braces contract test on the actual script invocation:
+    // confirms the npm prebuild hook (`node scripts/check-build-flags.mjs`)
+    // actually exits non-zero when the flag is set. The runCli unit
+    // tests above cover the logic; this proves the wiring.
+
+    it("exits non-zero on stderr when VITE_LOCAL='true'", () => {
         const env = {
             ...process.env,
             VITE_LOCAL: "true"
@@ -97,6 +133,12 @@ describe("check-build-flags.mjs CLI", () => {
         expect(caught).not.toBeNull();
         expect(caught?.status).toBe(1);
         expect(caught?.stderr).toContain("Refusing to build");
-        expect(caught?.stderr).toMatch(/Cognito/i);
+    });
+
+    it("exits 0 when VITE_LOCAL is unset", () => {
+        const env = { ...process.env };
+        delete env.VITE_LOCAL;
+
+        expect(() => execFileSync("node", [SCRIPT], { env })).not.toThrow();
     });
 });

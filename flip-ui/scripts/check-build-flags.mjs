@@ -48,14 +48,42 @@ export function checkViteLocal(env) {
     ].join("\n");
 }
 
+/**
+ * CLI driver. Takes the side-effecting bits as parameters so a unit
+ * test can drive it without forking a real process — child-process
+ * spawns don't count for vitest's coverage instrumentation, and we
+ * still want a regression test on the prebuild hook's contract.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @param {{ error: (msg: string) => void, exit: (code: number) => void }} io
+ * @returns {0 | 1} exit code; the caller forwards it to process.exit.
+ */
+export function runCli(env, io) {
+    const reason = checkViteLocal(env);
+    if (reason) {
+        io.error(reason);
+        io.exit(1);
+
+        return 1;
+    }
+
+    return 0;
+}
+
+// Bootstrap: forwards process state into runCli when this file is
+// invoked directly (`node scripts/check-build-flags.mjs`). Skipped
+// when imported, so vitest's coverage will never light it up — the
+// runCli unit tests cover the same logic with injected I/O, and the
+// child-process smoke tests verify the wiring end-to-end.
+/* v8 ignore start */
 const invokedDirectly =
     process.argv[1] !== undefined &&
     import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (invokedDirectly) {
-    const reason = checkViteLocal(process.env);
-    if (reason) {
-        console.error(reason);
-        process.exit(1);
-    }
+    runCli(process.env, {
+        error: (msg) => console.error(msg),
+        exit: (code) => process.exit(code)
+    });
 }
+/* v8 ignore stop */
