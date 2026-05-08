@@ -139,6 +139,8 @@ resource "aws_cognito_user_pool_client" "client" {
   # the wire. ALLOW_ADMIN_USER_PASSWORD_AUTH is retained because it is an
   # AWS-IAM-gated server-side flow (not browser-reachable) used by the
   # admin-auth fallback in flip-api integration tests.
+  # Reference for the SRP / USER_AUTH / OAuth flows enumerated below:
+  # https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-authentication-flow.html
   explicit_auth_flows = [
     "ALLOW_USER_AUTH",
     "ALLOW_USER_SRP_AUTH",
