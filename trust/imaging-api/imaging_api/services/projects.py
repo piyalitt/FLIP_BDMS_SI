@@ -37,6 +37,13 @@ from imaging_api.utils.logger import logger
 
 XNAT_URL = get_settings().XNAT_URL
 
+# Register the xnat namespace prefix once at module load. ET.register_namespace
+# mutates a process-global mapping; doing it here (rather than per-call) makes
+# the global-state nature explicit and avoids re-registering on every project
+# creation. The URI matches the value passed to create_payload_for_project_creation
+# from create_project, so the serializer emits the historical xmlns:xnat="…" form.
+ET.register_namespace("xnat", f"{XNAT_URL}/data/projects")
+
 
 def get_project_from_central_hub_project_id(central_hub_project_id: str, headers: dict[str, str]) -> Project:
     """
@@ -142,7 +149,6 @@ def create_payload_for_project_creation(
     Returns:
         str: XML payload for creating the project.
     """
-    ET.register_namespace("xnat", xnat_projects_uri)
     root = ET.Element(f"{{{xnat_projects_uri}}}projectData")
     ET.SubElement(root, "ID").text = project_id
     ET.SubElement(root, "secondary_ID").text = project_secondary_id

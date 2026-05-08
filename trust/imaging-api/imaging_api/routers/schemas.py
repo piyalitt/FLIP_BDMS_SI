@@ -21,11 +21,13 @@ from imaging_api.config import get_settings
 PACS_ID = get_settings().PACS_ID
 XNAT_PORT = get_settings().XNAT_PORT
 
-# XML control characters disallowed in project_name to defend against XML
-# injection in the XNAT projectData payload built by imaging_api.services.projects.
-# The XML serializer already escapes these, so this is defense in depth at the
-# trust-boundary schema layer — and gives a clear 422 instead of a corrupted XNAT
-# entity for callers that try to send them.
+# Blocks the three characters most likely to enable structural XML injection
+# in the XNAT projectData payload built by imaging_api.services.projects. This
+# is not exhaustive — ElementTree also escapes " and ' where they're significant
+# (attribute values), but project_name lands as element text where they aren't,
+# so blocking them at this layer is unnecessary. The serializer is the canonical
+# defence; this validator is the trust-boundary fail-fast that returns a 422
+# instead of letting the corrupted entity reach XNAT.
 _XML_FORBIDDEN_CHARS = ("<", ">", "&")
 
 # #########################

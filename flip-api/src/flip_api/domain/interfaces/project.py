@@ -19,11 +19,13 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, va
 from flip_api.domain.schemas.status import ModelStatus, ProjectStatus
 from flip_api.domain.schemas.users import CognitoUser
 
-# XML control characters disallowed in project name fields so they can never
-# reach the imaging-api projectData XML payload as un-escaped content. The
-# imaging-api XML serializer already escapes these (defense in depth on the
-# trust side); rejecting at the hub boundary fails fast with a clear 422 when
-# a caller submits a name that would break or inject the XNAT payload.
+# Blocks the three characters most likely to enable structural XML injection
+# downstream in the imaging-api projectData payload. This is not exhaustive —
+# ElementTree also escapes " and ' where they're significant (attribute values),
+# but the project name lands as element text where they aren't, so blocking
+# them at this layer is unnecessary. The downstream serializer is the canonical
+# defence; this validator is the hub-boundary fail-fast that returns a 422
+# instead of letting the corrupted name flow to the trust.
 _XML_FORBIDDEN_CHARS = ("<", ">", "&")
 
 
