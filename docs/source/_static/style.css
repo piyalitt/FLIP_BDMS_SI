@@ -169,8 +169,7 @@ body, .wy-body-for-nav,
 .wy-side-nav-search > div.version,
 .wy-side-nav-search .wy-dropdown > a,
 .wy-side-nav-search > div.version a,
-.wy-side-nav-search > div.version select,
-.wy-side-nav-search select {
+.wy-side-nav-search > div.version select {
     color: var(--flip-primary-400) !important;
     font-family: var(--font-mono);
     font-size: 11.5px;
