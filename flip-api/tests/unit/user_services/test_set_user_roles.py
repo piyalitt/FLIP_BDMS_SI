@@ -123,6 +123,37 @@ def test_cognito_5xx_returns_503(mock_db, user_id, token_id, roles_data):
         mock_db.commit.assert_not_called()
 
 
+def test_cognito_non_404_4xx_propagates_unchanged(mock_db, user_id, token_id, roles_data):
+    """Non-404 4xx from get_username (e.g. a future 400 or 429) must propagate.
+
+    A blanket "non-404 -> 503" remap would mask a real 400 (caller bug) or 429
+    (rate-limit signal). Only 5xx is genuine "could not verify" and warrants
+    503; client-error 4xx codes should stay as themselves so the caller sees
+    the actual signal.
+    """
+    with (
+        patch("flip_api.user_services.set_user_roles.has_permissions") as mock_has_permissions,
+        patch("flip_api.user_services.set_user_roles.get_username") as mock_get_username,
+        patch("flip_api.user_services.set_user_roles.get_settings") as mock_get_settings,
+    ):
+        mock_has_permissions.return_value = True
+        mock_get_settings.return_value.AWS_COGNITO_USER_POOL_ID = "pool-id"
+        mock_get_username.side_effect = HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Cognito throttled",
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            set_user_roles(user_id, roles_data, mock_db, token_id)
+
+        # Original 429 surfaces unchanged — not remapped to 503.
+        assert exc_info.value.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+        assert exc_info.value.detail == "Cognito throttled"
+        mock_db.execute.assert_not_called()
+        mock_db.add_all.assert_not_called()
+        mock_db.commit.assert_not_called()
+
+
 def test_user_not_found_in_cognito_returns_404(mock_db, user_id, token_id, roles_data):
     """Setting roles for a sub that does not exist in Cognito should return 404, not 500."""
     with (

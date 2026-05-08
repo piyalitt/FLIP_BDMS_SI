@@ -151,7 +151,11 @@ def get_cognito_users(params: dict[str, Any] | None = None) -> list[CognitoUser]
     elif "UserPoolId" not in params:
         params["UserPoolId"] = user_pool_id
 
-    logger.debug(f"Cognito list users params: {params}")
+    # Log only the pool ID, not the full params dict — params can carry a
+    # ``Filter`` whose value is an email or other PII, and an operator who
+    # turns debug logging on for a different reason should not be opting
+    # into PII capture as a side-effect.
+    logger.debug(f"Listing Cognito users in pool {params.get('UserPoolId')}")
     # Cognito ListUsers returns up to 60 users per page. Use the boto3
     # paginator so callers see the whole pool — the admin "list users"
     # endpoint and the per-trust XNAT-onboarding lookup both walk the

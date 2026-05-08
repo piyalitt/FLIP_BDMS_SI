@@ -69,6 +69,9 @@ def set_user_roles(
         # particular ``register_user_step_function``) can decide whether to
         # treat this as a definitive "role assignment failed" (and roll back
         # the registration) or a transient "could not verify; retry later".
+        # Non-404 client errors (e.g. a future 400 or 429 from Cognito) must
+        # propagate untouched so caller-side bugs and rate-limit signals
+        # aren't masked behind a generic 503.
         try:
             get_username(str(user_id), get_settings().AWS_COGNITO_USER_POOL_ID)
         except HTTPException as exc:
@@ -77,10 +80,12 @@ def set_user_roles(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"User with ID {user_id} not found",
                 ) from exc
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Could not verify user existence in Cognito; please try again.",
-            ) from exc
+            if exc.status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Could not verify user existence in Cognito; please try again.",
+                ) from exc
+            raise
 
         user_roles_ids = roles_data.roles
 

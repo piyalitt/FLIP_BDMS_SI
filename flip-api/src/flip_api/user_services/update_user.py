@@ -131,7 +131,10 @@ def update_user_endpoint(
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="User update partially succeeded; please verify and contact ops.",
+                detail=(
+                    f"{action} succeeded in Cognito + XNAT, but audit log "
+                    "write failed — please verify and contact ops."
+                ),
             ) from audit_err
 
         logger.info(f"User updated successfully: {response}")

@@ -803,8 +803,9 @@ class TestGetCognitoUsers:
         expected_params = {"UserPoolId": "test-pool-id"}
         mock_client_instance.list_users.assert_called_once_with(**expected_params)
 
-        # Verify logging
-        mock_logger.debug.assert_called_with(f"Cognito list users params: {expected_params}")
+        # Verify logging — pool ID only, never the full params dict (a
+        # ``Filter`` value can carry an email or other PII).
+        mock_logger.debug.assert_called_with("Listing Cognito users in pool test-pool-id")
 
     def test_custom_params_with_existing_user_pool_id(
         self, mock_boto3_client, mock_get_settings, sample_cognito_response, mock_logger
