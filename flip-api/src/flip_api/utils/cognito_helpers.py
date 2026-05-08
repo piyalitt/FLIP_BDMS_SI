@@ -254,7 +254,8 @@ def get_user_by_email_or_id(
         safe_email = _safe_email_for_cognito_filter(email)
         filter_expr = f'email = "{safe_email}"'
     else:
-        safe_user_id = _safe_uuid_for_cognito_filter(user_id)  # type: ignore[arg-type]
+        assert user_id is not None  # guaranteed by the guard above
+        safe_user_id = _safe_uuid_for_cognito_filter(user_id)
         filter_expr = f'sub = "{safe_user_id}"'
 
     params = {"UserPoolId": user_pool_id, "Filter": filter_expr, "Limit": 1}

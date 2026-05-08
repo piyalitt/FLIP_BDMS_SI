@@ -1746,6 +1746,24 @@ class TestGetUserByEmailOrId:
             assert params["Limit"] == 1
             assert params["UserPoolId"] == USER_POOL_ID
 
+    def test_explicit_quote_guard_fires_if_email_validator_relaxes(self):
+        """The explicit `"`/`\\` rejection in `_safe_email_for_cognito_filter`
+        is belt-and-braces against a future Pydantic update relaxing
+        ``EmailStr``. Bypass the validator with a mock to confirm the inner
+        guard still catches an unsafe value."""
+        unsafe = 'a@b.com" or email = "*'
+        with patch(
+            "flip_api.utils.cognito_helpers._EMAIL_VALIDATOR.validate_python",
+            return_value=unsafe,
+        ):
+            with patch("flip_api.utils.cognito_helpers.get_cognito_users") as mock_list:
+                with pytest.raises(HTTPException) as exc_info:
+                    get_user_by_email_or_id(USER_POOL_ID, email=unsafe)
+
+                assert exc_info.value.status_code == HTTP_400_BAD_REQUEST
+                assert exc_info.value.detail == "Invalid email address format"
+                mock_list.assert_not_called()
+
     def test_uuid_branch_uses_canonical_form(self):
         """A UUID-typed user_id must produce the canonical hex+hyphen form;
         the resulting filter expression contains no characters that could
