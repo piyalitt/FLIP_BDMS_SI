@@ -93,6 +93,14 @@ def update_user_endpoint(
         try:
             update_xnat_user_profile(set_user_enabled_data, db)
         except Exception as xnat_err:
+            # Despite the name, ``update_xnat_user_profile`` does not call
+            # XNAT directly — it enqueues one ``TrustTask`` per trust
+            # (via ``db.add``) and then ``db.commit()``s. If that commit
+            # fails mid-flight, the session has buffered TrustTask rows
+            # that need rolling back so the next request on this session
+            # doesn't inherit a poisoned transaction. (HTTP-to-XNAT
+            # happens later, in the trust-poll worker pulling those
+            # queued tasks.)
             db.rollback()
             logger.exception(
                 f"Cognito update succeeded for user_id={user_id} (initiated by {token_id}) "
