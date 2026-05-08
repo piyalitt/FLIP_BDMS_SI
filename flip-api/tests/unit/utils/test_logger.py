@@ -64,15 +64,17 @@ def test_logger_picks_up_log_level_from_real_basesettings():
 
     Locks down the chain ``Settings.LOG_LEVEL`` → ``get_settings()`` → ``logger.setLevel`` so
     a refactor that renames or retypes the field (e.g. to an Enum) is caught here, not in prod.
+    LOG_LEVEL is passed as a kwarg so it takes priority over any env var (CI sets
+    ``LOG_LEVEL=DEBUG`` which would otherwise shadow the field default).
     """
     from typing import Literal
 
     from pydantic_settings import BaseSettings
 
     class _RealishSettings(BaseSettings):
-        LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "WARNING"
+        LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
-    real_settings = _RealishSettings()
+    real_settings = _RealishSettings(LOG_LEVEL="WARNING")
     with patch.object(config, "get_settings", return_value=real_settings):
         reloaded = importlib.reload(logger_module)
         try:
