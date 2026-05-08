@@ -110,11 +110,18 @@ class Settings(BaseSettings):
 
     @field_validator("LOG_LEVEL", mode="before")
     @classmethod
-    def coerce_log_level(cls, v: str | None) -> str:
-        """Treat empty-string or None LOG_LEVEL as the default INFO; uppercase otherwise."""
+    def coerce_log_level(cls, v: object) -> object:
+        """Treat empty-string or None LOG_LEVEL as the default INFO; uppercase string input.
+
+        Non-string, non-empty input is returned unchanged so the downstream
+        Literal validator rejects it loudly, instead of ``.upper()`` raising
+        ``AttributeError`` mid-validation on e.g. ``Settings(LOG_LEVEL=10)``.
+        """
         if v is None or v == "":
             return "INFO"
-        return v.upper()
+        if isinstance(v, str):
+            return v.upper()
+        return v
 
     # Trust task queue settings
     HEARTBEAT_TIMEOUT_SECONDS: int = 30  # How long since last heartbeat before a trust is considered offline
