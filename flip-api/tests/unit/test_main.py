@@ -106,6 +106,10 @@ class TestDocsGating:
         """With ENV=production, the FastAPI app must build with all three URLs unset."""
         monkeypatch.setattr(config, "_settings", SimpleNamespace(ENV="production"))
         try:
+            # FastAPI bakes docs_url/openapi_url/redoc_url into the router at app
+            # construction time, so patching the live app object after the fact has
+            # no effect on routing — we must reload the module to construct a new
+            # app under the production settings.
             importlib.reload(main)
             assert main.app.docs_url is None
             assert main.app.openapi_url is None

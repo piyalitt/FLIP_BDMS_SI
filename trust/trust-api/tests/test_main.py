@@ -62,6 +62,10 @@ class TestDocsGating:
             SimpleNamespace(ENV="production", TRUST_INTERNAL_SERVICE_KEY="x"),
         )
         try:
+            # FastAPI bakes docs_url/openapi_url/redoc_url into the router at app
+            # construction time, so patching the live app object after the fact has
+            # no effect on routing — we must reload the module to construct a new
+            # app under the production settings.
             importlib.reload(main)
             assert main.app.docs_url is None
             assert main.app.openapi_url is None
