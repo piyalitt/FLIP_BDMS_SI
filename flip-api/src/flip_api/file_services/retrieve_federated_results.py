@@ -83,8 +83,14 @@ def retrieve_federated_results(
         # List objects in bucket with model_id prefix
         try:
             list_objects = s3.list_objects(s3_path)
-        except Exception:
-            logger.exception(f"An error occurred when finding the result data in {s3_path}")
+        except Exception as e:
+            # Drop ``exc_info``: the formatter would otherwise emit ``str(e)``
+            # via the traceback. A future boto error shape that embeds a URL
+            # fragment in its message would leak through that channel.
+            logger.error(
+                f"An error occurred when finding the result data in {s3_path} "
+                f"error_type={type(e).__name__}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="An error occurred when finding the result data",
@@ -100,11 +106,11 @@ def retrieve_federated_results(
         # Get presigned URLs for each file
         try:
             result = [s3.get_presigned_url(f) for f in list_objects]
-        except Exception:
-            # Use logger.exception (no f-string of {e}) so any URL fragment in
-            # an exception message stays out of the formatted log line and only
-            # appears in the structured traceback that operators read out-of-band.
-            logger.exception(f"Error generating pre-signed URLs for model {model_id}")
+        except Exception as e:
+            logger.error(
+                f"Error generating pre-signed URLs for model {model_id} "
+                f"error_type={type(e).__name__}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="An error occurred when attempting to retrieve the files",
@@ -118,11 +124,11 @@ def retrieve_federated_results(
 
     except HTTPException:
         raise
-    except Exception:
-        # Static detail: never echo the raw exception into the HTTP body —
-        # for boto-derived errors the str() can carry bucket names, ARNs,
-        # request IDs, or (in pathological cases) URL fragments.
-        logger.exception(f"Unhandled error in retrieve_federated_results for model {model_id}")
+    except Exception as e:
+        logger.error(
+            f"Unhandled error in retrieve_federated_results for model {model_id} "
+            f"error_type={type(e).__name__}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",

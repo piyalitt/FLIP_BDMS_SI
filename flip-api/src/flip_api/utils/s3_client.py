@@ -117,12 +117,15 @@ class S3Client:
             )
             return url
         except ClientError as e:
-            # Use logger.exception so the boto traceback is captured out-of-band.
-            # ``str(e)`` is intentionally excluded from the formatted log line —
-            # the boto ``Error.Message`` field is operator-controlled in some
-            # error shapes and could in pathological cases carry URL fragments.
-            logger.exception(
-                f"Error generating pre-signed PUT URL bucket={bucket} key_hash={hash_s3_key(key)}"
+            # Log a structured line without the traceback. ``logger.exception``
+            # would emit ``str(e)`` via the formatter, and a future boto error
+            # shape that embeds a URL fragment in ``Error.Message`` would then
+            # leak through ``exc_info``. Keep only the AWS error code, which
+            # is an enum-like string (``AccessDenied``, ``NoSuchBucket``, …).
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            logger.error(
+                f"Error generating pre-signed PUT URL bucket={bucket} "
+                f"key_hash={hash_s3_key(key)} error_code={error_code}"
             )
             raise Exception("Unable to create a pre-signed URL") from e
 

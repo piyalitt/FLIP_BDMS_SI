@@ -59,6 +59,18 @@ def _assert_logs_have_no_presigned_url(records: list[logging.LogRecord]) -> None
         candidates = [record.getMessage()]
         if record.args:
             candidates.append(repr(record.args))
+        # Inspect the attached exception too: ``logger.exception(...)`` (or any
+        # ``logger.error(..., exc_info=True)``) populates ``exc_info``, and the
+        # default formatter emits ``str(exc_value)`` plus the traceback into the
+        # final log line. Pinning the policy here means a future regression
+        # that re-adds ``exc_info`` cannot let URL material slip through that
+        # channel without tripping a test.
+        if record.exc_info:
+            _, exc_value, _ = record.exc_info
+            candidates.append(repr(exc_value))
+            candidates.append(str(exc_value))
+        if record.exc_text:
+            candidates.append(record.exc_text)
         for candidate in candidates:
             for token in _FORBIDDEN_TOKENS:
                 assert token not in candidate, (

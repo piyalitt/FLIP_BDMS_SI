@@ -60,6 +60,18 @@ def _assert_logs_have_no_presigned_url(records: list[logging.LogRecord]) -> None
         candidates = [record.getMessage()]
         if record.args:
             candidates.append(repr(record.args))
+        # Inspect the attached exception too: ``logger.exception(...)`` (or any
+        # ``logger.error(..., exc_info=True)``) populates ``exc_info``, and the
+        # default formatter emits ``str(exc_value)`` plus the traceback into the
+        # final log line. Pinning the policy here means a future regression
+        # that re-adds ``exc_info`` cannot let URL material slip through that
+        # channel without tripping a test.
+        if record.exc_info:
+            _, exc_value, _ = record.exc_info
+            candidates.append(repr(exc_value))
+            candidates.append(str(exc_value))
+        if record.exc_text:
+            candidates.append(record.exc_text)
         for candidate in candidates:
             for token in _FORBIDDEN_TOKENS:
                 assert token not in candidate, (
@@ -183,12 +195,9 @@ def test_get_put_presigned_url_does_not_log_url_on_client_error(caplog):
         with pytest.raises(Exception, match="Unable to create a pre-signed URL"):
             S3Client().get_put_presigned_url("s3://test-bucket/key")
 
-    # The wrapped exception we re-raise has a static message, but we still
-    # want the error log line to stay redacted even though it interpolates
-    # ``{e}`` — the f-string includes the boto error which itself includes
-    # the URL we put in the simulated message.
-    for record in caplog.records:
-        for token in _FORBIDDEN_TOKENS:
-            assert token not in record.getMessage(), (
-                f"Pre-signed URL artefact {token!r} leaked into log message: {record.getMessage()!r}"
-            )
+    # The wrapped exception we re-raise has a static message, but the helper
+    # also inspects the attached ``exc_info`` — if ``logger.exception`` were
+    # ever reintroduced here, the boto ``ClientError`` (whose ``str()``
+    # contains ``_FAKE_SIGNED_URL``) would land in the formatted traceback
+    # and trip this assertion.
+    _assert_logs_have_no_presigned_url(caplog.records)
