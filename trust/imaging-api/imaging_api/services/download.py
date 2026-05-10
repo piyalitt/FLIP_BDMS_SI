@@ -193,7 +193,7 @@ def format_download_url(
     )
 
 
-def download_file(url: str, destination_path: str, headers: dict[str, str]):
+def download_file(url: str, destination_path: str, headers: dict[str, str]) -> str:
     """
     Downloads a file from the given URL using an XNAT auth headers.
 
@@ -245,7 +245,7 @@ def download_file(url: str, destination_path: str, headers: dict[str, str]):
     return destination_path
 
 
-def unzip_file(zip_path: str, extract_dir: str, new_name: str):
+def unzip_file(zip_path: str, extract_dir: str, new_name: str) -> str:
     """
     Extracts a ZIP file and renames the directory.
 
