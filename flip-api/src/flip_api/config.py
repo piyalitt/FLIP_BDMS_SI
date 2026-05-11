@@ -12,7 +12,7 @@
 
 from typing import Literal
 
-from pydantic import EmailStr, SecretStr
+from pydantic import EmailStr, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,6 +21,12 @@ class Settings(BaseSettings):
 
     # Environment flag
     ENV: Literal["development", "production"] = "development"
+
+    # Application log level. Defaults to INFO so any unknown environment
+    # (prod, stag, any new deploy) emits at INFO and avoids leaking the
+    # contents of debug-only diagnostics. Dev compose may override to DEBUG
+    # for local development.
+    LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
     model_config = SettingsConfigDict(
         env_file=f"../.env.{ENV}",
@@ -83,6 +89,39 @@ class Settings(BaseSettings):
     # Not tied to ENV — kept as a dedicated flag so a developer can flip
     # it on locally to verify MFA end-to-end without pretending to be prod.
     ENFORCE_MFA: bool = True
+
+    @field_validator("ENV", mode="before")
+    @classmethod
+    def coerce_empty_env(cls, v: str) -> str:
+        """Treat empty-string ENV (e.g. from CI environment injection) as 'development'."""
+        if v is None or v == "":
+            return "development"
+        return v
+
+    @field_validator("ENFORCE_MFA", mode="before")
+    @classmethod
+    def coerce_empty_mfa(cls, v: str | bool | None) -> bool:
+        """Treat empty-string or None ENFORCE_MFA as the default True."""
+        if v is None or v == "":
+            return True
+        if isinstance(v, bool):
+            return v
+        return v.lower() in ("true", "1")    # type: ignore[union-attr]
+
+    @field_validator("LOG_LEVEL", mode="before")
+    @classmethod
+    def coerce_log_level(cls, v: object) -> object:
+        """Treat empty-string or None LOG_LEVEL as the default INFO; uppercase string input.
+
+        Non-string, non-empty input is returned unchanged so the downstream
+        Literal validator rejects it loudly, instead of ``.upper()`` raising
+        ``AttributeError`` mid-validation on e.g. ``Settings(LOG_LEVEL=10)``.
+        """
+        if v is None or v == "":
+            return "INFO"
+        if isinstance(v, str):
+            return v.upper()
+        return v
 
     # Trust task queue settings
     HEARTBEAT_TIMEOUT_SECONDS: int = 30  # How long since last heartbeat before a trust is considered offline

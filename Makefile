@@ -12,7 +12,8 @@
 
 .PHONY: build dev prod clean stop up down up-no-trust up-trusts central-fl central-hub \
 		restart restart-no-trust ci tests debug create-networks remove-networks recreate-networks consolidate-deps \
-		check-aws-access up-local-trust generate-trust-api-keys generate-internal-service-key
+		check-aws-access up-local-trust generate-trust-api-keys generate-internal-service-key \
+		generate-trust-internal-service-keys integration_test
 
 ifeq ($(PROD),true)
 MAIN_ENV_FILE=.env.production
@@ -262,11 +263,27 @@ unit_test:
 	$(MAKE) -C trust/trust-api unit_test
 	$(MAKE) -C trust/xnat unit_test
 
+integration_test:
+	$(MAKE) -C flip-api integration_test
+	$(MAKE) -C trust integration_test
+
+# Drives a fresh project end-to-end against a running `make up` stack:
+# create → approve → upload model → wait for image pull → start training.
+# Defaults to the xray classification tutorial in flip-fl-base (sibling repo)
+# for both model files and cohort query. Useful for sanity-checking PRs
+# without manually clicking through the UI. See flip-api/Makefile for
+# overrides (MODEL_FILES_DIR, QUERY_FILE, EXTRA_ARGS).
+e2e_smoke:
+	$(MAKE) -C flip-api e2e_smoke $(if $(MODEL_FILES_DIR),MODEL_FILES_DIR=$(MODEL_FILES_DIR)) $(if $(QUERY_FILE),QUERY_FILE=$(QUERY_FILE)) $(if $(EXTRA_ARGS),EXTRA_ARGS="$(EXTRA_ARGS)")
+
 generate-trust-api-keys:
 	$(MAKE) -C flip-api generate-trust-api-keys $(if $(ENV_FILE),ENV_FILE=$(ENV_FILE))
 
 generate-internal-service-key:
 	$(MAKE) -C flip-api generate-internal-service-key $(if $(ENV_FILE),ENV_FILE=$(ENV_FILE)) $(if $(FORCE),FORCE=$(FORCE))
+
+generate-trust-internal-service-keys:
+	$(MAKE) -C flip-api generate-trust-internal-service-keys $(if $(ENV_FILE),ENV_FILE=$(ENV_FILE)) $(if $(FORCE),FORCE=$(FORCE))
 
 check-aws-access:
 	@echo "🔎 Checking AWS CLI access..."
