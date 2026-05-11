@@ -11,7 +11,6 @@
 #
 
 import logging
-import re
 import uuid
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -29,6 +28,7 @@ from flip_api.file_services.retrieve_federated_results import retrieve_federated
 from flip_api.main import app
 from flip_api.utils.s3_client import S3Client
 from tests.fixtures.db_fixtures import ModelFactory, ProjectFactory
+from tests.unit._log_policy import _FAKE_SIGNED_URL, _assert_logs_have_no_presigned_url
 
 
 @pytest.fixture
@@ -320,57 +320,9 @@ class TestS3Client:
 # ---------------------------------------------------------------------------
 # Logging policy: the route used to JSON-dump the presigned-URL list at INFO,
 # which made every entry's X-Amz-Signature / X-Amz-Credential reachable from
-# the application log. Pin that it cannot regress.
+# the application log. The shared helper lives in ``tests/unit/_log_policy``;
+# pin that the policy holds for this route too.
 # ---------------------------------------------------------------------------
-
-
-_FAKE_SIGNED_URL = (
-    "https://test-bucket.s3.amazonaws.com/model-id/weights.bin?"
-    "X-Amz-Algorithm=AWS4-HMAC-SHA256&"
-    "X-Amz-Credential=AKIAEXAMPLEKEY%2F20260506%2Feu-west-2%2Fs3%2Faws4_request&"
-    "X-Amz-Date=20260506T000000Z&"
-    "X-Amz-Expires=600&"
-    "X-Amz-SignedHeaders=host&"
-    "X-Amz-Signature=deadbeefcafe1234567890abcdef"
-)
-# Match any URL that carries SigV4 query parameters, regardless of host —
-# AWS, moto/localstack (``http://localhost:4566/...``), GovCloud, S3
-# Accelerate, and path-style endpoints all produce ``...?X-Amz-...`` URLs.
-_S3_URL_WITH_QUERY = re.compile(r"https?://\S+\?\S*X-Amz-", re.IGNORECASE)
-_FORBIDDEN_TOKENS = (
-    "X-Amz-Signature=",
-    "X-Amz-Credential=",
-    "X-Amz-SignedHeaders=",
-    "X-Amz-Security-Token=",
-    "Authorization=AWS4-HMAC-SHA256",
-)
-
-
-def _assert_logs_have_no_presigned_url(records: list[logging.LogRecord]) -> None:
-    for record in records:
-        candidates = [record.getMessage()]
-        if record.args:
-            candidates.append(repr(record.args))
-        # Inspect the attached exception too: ``logger.exception(...)`` (or any
-        # ``logger.error(..., exc_info=True)``) populates ``exc_info``, and the
-        # default formatter emits ``str(exc_value)`` plus the traceback into the
-        # final log line. Pinning the policy here means a future regression
-        # that re-adds ``exc_info`` cannot let URL material slip through that
-        # channel without tripping a test.
-        if record.exc_info:
-            _, exc_value, _ = record.exc_info
-            candidates.append(repr(exc_value))
-            candidates.append(str(exc_value))
-        if record.exc_text:
-            candidates.append(record.exc_text)
-        for candidate in candidates:
-            for token in _FORBIDDEN_TOKENS:
-                assert token not in candidate, (
-                    f"Pre-signed URL artefact {token!r} leaked into a log line: {candidate!r}"
-                )
-            assert not _S3_URL_WITH_QUERY.search(candidate), (
-                f"Pre-signed S3 URL leaked into a log line: {candidate!r}"
-            )
 
 
 def test_retrieve_federated_results_does_not_log_url_list(caplog):
@@ -443,11 +395,7 @@ def test_retrieve_federated_results_redacts_url_when_get_presigned_raises(caplog
 
     assert response.status_code == 500, response.text
     assert _FAKE_SIGNED_URL not in response.text  # static detail in HTTP body
-    for record in caplog.records:
-        for token in _FORBIDDEN_TOKENS:
-            assert token not in record.getMessage(), (
-                f"Pre-signed URL artefact {token!r} leaked into log message: {record.getMessage()!r}"
-            )
+    _assert_logs_have_no_presigned_url(caplog.records)
 
 
 def test_retrieve_federated_results_redacts_url_when_unhandled_error(caplog):
@@ -470,8 +418,4 @@ def test_retrieve_federated_results_redacts_url_when_unhandled_error(caplog):
 
     assert response.status_code == 500, response.text
     assert _FAKE_SIGNED_URL not in response.text
-    for record in caplog.records:
-        for token in _FORBIDDEN_TOKENS:
-            assert token not in record.getMessage(), (
-                f"Pre-signed URL artefact {token!r} leaked into log message: {record.getMessage()!r}"
-            )
+    _assert_logs_have_no_presigned_url(caplog.records)

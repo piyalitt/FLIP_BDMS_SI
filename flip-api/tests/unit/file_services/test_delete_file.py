@@ -100,7 +100,7 @@ def test_delete_model_file_s3_error(session: Session, monkeypatch):
 
     # Assertions
     assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-    assert "Error deleting" in exc_info.value.detail
+    assert exc_info.value.detail == "Error deleting file"
 
 
 @pytest.mark.parametrize(

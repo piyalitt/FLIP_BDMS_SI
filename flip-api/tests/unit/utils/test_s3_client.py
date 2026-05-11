@@ -23,63 +23,13 @@ or any ``s3.amazonaws.com/...?...`` URL.
 """
 
 import logging
-import re
 from unittest.mock import MagicMock, patch
 
 import pytest
 from botocore.exceptions import ClientError
 
 from flip_api.utils.s3_client import MAX_PUT_PRESIGNED_URL_TTL_SECONDS, S3Client
-
-# Mirrors the shape of a real SigV4 pre-signed URL so the assertions
-# exercise the same query-string layout AWS would emit in production.
-_FAKE_SIGNED_URL = (
-    "https://test-bucket.s3.amazonaws.com/model-id/weights.bin?"
-    "X-Amz-Algorithm=AWS4-HMAC-SHA256&"
-    "X-Amz-Credential=AKIAEXAMPLEKEY%2F20260506%2Feu-west-2%2Fs3%2Faws4_request&"
-    "X-Amz-Date=20260506T000000Z&"
-    "X-Amz-Expires=600&"
-    "X-Amz-SignedHeaders=host&"
-    "X-Amz-Signature=deadbeefcafe1234567890abcdef"
-)
-# Match any URL that carries SigV4 query parameters, regardless of host —
-# AWS, moto/localstack (``http://localhost:4566/...``), GovCloud, S3
-# Accelerate, and path-style endpoints all produce ``...?X-Amz-...`` URLs.
-_S3_URL_WITH_QUERY = re.compile(r"https?://\S+\?\S*X-Amz-", re.IGNORECASE)
-_FORBIDDEN_TOKENS = (
-    "X-Amz-Signature=",
-    "X-Amz-Credential=",
-    "X-Amz-SignedHeaders=",
-    "X-Amz-Security-Token=",
-    "Authorization=AWS4-HMAC-SHA256",
-)
-
-
-def _assert_logs_have_no_presigned_url(records: list[logging.LogRecord]) -> None:
-    for record in records:
-        candidates = [record.getMessage()]
-        if record.args:
-            candidates.append(repr(record.args))
-        # Inspect the attached exception too: ``logger.exception(...)`` (or any
-        # ``logger.error(..., exc_info=True)``) populates ``exc_info``, and the
-        # default formatter emits ``str(exc_value)`` plus the traceback into the
-        # final log line. Pinning the policy here means a future regression
-        # that re-adds ``exc_info`` cannot let URL material slip through that
-        # channel without tripping a test.
-        if record.exc_info:
-            _, exc_value, _ = record.exc_info
-            candidates.append(repr(exc_value))
-            candidates.append(str(exc_value))
-        if record.exc_text:
-            candidates.append(record.exc_text)
-        for candidate in candidates:
-            for token in _FORBIDDEN_TOKENS:
-                assert token not in candidate, (
-                    f"Pre-signed URL artefact {token!r} leaked into a log line: {candidate!r}"
-                )
-            assert not _S3_URL_WITH_QUERY.search(candidate), (
-                f"Pre-signed S3 URL leaked into a log line: {candidate!r}"
-            )
+from tests.unit._log_policy import _FAKE_SIGNED_URL, _assert_logs_have_no_presigned_url
 
 
 def test_get_put_presigned_url_does_not_log_url(caplog):

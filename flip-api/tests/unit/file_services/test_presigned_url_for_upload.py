@@ -19,7 +19,6 @@ override value verbatim. Neither may write a signed URL to a log line.
 """
 
 import logging
-import re
 import uuid
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -31,54 +30,7 @@ from flip_api.auth.dependencies import verify_token
 from flip_api.config import Settings
 from flip_api.db.database import get_session
 from flip_api.main import app
-
-_FAKE_SIGNED_URL = (
-    "https://test-bucket.s3.amazonaws.com/model-id/weights.bin?"
-    "X-Amz-Algorithm=AWS4-HMAC-SHA256&"
-    "X-Amz-Credential=AKIAEXAMPLEKEY%2F20260506%2Feu-west-2%2Fs3%2Faws4_request&"
-    "X-Amz-Date=20260506T000000Z&"
-    "X-Amz-Expires=600&"
-    "X-Amz-SignedHeaders=host&"
-    "X-Amz-Signature=deadbeefcafe1234567890abcdef"
-)
-# Match any URL that carries SigV4 query parameters, regardless of host —
-# AWS, moto/localstack (``http://localhost:4566/...``), GovCloud, S3
-# Accelerate, and path-style endpoints all produce ``...?X-Amz-...`` URLs.
-_S3_URL_WITH_QUERY = re.compile(r"https?://\S+\?\S*X-Amz-", re.IGNORECASE)
-_FORBIDDEN_TOKENS = (
-    "X-Amz-Signature=",
-    "X-Amz-Credential=",
-    "X-Amz-SignedHeaders=",
-    "X-Amz-Security-Token=",
-    "Authorization=AWS4-HMAC-SHA256",
-)
-
-
-def _assert_logs_have_no_presigned_url(records: list[logging.LogRecord]) -> None:
-    for record in records:
-        candidates = [record.getMessage()]
-        if record.args:
-            candidates.append(repr(record.args))
-        # Inspect the attached exception too: ``logger.exception(...)`` (or any
-        # ``logger.error(..., exc_info=True)``) populates ``exc_info``, and the
-        # default formatter emits ``str(exc_value)`` plus the traceback into the
-        # final log line. Pinning the policy here means a future regression
-        # that re-adds ``exc_info`` cannot let URL material slip through that
-        # channel without tripping a test.
-        if record.exc_info:
-            _, exc_value, _ = record.exc_info
-            candidates.append(repr(exc_value))
-            candidates.append(str(exc_value))
-        if record.exc_text:
-            candidates.append(record.exc_text)
-        for candidate in candidates:
-            for token in _FORBIDDEN_TOKENS:
-                assert token not in candidate, (
-                    f"Pre-signed URL artefact {token!r} leaked into a log line: {candidate!r}"
-                )
-            assert not _S3_URL_WITH_QUERY.search(candidate), (
-                f"Pre-signed S3 URL leaked into a log line: {candidate!r}"
-            )
+from tests.unit._log_policy import _FAKE_SIGNED_URL, _assert_logs_have_no_presigned_url
 
 
 @pytest.fixture
@@ -232,12 +184,4 @@ def test_presigned_url_endpoint_redacts_url_when_unhandled_error(
 
     assert response.status_code == 500, response.text
     assert _FAKE_SIGNED_URL not in response.text
-    # Note: ``logger.exception`` writes the traceback to ``record.exc_info`` —
-    # which our policy assertion intentionally does not check, since operators
-    # need that traceback to debug. The contract is that the formatted log
-    # message itself never carries URL artefacts.
-    for record in caplog.records:
-        for token in _FORBIDDEN_TOKENS:
-            assert token not in record.getMessage(), (
-                f"Pre-signed URL artefact {token!r} leaked into log message: {record.getMessage()!r}"
-            )
+    _assert_logs_have_no_presigned_url(caplog.records)

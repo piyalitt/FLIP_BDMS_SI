@@ -163,7 +163,7 @@ def test_download_file_s3_error(
 
     # Verify the status code is 500 (Internal Server Error)
     assert excinfo.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-    assert "Error downloading" in str(excinfo.value.detail)
+    assert excinfo.value.detail == "Error downloading file"
 
 
 def test_download_file_general_exception(
