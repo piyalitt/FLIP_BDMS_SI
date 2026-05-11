@@ -51,13 +51,20 @@ from flip_api.domain.schemas.status import ModelStatus
 from flip_api.utils import constants
 from tests.integration.utils import admin_authentication
 
-DEFAULT_QUERY_FILE = Path("tests/example_query.sql")
+# Resolve next to this file so the default works regardless of CWD (direct
+# `uv run` from any directory, not just `flip-api/`). `make e2e_smoke` passes
+# --query-file explicitly, so this default only kicks in for direct invocation.
+DEFAULT_QUERY_FILE = Path(__file__).parent / "example_query.sql"
 DEFAULT_PROJECT_NAME_PREFIX = "Xrays E2E Smoke"
 DEFAULT_MODEL_NAME = "Xrays E2E Smoke Model"
 
-# Model statuses that mean "the FL pipeline has picked the job up". INITIATED
-# is the post-/fl/initiate state set inside the same request, so we wait for
-# anything strictly past it before declaring success.
+# Model statuses that mean "past INITIATED at minimum" — the FL pipeline has
+# picked the job up. INITIATED is the post-/fl/initiate state set inside the
+# same request, so we wait for anything strictly past it before declaring
+# success. RESULTS_UPLOADED is included for the case where training finishes
+# faster than --training-start-timeout: wait_for_training_started returns
+# RESULTS_UPLOADED, then wait_for_training_finished sees it on the first poll
+# and returns immediately. That short-circuit is intentional, not a race.
 TRAINING_PROGRESS_STATUSES = {
     ModelStatus.PREPARED.value,
     ModelStatus.TRAINING_STARTED.value,
@@ -427,8 +434,12 @@ def download_results(
     paths: list[Path] = []
     for url in urls:
         # The presigned URL ends in `…/<key>?X-Amz-…`; the key's last segment
-        # is the filename the FL server uploaded. Falling back to the model
-        # ID + index keeps things sane if a future URL shape breaks that.
+        # is the filename the FL server uploaded. Assumes path-style S3 URLs
+        # (the only shape flip-api emits today) and that the key contains no
+        # encoded slashes — both hold for current FL artefact naming. Falling
+        # back to the model ID + index keeps things sane if a future URL shape
+        # breaks that. This is a developer-tool best effort, not a robust
+        # general-purpose S3 URL parser.
         key = url.split("?", 1)[0].rsplit("/", 1)[-1] or f"{model_id}-{len(paths)}"
         out = dest_dir / key
         with requests.get(url, stream=True, timeout=120) as r:
