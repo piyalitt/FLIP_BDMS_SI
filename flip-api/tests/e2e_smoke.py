@@ -58,13 +58,8 @@ DEFAULT_QUERY_FILE = Path(__file__).parent / "example_query.sql"
 DEFAULT_PROJECT_NAME_PREFIX = "Xrays E2E Smoke"
 DEFAULT_MODEL_NAME = "Xrays E2E Smoke Model"
 
-# Model statuses that mean "past INITIATED at minimum" — the FL pipeline has
-# picked the job up. INITIATED is the post-/fl/initiate state set inside the
-# same request, so we wait for anything strictly past it before declaring
-# success. RESULTS_UPLOADED is included for the case where training finishes
-# faster than --training-start-timeout: wait_for_training_started returns
-# RESULTS_UPLOADED, then wait_for_training_finished sees it on the first poll
-# and returns immediately. That short-circuit is intentional, not a race.
+# Anything strictly past INITIATED. RESULTS_UPLOADED is included so a fast
+# finish short-circuits wait_for_training_finished cleanly on the first poll.
 TRAINING_PROGRESS_STATUSES = {
     ModelStatus.PREPARED.value,
     ModelStatus.TRAINING_STARTED.value,
@@ -73,7 +68,7 @@ TRAINING_PROGRESS_STATUSES = {
 
 
 class SmokeFailure(RuntimeError):
-    """Raised when a step the smoke test depends on fails."""
+    pass
 
 
 def _log(msg: str) -> None:
@@ -433,13 +428,8 @@ def download_results(
     _log(f"  ✅ {len(urls)} artefact(s); downloading to {dest_dir}")
     paths: list[Path] = []
     for url in urls:
-        # The presigned URL ends in `…/<key>?X-Amz-…`; the key's last segment
-        # is the filename the FL server uploaded. Assumes path-style S3 URLs
-        # (the only shape flip-api emits today) and that the key contains no
-        # encoded slashes — both hold for current FL artefact naming. Falling
-        # back to the model ID + index keeps things sane if a future URL shape
-        # breaks that. This is a developer-tool best effort, not a robust
-        # general-purpose S3 URL parser.
+        # Assumes path-style S3 URLs and unencoded keys (both hold for current
+        # FL artefact naming). Falls back to model_id + index otherwise.
         key = url.split("?", 1)[0].rsplit("/", 1)[-1] or f"{model_id}-{len(paths)}"
         out = dest_dir / key
         with requests.get(url, stream=True, timeout=120) as r:
@@ -545,9 +535,7 @@ def main(argv: list[str] | None = None) -> int:
         _log(f"\n❌ Smoke failed: {exc}")
         return 1
     except requests.exceptions.RequestException as exc:
-        # Anything that escapes the per-call resilience (e.g. a hard failure
-        # on a one-shot call like create_model) lands here so the smoke fails
-        # cleanly with a single line instead of a stack trace.
+        # Backstop for one-shot calls that bypass _try_request (e.g. create_model).
         _log(f"\n❌ Smoke failed: unhandled request error: {type(exc).__name__}: {exc}")
         return 1
 
